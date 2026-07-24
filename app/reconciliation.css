@@ -1,0 +1,8 @@
+.invoice-entry { margin: 12px 0; padding: 12px; border: 1px solid #dbe5e8; border-radius: 8px; background: #fff; }
+.entry-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; color: var(--navy); font-size: 13px; }
+.remove-entry, .add-entry { width: auto; margin: 6px 0 0; padding: 7px 10px; font-size: 12px; }
+.remove-entry { color: #a63822; background: #ffebe5; }
+.add-entry { color: #125c89; background: #e6f1f8; }
+.ledger-check { margin: 6px 0 0; font-size: 12px; font-weight: 700; color: #657582; }
+.ledger-check.matched { color: #196a45; }
+.ledger-check.not-matched { color: #b42d19; }

@@ -1,0 +1,1 @@
+.executive-conclusion .conclusion-grid{grid-template-columns:repeat(2,1fr)}.executive-conclusion .conclusion-grid article:last-child{display:none}@media(max-width:760px){.executive-conclusion .conclusion-grid{grid-template-columns:1fr}}
