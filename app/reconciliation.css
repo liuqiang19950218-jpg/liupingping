@@ -10,3 +10,7 @@
 .image-field input { width: 100%; padding: 7px; border: 1px dashed #a9c6dc; border-radius: 6px; background: #f8fbfd; color: #4b6374; font-size: 12px; }
 .image-preview { display: flex; align-items: start; gap: 10px; }
 .image-preview img { width: 88px; height: 64px; object-fit: cover; border: 1px solid #dbe5e8; border-radius: 6px; background: #fff; }
+.image-open { display: grid; gap: 3px; width: auto; padding: 0; border: 0; background: transparent; color: #125c89; font-size: 11px; text-align: center; cursor: zoom-in; }
+.image-lightbox { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: 24px; background: rgb(12 25 42 / 78%); }
+.image-lightbox > div { position: relative; max-width: min(960px, 92vw); max-height: 88vh; padding: 10px; border-radius: 10px; background: #fff; }
+.image-lightbox img { display: block; max-width: min(920px, 88vw); max-height: 82vh; object-fit: contain; }
