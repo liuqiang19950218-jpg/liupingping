@@ -14,3 +14,10 @@
 .image-lightbox { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: 24px; background: rgb(12 25 42 / 78%); }
 .image-lightbox > div { position: relative; max-width: min(960px, 92vw); max-height: 88vh; padding: 10px; border-radius: 10px; background: #fff; }
 .image-lightbox img { display: block; max-width: min(920px, 88vw); max-height: 82vh; object-fit: contain; }
+.local-summary { flex-wrap: wrap; }
+.hidden-columns { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 12px; color: #50677b; }
+.hidden-columns button, .column-actions button, .column-filter button { width: auto; margin: 0; padding: 3px 6px; border: 1px solid #c8d9e6; border-radius: 4px; background: #f8fbfd; color: #125c89; font-size: 11px; cursor: pointer; }
+.column-filter { display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 9px 11px; border: 1px solid #cfe0ec; border-radius: 7px; background: #f6fbff; font-size: 12px; }
+.column-filter input { width: 180px; height: 30px; padding: 0 8px; border: 1px solid #bfd1df; border-radius: 5px; }
+.local-table th > span:first-child { display: block; min-width: 72px; }
+.column-actions { display: flex; gap: 4px; margin-top: 5px; }
