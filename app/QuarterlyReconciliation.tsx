@@ -22,6 +22,7 @@ const empty = (): DetailForm => ({ customerAmount:"", transit:[blankInvoice()], 
 const num = (value: unknown) => { const n = Number(String(value ?? "").replace(/,/g, "")); return Number.isFinite(n) ? n : 0; };
 const money = (value: number) => value.toLocaleString("zh-CN", { minimumFractionDigits:2, maximumFractionDigits:2 });
 const sum = (entries: Array<{ amount:string }>) => entries.reduce((total, entry) => total + num(entry.amount), 0);
+const backfillClearedStatus = (source: LocalSheet) => { const clearedAt=source.headers.findIndex(header=>String(header).replace(/\s/g,"").includes("是否对清")); const companyAt=source.headers.indexOf(T.company),customerAt=source.headers.indexOf(T.customerBook); if(clearedAt<0||companyAt<0||customerAt<0)return source; let changed=false; const rows=source.rows.map((sourceRow,id)=>{const detail=source.details?.[String(id)]; const customerValue=detail?.customerAmount??sourceRow[customerAt]; if(!detail&&String(customerValue??"").trim()==="")return sourceRow; const row=[...sourceRow]; const difference=num(row[companyAt])-num(customerValue); const total=detail?sum(detail.transit)+sum(detail.returned)+sum(detail.otherInvoice)+sum(detail.other):0; const status=Math.abs(difference)<.01||Boolean(detail)&&Math.abs(difference-total)<.01?T.clear:T.uncleared; if(row[clearedAt]!==status){row[clearedAt]=status;changed=true;} return row;}); return changed?{...source,rows}:source; };
 const anyInvoice = (entry: InvoiceEntry) => Boolean(entry.date || entry.invoice || entry.amount || entry.note);
 const ledgerKey = (entry: InvoiceEntry) => `${entry.invoice.trim()}|${entry.date.replace(/[^0-9]/g, "").slice(0,8)}|${num(entry.amount).toFixed(2)}`;
 const validLedgerEntry = (entry: InvoiceEntry, keys: Set<string> | null) => !anyInvoice(entry) || Boolean(entry.date && entry.invoice && entry.amount !== "" && keys?.has(ledgerKey(entry)));
@@ -45,7 +46,7 @@ export function QuarterlyReconciliation() {
   const [ledgerError, setLedgerError] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  useEffect(() => { try { const saved = localStorage.getItem(STORAGE_KEY); if (saved) setSheet(JSON.parse(saved)); } catch { localStorage.removeItem(STORAGE_KEY); } }, []);
+  useEffect(() => { try { const saved = localStorage.getItem(STORAGE_KEY); if (saved) { const next=backfillClearedStatus(JSON.parse(saved)); setSheet(next); localStorage.setItem(STORAGE_KEY,JSON.stringify(next)); } } catch { localStorage.removeItem(STORAGE_KEY); } }, []);
   useEffect(() => { let alive = true; fetch("/ledger_keys.json").then(r => { if (!r.ok) throw new Error("ledger"); return r.json() as Promise<string[]>; }).then(async keys => { const saved=await loadCurrentLedger().catch(()=>undefined); historicalLedgerKeys=new Set(keys); if (alive) setLedgerKeys(new Set([...keys,...(saved?.keys??[])])); }).catch(() => { if (alive) setLedgerError(true); }); return () => { alive = false; }; }, []);
   useEffect(() => { loadCurrentLedger().then(saved => { if(saved) { setCurrentLedgerInfo(saved); setCurrentLedgerKeys(new Set(saved.keys)); } }).catch(() => undefined); }, []);
 
