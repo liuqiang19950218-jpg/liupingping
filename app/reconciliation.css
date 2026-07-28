@@ -31,5 +31,5 @@
 .photo-result button { flex: 0 0 auto; width: auto; margin: 0; padding: 5px 8px; border: 0; border-radius: 5px; background: #1677ff; color: #fff; cursor: pointer; }
 .customer-save-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: 12px; margin: 12px 0; }
 .customer-save-row .field { margin: 0; }
-.top-save-button { width: 100%; min-height: 42px; margin: 0; align-self: end; }
+.top-save-button { width: 100%; min-height: 42px; margin: 0; align-self: end; background: #e6f1f8; color: #125c89; }
 @media (max-width: 640px) { .customer-save-row { grid-template-columns: 1fr; } }
