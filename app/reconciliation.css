@@ -23,3 +23,9 @@
 .column-actions { display: flex; gap: 4px; margin-top: 5px; }
 .invoice-choices { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; padding: 7px; border-radius: 6px; background: #fff7e7; color: #8d5d08; font-size: 12px; }
 .invoice-choices button { width: auto; margin: 0; padding: 3px 6px; border: 1px solid #f0ce8d; border-radius: 4px; background: #fff; color: #895400; font-size: 11px; cursor: pointer; }
+.photo-import { margin: 0 0 12px; padding: 10px; border: 1px dashed #a8c9e8; border-radius: 8px; background: #f5faff; color: #55718c; font-size: 12px; }
+.photo-import-button { display: inline-flex; width: auto; margin: 0 8px 6px 0; padding: 7px 10px; border-radius: 6px; background: #0d66d9; color: #fff; font-weight: 600; cursor: pointer; }
+.photo-import-button input { display: none; }
+.photo-import p { margin: 5px 0 0; color: #36546d; }
+.photo-result { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; padding-top: 7px; border-top: 1px solid #dceaf7; color: #1e466c; word-break: break-all; }
+.photo-result button { flex: 0 0 auto; width: auto; margin: 0; padding: 5px 8px; border: 0; border-radius: 5px; background: #1677ff; color: #fff; cursor: pointer; }
