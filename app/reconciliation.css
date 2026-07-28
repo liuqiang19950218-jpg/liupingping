@@ -32,4 +32,7 @@
 .customer-save-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: 12px; margin: 12px 0; }
 .customer-save-row .field { margin: 0; }
 .top-save-button { width: 100%; min-height: 42px; margin: 0; align-self: end; background: #e6f1f8; color: #125c89; }
+.local-tool .file-button, .local-tool .fill-button, .sales-modal .save-button { background: #e6f1f8 !important; color: #125c89 !important; }
+.invoice-choices { background: #eef6ff; color: #125c89; }
+.invoice-choices button { border-color: #b9d5ef; color: #125c89; }
 @media (max-width: 640px) { .customer-save-row { grid-template-columns: 1fr; } }
