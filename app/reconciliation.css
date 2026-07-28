@@ -27,6 +27,7 @@
 .local-table .customer-name-heading, .local-table .customer-name-cell { white-space: normal !important; overflow-wrap: anywhere; word-break: break-word; line-height: 1.5; vertical-align: top; }
 .local-table .customer-name-heading > span:first-child { min-width: 0; white-space: normal; }
 .local-table th, .local-table td { text-align: center !important; }
+.detail-table-tool .local-table th, .detail-table-tool .local-table td { text-align: center !important; vertical-align: middle !important; }
 .local-table .detail-note-heading, .local-table .customer-name-heading { white-space: nowrap !important; overflow-wrap: normal; word-break: normal; }
 .local-table .detail-note-heading > span:first-child, .local-table .customer-name-heading > span:first-child { white-space: nowrap; }
 .multi-column-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0; }
