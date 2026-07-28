@@ -20,6 +20,8 @@
 .column-filter { display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 9px 11px; border: 1px solid #cfe0ec; border-radius: 7px; background: #f6fbff; font-size: 12px; }
 .column-filter input { width: 180px; height: 30px; padding: 0 8px; border: 1px solid #bfd1df; border-radius: 5px; }
 .local-table th > span:first-child { display: block; min-width: 72px; }
+.local-table { max-height: none; overflow-x: auto; overflow-y: hidden; }
+.local-table .detail-note-heading, .local-table .detail-note-cell { width: 5cm; min-width: 5cm; max-width: 5cm; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.5; }
 .column-actions { display: flex; gap: 4px; margin-top: 5px; }
 .invoice-choices { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; padding: 7px; border-radius: 6px; background: #fff7e7; color: #8d5d08; font-size: 12px; }
 .invoice-choices button { width: auto; margin: 0; padding: 3px 6px; border: 1px solid #f0ce8d; border-radius: 4px; background: #fff; color: #895400; font-size: 11px; cursor: pointer; }
