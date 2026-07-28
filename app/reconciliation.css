@@ -101,7 +101,7 @@
 .detail-table-tool .local-table th { position: sticky; top: 0; z-index: 5; height: 52px; padding: 8px 26px 8px 10px; border-bottom: 0; background: #123e63; color: #fff; font-size: 12px; text-align: left !important; vertical-align: middle !important; white-space: nowrap !important; }
 .detail-table-tool .local-table td { height: 52px; max-height: 64px; padding: 8px 10px; border-bottom-color: #edf2f7; background: #fff; color: #263b57; font-size: 12px; text-align: left !important; vertical-align: middle !important; }
 .detail-table-tool .local-table tbody tr:hover td { background: #f1f7ff; }
-.detail-table-tool .local-table tbody tr.has-difference td:first-child { box-shadow: inset 3px 0 #fa8c16; }
+.detail-table-tool .local-table tbody tr.is-uncleared-row td:first-child { box-shadow: inset 3px 0 #fa8c16; }
 .local-table th:nth-child(1), .local-table td:nth-child(1) { width: 64px; min-width: 64px; text-align: center !important; }
 .local-table th:nth-child(2), .local-table td:nth-child(2) { width: 100px; }
 .local-table th:nth-child(3), .local-table td:nth-child(3) { width: 110px; }
