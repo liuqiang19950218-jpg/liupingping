@@ -116,11 +116,12 @@
 .local-table .sticky-action { position: sticky; right: 0; z-index: 6; width: 100px; min-width: 100px; text-align: center !important; box-shadow: -8px 0 12px rgb(21 49 80 / 7%); }
 .local-table th.sticky-action { z-index: 8; }
 .local-table .money-cell { width: 128px; min-width: 128px; text-align: right !important; font-variant-numeric: tabular-nums; }
-.local-table .money-cell .cell-value { color: #155fce; font-weight: 700; }
-.local-table .has-difference .money-cell .cell-value { color: #f04438; }
+.local-table .money-cell .cell-value { color: #52667f; font-weight: 700; }
+.local-table .primary-money .cell-value { color: #1677ff; }
+.local-table .has-difference .difference-cell .cell-value { color: #f04438; }
 .local-table .status-cell { width: 110px; min-width: 110px; text-align: center !important; }
 .status-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 56px; padding: 4px 7px; border-radius: 5px; font-size: 11px; font-weight: 800; }
-.status-badge.is-cleared { color: #168044; background: #e7f8ed; }
+.status-badge.is-cleared { color: #1677ff; background: #eaf3ff; }
 .status-badge.is-uncleared { color: #d8382d; background: #fff0ee; }
 .status-badge.is-unreconciled { color: #c76a00; background: #fff5df; }
 .status-badge.is-empty { color: #7a8797; background: #f2f5f8; }
