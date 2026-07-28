@@ -20,7 +20,7 @@
 .column-filter { display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 9px 11px; border: 1px solid #cfe0ec; border-radius: 7px; background: #f6fbff; font-size: 12px; }
 .column-filter input { width: 180px; height: 30px; padding: 0 8px; border: 1px solid #bfd1df; border-radius: 5px; }
 .local-table th > span:first-child { display: block; min-width: 72px; }
-.local-table { max-height: none; overflow-x: auto; overflow-y: hidden; }
+.local-table { max-height: 70vh; overflow: auto; }
 .local-table table { width: 1600px; min-width: 100%; table-layout: fixed; }
 .local-table .detail-note-heading, .local-table .detail-note-cell { width: 5cm !important; min-width: 5cm !important; max-width: 5cm !important; white-space: normal !important; overflow-wrap: anywhere; word-break: break-word; line-height: 1.6; vertical-align: top; }
 .local-table .detail-note-heading > span:first-child { width: 100%; min-width: 0; white-space: normal; }
