@@ -31,6 +31,10 @@
 .local-table .customer-name-cell { width: 150px; min-width: 150px; max-width: 150px; }
 .local-table .customer-name-heading > span:first-child { min-width: 0; white-space: normal; }
 .local-table th, .local-table td { text-align: center !important; }
+.detail-table-tool .local-toolbar { padding: 8px 30px; }
+.detail-table-tool .local-toolbar .eyebrow { margin-bottom: 2px; }
+.detail-table-tool .local-toolbar h2 { margin-bottom: 3px; font-size: 24px; }
+.detail-table-tool .local-toolbar p { line-height: 1.35; }
 .detail-table-tool .local-table th, .detail-table-tool .local-table td { text-align: center !important; vertical-align: middle !important; }
 .local-table .detail-note-heading, .local-table .customer-name-heading { white-space: nowrap !important; overflow-wrap: normal; word-break: normal; }
 .local-table .detail-note-heading > span:first-child, .local-table .customer-name-heading > span:first-child { white-space: nowrap; }
