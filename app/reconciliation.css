@@ -29,6 +29,13 @@
 .local-table th, .local-table td { text-align: center !important; }
 .local-table .detail-note-heading, .local-table .customer-name-heading { white-space: nowrap !important; overflow-wrap: normal; word-break: normal; }
 .local-table .detail-note-heading > span:first-child, .local-table .customer-name-heading > span:first-child { white-space: nowrap; }
+.multi-column-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0; }
+.multi-column-filter .filter-item { display: flex; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid #cfe0ec; border-radius: 7px; background: #f6fbff; white-space: nowrap; }
+.multi-column-filter input { width: 150px; }
+.export-button { min-width: 88px; margin: 0; background: #0d66d9 !important; color: #fff !important; }
+.export-button:disabled { cursor: not-allowed; opacity: .55; }
+.import-status { display: grid; gap: 8px; margin: 22px 40px 30px; padding: 22px; border: 1px solid #d5e6f7; border-radius: 10px; background: #f6fbff; color: #4e6477; line-height: 1.65; }
+.import-status strong { color: #125c89; font-size: 16px; }
 .column-actions { display: flex; gap: 3px; margin-top: 4px; }
 .invoice-choices { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; padding: 7px; border-radius: 6px; background: #fff7e7; color: #8d5d08; font-size: 12px; }
 .invoice-choices button { width: auto; margin: 0; padding: 3px 6px; border: 1px solid #f0ce8d; border-radius: 4px; background: #fff; color: #895400; font-size: 11px; cursor: pointer; }
