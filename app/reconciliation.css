@@ -114,10 +114,11 @@
 .local-table th:nth-child(5), .local-table td:nth-child(5) { width: 110px; }
 .local-table th:nth-child(6), .local-table td:nth-child(6) { width: 90px; }
 .local-table th:nth-child(7), .local-table td:nth-child(7) { width: 100px; }
-.local-table .sticky-index, .local-table .sticky-customer { position: sticky; z-index: 4; }
-.local-table th.sticky-index, .local-table th.sticky-customer { z-index: 7; }
+.local-table .sticky-index, .local-table .sticky-account, .local-table .sticky-customer { position: sticky; z-index: 4; }
+.local-table th.sticky-index, .local-table th.sticky-account, .local-table th.sticky-customer { z-index: 7; }
 .local-table .sticky-index { left: 0; }
-.local-table .sticky-customer { left: 64px; width: 220px !important; min-width: 220px !important; box-shadow: 8px 0 12px rgb(21 49 80 / 7%); }
+.local-table .sticky-account { left: 64px; width: 110px !important; min-width: 110px !important; }
+.local-table .sticky-customer { left: 174px; width: 220px !important; min-width: 220px !important; box-shadow: 8px 0 12px rgb(21 49 80 / 7%); }
 .local-table .sticky-action { position: sticky; right: 0; z-index: 6; width: 100px; min-width: 100px; text-align: center !important; box-shadow: -8px 0 12px rgb(21 49 80 / 7%); }
 .local-table th.sticky-action { z-index: 8; }
 .local-table .money-cell { width: 128px; min-width: 128px; text-align: right !important; font-variant-numeric: tabular-nums; }
