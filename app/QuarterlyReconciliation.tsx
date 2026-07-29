@@ -107,7 +107,7 @@ export function QuarterlyReconciliation({ mode="table" }: { mode?: "table" | "im
 
   const index = (name:string) => sheet?.headers.indexOf(name) ?? -1;
   const clearedIndex = sheet?.headers.findIndex(header => String(header).replace(/\s/g, "").includes("是否对清")) ?? -1;
-  const regionIndex = index(T.region); const customerIndex = index(T.customer); const companyIndex = index(T.company); const responsibleIndex = sheet?.headers.findIndex(header=>String(header).replace(/\s/g,"").includes(RESPONSIBLE_HEADER)) ?? -1;
+  const regionIndex = index(T.region); const customerIndex = index(T.customer); const companyIndex = index(T.company); const accountIndex = sheet?.headers.findIndex(header=>String(header).replace(/\s/g,"").includes("\u8d26\u5957")) ?? -1; const responsibleIndex = sheet?.headers.findIndex(header=>String(header).replace(/\s/g,"").includes(RESPONSIBLE_HEADER)) ?? -1;
   const regions = useMemo(() => sheet ? Array.from(new Set(sheet.rows.map(row => String(row[regionIndex] ?? "\u672a\u586b\u5199")))) : [], [sheet, regionIndex]);
   const shown = useMemo(() => sheet ? sheet.rows.map((row,id) => ({row,id})).filter(({row,id}) => { const needle=searchQuery.toLocaleLowerCase(); const searchable=[row[customerIndex],row[responsibleIndex],row[regionIndex]].map(value=>String(value??"").toLocaleLowerCase()).join(" "); return (region === T.all || String(row[regionIndex] ?? "\u672a\u586b\u5199") === region) && (!needle||searchable.includes(needle)) && Object.entries(columnFilters).every(([column,value])=>!value||String(row[Number(column)]??"").includes(value)) && (stripeFilter==="all"||needsDifferenceStripe(sheet,id,num(row[index(T.difference)]))); }) : [], [sheet, region, regionIndex, customerIndex, responsibleIndex, searchQuery, columnFilters, stripeFilter]);
   const pageCount=Math.max(1,Math.ceil(shown.length/pageSize));
@@ -171,7 +171,7 @@ export function QuarterlyReconciliation({ mode="table" }: { mode?: "table" | "im
         </>}
       </section>
       {active!==null && sheet && <div className="modal-backdrop"><section className="sales-modal">
-        <button className="modal-close" onClick={()=>setActive(null)}>{"\u00d7"}</button><div className="sales-modal-sticky"><p className="eyebrow">{T.sales}</p><h2>{`${String(sheet.rows[active][customerIndex]??T.customerFallback)} ${T.detail}`}</h2>
+        <button className="modal-close" onClick={()=>setActive(null)}>{"\u00d7"}</button><div className="sales-modal-sticky"><p className="eyebrow">{T.sales}</p><p className="sales-account">{"\u8d26\u5957\uff1a"}{String(sheet.rows[active][accountIndex]??"\u2014")}</p><h2>{`${String(sheet.rows[active][customerIndex]??T.customerFallback)} ${T.detail}`}</h2>
         <div className="amount-bar"><span>{`${T.company}\uff1a`}<strong>{money(company)}</strong></span><span>{`${T.difference}\uff1a`}<strong>{money(difference)}</strong></span><span className={isClear?"clear":"unclear"}>{isClear?T.clear:T.uncleared}</span></div>
         <div className="customer-save-row"><TextField label={T.customerBook} value={form.customerAmount} type="number" onChange={value=>setForm({...form,customerAmount:value})}/><TextField label={RESPONSIBLE_HEADER} value={form.responsible} onChange={updateResponsible}/><button className="save-button top-save-button" onClick={commit}>{T.save}</button></div>
         </div>
