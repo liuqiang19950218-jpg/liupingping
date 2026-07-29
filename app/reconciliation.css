@@ -143,3 +143,19 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 @media (max-width: 768px) { .detail-table-tool .local-toolbar { padding: 18px; } .reconciliation-toolbar { padding: 14px; } .file-summary { width: 100%; } .table-controls { width: 100%; } .table-controls label, .search-control, .search-control input { flex: 1 1 160px; width: auto; } .local-table { margin: 0 -1px; max-height: 60vh; } .local-table .sticky-customer { width: 160px !important; min-width: 160px !important; } .column-menu { grid-template-columns: 1fr; } }
 @media (max-width: 480px) { .table-controls { display: grid; grid-template-columns: 1fr 1fr; } .table-controls label, .search-control { grid-column: 1 / -1; } .table-controls button { width: 100%; } .table-pagination { align-items: flex-start; flex-direction: column; } .table-pagination > div { width: 100%; justify-content: space-between; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
+
+/* Keep the detailed reconciliation workspace in a single desktop viewport.
+   The table is the only scrollable surface, so wheel/trackpad scrolling never
+   shifts the whole application while reviewing records. */
+@media (min-width: 769px) {
+  .reconciliation-page { height: 100dvh; overflow: hidden; }
+  .reconciliation-page .side-nav { height: 100dvh; min-height: 0; overflow-y: auto; }
+  .reconciliation-page .work-area { display: flex; min-height: 0; height: 100dvh; flex-direction: column; overflow: hidden; }
+  .reconciliation-page .work-header { flex: 0 0 auto; height: 76px; }
+  .reconciliation-page .work-content { display: flex; min-height: 0; flex: 1; overflow: hidden; padding: 12px 24px 16px; }
+  .reconciliation-page .detail-table-tool { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+  .reconciliation-page .detail-table-tool .local-toolbar { flex: 0 0 auto; margin-bottom: 10px; padding: 12px 22px; }
+  .reconciliation-page .reconciliation-toolbar { flex: 0 0 auto; margin-bottom: 10px; padding: 12px 18px; }
+  .reconciliation-page .local-table { min-height: 0; max-height: none; flex: 1 1 auto; overscroll-behavior: contain; }
+  .reconciliation-page .table-pagination { flex: 0 0 auto; padding: 10px 16px; }
+}

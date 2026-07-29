@@ -22,7 +22,7 @@ export default function Home() {
   const [updatedAt] = useState(() => new Intl.DateTimeFormat("zh-CN", { dateStyle:"medium", timeStyle:"short", hour12:false }).format(new Date()));
   const cockpit = (next:"cockpit" | "review" | "issue") => { setTab(next); setView("cockpit"); };
 
-  return <main className="app-shell">
+  return <main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
     <aside className="side-nav">
       <div className="side-brand"><i>账</i><div><strong>{T.brand}</strong><span>{T.sub}</span></div></div>
       <nav>
