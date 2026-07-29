@@ -36,6 +36,31 @@ const reorderReviewColumns = (source: LocalSheet) => { const review=[T.lost,T.in
 const placeMaterialHeaders = (source: LocalSheet) => { const materialHeaders=MATERIAL_HEADERS.filter(header=>source.headers.includes(header)); const base=source.headers.filter(header=>!MATERIAL_HEADERS.includes(header)); const solutionAt=base.indexOf("\u89e3\u51b3\u65b9\u6848"); if(!materialHeaders.length||solutionAt<0)return source; const headers=[...base.slice(0,solutionAt),...materialHeaders,...base.slice(solutionAt)]; if(headers.every((header,index)=>header===source.headers[index]))return source; const positions=headers.map(header=>source.headers.indexOf(header)); return {...source,headers,rows:source.rows.map(row=>positions.map(position=>position<0?"":row[position]??""))}; };
 const ensureMaterialHeaders = (source: LocalSheet) => placeMaterialHeaders({...source,headers:[...source.headers,...MATERIAL_HEADERS.filter(header=>!source.headers.includes(header))],rows:source.rows.map(row=>[...row])});
 const sum = (entries: Array<{ amount:string }>) => entries.reduce((total, entry) => total + num(entry.amount), 0);
+const currentQuarterRange = (source: LocalSheet) => {
+  const reference=[...source.headers,source.fileName].join(" ");
+  const match=reference.match(/(\d{2,4})\s*\u5e74\s*([1-4])\s*\u5b63\u5ea6/);
+  if(!match) return null;
+  const year=Number(match[1].length===2 ? "20"+match[1] : match[1]);
+  const quarter=Number(match[2]);
+  const months: Record<number,[number,number]>={1:[1,3],2:[4,6],3:[6,9],4:[10,12]};
+  return {year,months:months[quarter]};
+};
+const isCurrentQuarterInvoice = (date:string, range:{year:number;months:[number,number]}|null) => {
+  const digits=date.replace(/[^0-9]/g,"");
+  if(!range||digits.length<6) return false;
+  const year=Number(digits.slice(0,4)), month=Number(digits.slice(4,6));
+  return year===range.year&&month>=range.months[0]&&month<=range.months[1];
+};
+const needsDifferenceStripe = (source:LocalSheet, id:number, difference:number) => {
+  if(Math.abs(difference)<.01) return false;
+  const detail=source.details?.[String(id)], range=currentQuarterRange(source);
+  if(!detail||!range) return true;
+  const invoiceEntries=[...detail.transit,...detail.returned,...(detail.lost??[]),...(detail.instrument??[]),...detail.otherInvoice]
+    .filter(entry=>num(entry.amount)!==0||entry.invoice.trim()!==""||entry.date.trim()!=="");
+  const hasNoInvoiceAmount=sum(detail.other)!==0;
+  if(hasNoInvoiceAmount||!invoiceEntries.length) return true;
+  return invoiceEntries.some(entry=>!entry.invoice.trim()||!isCurrentQuarterInvoice(entry.date,range));
+};
 const backfillClearedStatus = (source: LocalSheet) => { const clearedAt=source.headers.findIndex(header=>String(header).replace(/\s/g,"").includes("是否对清")); const companyAt=source.headers.indexOf(T.company),customerAt=source.headers.indexOf(T.customerBook); if(clearedAt<0||companyAt<0||customerAt<0)return source; let changed=false; const rows=source.rows.map((sourceRow,id)=>{const detail=source.details?.[String(id)]; const customerValue=detail?.customerAmount??sourceRow[customerAt]; const filled=Boolean(detail)||String(customerValue??"").trim()!==""; const row=[...sourceRow]; const difference=num(row[companyAt])-num(customerValue); const total=detail?sum(detail.transit)+sum(detail.returned)+sum(detail.lost??[])+sum(detail.otherInvoice)+sum(detail.other):0; const status=!filled?T.unreconciled:(Math.abs(difference)<.01||Math.abs(difference-total)<.01)?T.clear:T.uncleared; if(row[clearedAt]!==status){row[clearedAt]=status;changed=true;} return row;});
  return changed?{...source,rows}:source; };
 const anyInvoice = (entry: InvoiceEntry) => Boolean(entry.date || entry.invoice || entry.amount || entry.note);
@@ -137,7 +162,7 @@ export function QuarterlyReconciliation({ mode="table" }: { mode?: "table" | "im
           <div className="table-scroll local-table" aria-busy={!sheet}>
             <table>
               <thead><tr>{sheet.headers.map((header,index)=>!hiddenColumns.includes(index)&&<th key={index} scope="col" className={[tableColumnHeadingClass(header),index===0?"sticky-index":String(header)===T.customer?"sticky-customer":""].filter(Boolean).join(" ")}><span>{tableHeader(header)}</span><button type="button" className={"column-filter-icon "+(filterColumns.includes(index)?"active":"")} aria-label={"筛选 "+tableHeader(header)} onClick={()=>setFilterColumn(index)}>⌄</button></th>)}{!salesHidden&&<th scope="col" className="sales-heading sticky-action"><span>{T.sales}</span><button type="button" className="column-filter-icon" aria-label="隐藏销售填写列" onClick={()=>setSalesHidden(true)}>⋮</button></th>}</tr></thead>
-              <tbody>{pagedRows.length?pagedRows.map(({row,id})=><tr key={id} className={[num(row[index(T.difference)])!==0?"has-difference":"",clearedIndex>=0&&String(row[clearedIndex])===T.uncleared?"is-uncleared-row":""].filter(Boolean).join(" ")}>{sheet.headers.map((header,index)=>!hiddenColumns.includes(index)&&<td key={index} className={cellClass(header,index)}>{String(header).includes("是否对清")?<span className={"status-badge "+clearedBadgeClass(row[index])}>{String(row[index]??"—")}</span>:<span className="cell-value" title={String(row[index]??"")}>{tableValue(header,row[index])||"—"}</span>}</td>)}{!salesHidden&&<td className="sticky-action"><button className="fill-button" type="button" onClick={()=>open(id)}>{T.fill}</button></td>}</tr>):<tr><td className="table-empty" colSpan={sheet.headers.length+1}>暂无符合条件的对账记录<button type="button" onClick={()=>{setRegion(T.all);setSearchInput("");setColumnFilters({});}}>清空筛选</button></td></tr>}</tbody>
+              <tbody>{pagedRows.length?pagedRows.map(({row,id})=><tr key={id} className={[num(row[index(T.difference)])!==0?"has-difference":"",needsDifferenceStripe(sheet,id,num(row[index(T.difference)]))?"has-history-difference":""].filter(Boolean).join(" ")}>{sheet.headers.map((header,index)=>!hiddenColumns.includes(index)&&<td key={index} className={cellClass(header,index)}>{String(header).includes("是否对清")?<span className={"status-badge "+clearedBadgeClass(row[index])}>{String(row[index]??"—")}</span>:<span className="cell-value" title={String(row[index]??"")}>{tableValue(header,row[index])||"—"}</span>}</td>)}{!salesHidden&&<td className="sticky-action"><button className="fill-button" type="button" onClick={()=>open(id)}>{T.fill}</button></td>}</tr>):<tr><td className="table-empty" colSpan={sheet.headers.length+1}>暂无符合条件的对账记录<button type="button" onClick={()=>{setRegion(T.all);setSearchInput("");setColumnFilters({});}}>清空筛选</button></td></tr>}</tbody>
             </table>
           </div>
           <div className="table-pagination"><span>共 {shown.length} 条，第 {page} / {pageCount} 页</span><div><button type="button" disabled={page<=1} onClick={()=>setPage(current=>Math.max(1,current-1))}>上一页</button><span>{page}</span><button type="button" disabled={page>=pageCount} onClick={()=>setPage(current=>Math.min(pageCount,current+1))}>下一页</button><select aria-label="每页条数" value={pageSize} onChange={event=>setPageSize(Number(event.target.value))}><option value={10}>每页 10 条</option><option value={20}>每页 20 条</option><option value={50}>每页 50 条</option></select></div></div>
