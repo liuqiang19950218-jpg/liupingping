@@ -171,7 +171,7 @@ export function QuarterlyReconciliation({ mode="table" }: { mode?: "table" | "im
         </>}
       </section>
       {active!==null && sheet && <div className="modal-backdrop"><section className="sales-modal">
-        <button className="modal-close" onClick={()=>setActive(null)}>{"\u00d7"}</button><div className="sales-modal-sticky"><p className="eyebrow">{T.sales}</p><p className="sales-account">{"\u8d26\u5957\uff1a"}{String(sheet.rows[active][accountIndex]??"\u2014")}</p><h2>{`${String(sheet.rows[active][customerIndex]??T.customerFallback)} ${T.detail}`}</h2>
+        <div className="sales-modal-sticky"><button type="button" className="modal-close" aria-label="关闭销售填写" onClick={()=>setActive(null)}>{"\u00d7"}</button><p className="eyebrow">{T.sales}</p><p className="sales-account">{"\u8d26\u5957\uff1a"}{String(sheet.rows[active][accountIndex]??"\u2014")}</p><h2>{`${String(sheet.rows[active][customerIndex]??T.customerFallback)} ${T.detail}`}</h2>
         <div className="amount-bar"><span>{`${T.company}\uff1a`}<strong>{money(company)}</strong></span><span>{`${T.difference}\uff1a`}<strong>{money(difference)}</strong></span><span className={isClear?"clear":"unclear"}>{isClear?T.clear:T.uncleared}</span></div>
         <div className="customer-save-row"><TextField label={T.customerBook} value={form.customerAmount} type="number" onChange={value=>setForm({...form,customerAmount:value})}/><TextField label={RESPONSIBLE_HEADER} value={form.responsible} onChange={updateResponsible}/><button className="save-button top-save-button" onClick={commit}>{T.save}</button></div>
         </div>
