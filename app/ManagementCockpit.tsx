@@ -1,10 +1,680 @@
 "use client";
-import {useMemo,useState} from "react";
-import {CockpitRow,cockpitRows,trendData} from "./cockpit-data";
+import { useEffect, useMemo, useState } from "react";
+import { CockpitRow, cockpitRows, trendData } from "./cockpit-data";
+import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
 import "./management-cockpit.css";
-type Props={activeTab:"cockpit"|"review"|"issue";onTabChange:(tab:"cockpit"|"review"|"issue")=>void}; type Filters={quarter:string;region:string;accountSet:string;owner:string;customer:string;cleared:string;follow:string};
-const money=(n:number)=>`${(n/10000).toLocaleString("zh-CN",{maximumFractionDigits:1})}万`,today=new Date("2026-05-20").getTime(),overdue=(r:CockpitRow)=>new Date(r.expectedDate).getTime()<today&&!r.actualDate;
-const score=(r:CockpitRow)=>Math.min(100,(r.difference?30:0)+(r.consecutiveUnclear?20:0)+(overdue(r)?20:0)+(r.transitInvoiceFail||r.returnInvoiceFail||r.duplicateInvoice?15:0)+(r.difference&&r.otherNoInvoice/r.difference>.2?10:0)+(!r.solution?5:0));
-const level=(r:CockpitRow)=>score(r)>=80?"高风险":score(r)>=60?"中风险":score(r)>=40?"需关注":"低风险";
-const getRisks=(r:CockpitRow)=>[r.difference!==r.transit+r.returned+r.otherInvoice+r.otherNoInvoice+r.badDebt+r.adjustment&&"四类差额合计不一致",r.transitInvoiceFail&&"在途发票校验失败",r.returnInvoiceFail&&"退回发票校验失败",r.consecutiveUnclear&&"连续两季度未对清",r.difference&&r.otherNoInvoice/r.difference>.4&&"其他无票占比过高",overdue(r)&&"逾期未解决",!r.solution&&"未填写解决方案",r.duplicateInvoice&&"存在重复发票"].filter(Boolean) as string[];
-export function ManagementCockpit({activeTab,onTabChange}:Props){const [f,setF]=useState<Filters>({quarter:"2026 Q2",region:"全部",accountSet:"全部",owner:"全部",customer:"",cleared:"全部",follow:"全部"}),[modal,setModal]=useState<{title:string;rows:CockpitRow[]}|null>(null),[range,setRange]=useState(4);const regions=[...new Set(cockpitRows.map(x=>x.region))],owners=[...new Set(cockpitRows.map(x=>x.owner))];const rows=useMemo(()=>cockpitRows.filter(r=>r.quarter===f.quarter&&(f.region==="全部"||r.region===f.region)&&(f.accountSet==="全部"||r.accountSet===f.accountSet)&&(f.owner==="全部"||r.owner===f.owner)&&(!f.customer||r.customer.includes(f.customer))&&(f.cleared==="全部"||(f.cleared==="已对清"?r.cleared:!r.cleared))&&(f.follow==="全部"||r.followStatus===f.follow)),[f]);const m=useMemo(()=>{let clear=rows.filter(x=>x.cleared).length,unclear=rows.length-clear;return{total:rows.length,clear,unclear,filled:rows.filter(x=>x.filled).length,unfilled:rows.filter(x=>!x.filled).length,rate:rows.length?clear/rows.length*100:0,unresolved:rows.filter(x=>!x.cleared).reduce((s,x)=>s+x.difference,0),invoice:rows.filter(x=>x.transitInvoiceFail||x.returnInvoiceFail||x.duplicateInvoice).length,overdue:rows.filter(overdue).length,resolved:rows.filter(x=>x.followStatus==="已解决").length}},[rows]);const regionRows=regions.map(region=>{const x=rows.filter(r=>r.region===region),clear=x.filter(r=>r.cleared).length;return{region,x,clear,rate:x.length?clear/x.length*100:0,unresolved:x.filter(r=>!r.cleared).reduce((s,r)=>s+r.difference,0),invoice:x.filter(r=>r.transitInvoiceFail||r.returnInvoiceFail||r.duplicateInvoice).length,overdue:x.filter(overdue).length,risk:x.reduce((s,r)=>s+getRisks(r).length,0)}}).filter(x=>x.x.length).sort((a,b)=>b.risk-a.risk);const cats=[['在途金额','transit','#2c78f6'],['退票金额','returned','#18b79b'],['其他（有发票）','otherInvoice','#f7af2d'],['其他（无发票）','otherNoInvoice','#8d70e8'],['坏账金额','badDebt','#f16f78'],['调整金额','adjustment','#5aaeea']].map(([name,key,color])=>({name,key:key as keyof CockpitRow,color,value:rows.reduce((s,r)=>s+Number(r[key]),0)})).filter(x=>x.value);const conic=`conic-gradient(${cats.map((x,i)=>{const start=cats.slice(0,i).reduce((s,a)=>s+a.value,0)/Math.max(m.unresolved,1)*360,end=cats.slice(0,i+1).reduce((s,a)=>s+a.value,0)/Math.max(m.unresolved,1)*360;return `${x.color} ${start}deg ${end}deg`}).join(',')})`;const risks=["四类差额合计不一致","在途发票校验失败","退回发票校验失败","连续两季度未对清","其他无票占比过高","逾期未解决","未填写解决方案","存在重复发票"].map(name=>({name,list:rows.filter(r=>getRisks(r).includes(name))})).filter(x=>x.list.length);const priority=[...rows].filter(x=>!x.cleared).sort((a,b)=>score(b)-score(a)||b.difference-a.difference),trend=trendData.slice(-range),compare=trend.at(-1)!.rate-trend.at(-2)!.rate;const change=(key:keyof Filters,value:string)=>setF(v=>({...v,[key]:value})),open=(title:string,list:CockpitRow[])=>setModal({title,rows:list});const download=()=>{const data=['客户,区域,账套,负责人,差额,状态,风险等级',...rows.map(r=>[r.customer,r.region,r.accountSet,r.owner,r.difference,r.cleared?'已对清':'未对清',level(r)].join(','))].join('\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+data],{type:'text/csv'}));a.download=`${f.quarter}-管理层驾驶舱.csv`;a.click();URL.revokeObjectURL(a.href)};const metrics=[['客户总数',m.total],['已填报',m.filled],['未填报',m.unfilled],['已对清',m.clear],['未对清',m.unclear],['对清率',`${m.rate.toFixed(1)}%`],['未解决差额',money(m.unresolved)],['发票校验异常',m.invoice],['逾期客户',m.overdue],['已解决客户',m.resolved]];return <div className="cockpit"><div className="cockpit-tabs"><button className={activeTab==='cockpit'?'active':''} onClick={()=>onTabChange('cockpit')}>管理层驾驶舱</button><button className={activeTab==='review'?'active':''} onClick={()=>onTabChange('review')}>财务复核看板</button><button className={activeTab==='issue'?'active':''} onClick={()=>onTabChange('issue')}>问题解决看板</button></div>{activeTab!=='cockpit'&&<div className="cockpit-subnotice">当前为{activeTab==='review'?'财务复核':'问题解决'}视图，已复用同一筛选范围；完整业务操作可从左侧对账明细和客户跟进进入。</div>}<section className="cockpit-filter"><label>季度<select value={f.quarter} onChange={e=>change('quarter',e.target.value)}><option>2026 Q2</option><option>2026 Q1</option></select></label><label>区域<select value={f.region} onChange={e=>change('region',e.target.value)}><option>全部</option>{regions.map(x=><option key={x}>{x}</option>)}</select></label><label>账套<select value={f.accountSet} onChange={e=>change('accountSet',e.target.value)}><option>全部</option><option>华东医疗</option><option>工业客户</option></select></label><label>对账负责人<select value={f.owner} onChange={e=>change('owner',e.target.value)}><option>全部</option>{owners.map(x=><option key={x}>{x}</option>)}</select></label><label className="customer-search">客户名称<input value={f.customer} onChange={e=>change('customer',e.target.value)} placeholder="请输入客户名称"/></label><label>对清状态<select value={f.cleared} onChange={e=>change('cleared',e.target.value)}><option>全部</option><option>已对清</option><option>未对清</option></select></label><label>跟进状态<select value={f.follow} onChange={e=>change('follow',e.target.value)}><option>全部</option><option>待资料</option><option>待跟进</option><option>待财务复核</option><option>已解决</option></select></label><div className="filter-actions"><button onClick={()=>setF({quarter:'2026 Q2',region:'全部',accountSet:'全部',owner:'全部',customer:'',cleared:'全部',follow:'全部'})}>重置筛选</button><button onClick={download}>导出看板</button><button className="primary" onClick={()=>setF(v=>({...v}))}>刷新数据</button></div></section><div className="cockpit-conclusion">📣 <b>{f.quarter}</b> 共完成 <em>{m.total}</em> 家客户对账，对清率 <em>{m.rate.toFixed(1)}%</em>，未对清 <strong>{m.unclear}</strong> 家，未解决差额 <strong>{money(m.unresolved)}</strong>，风险主要集中在 <strong>{regionRows.slice(0,2).map(x=>x.region).join('和')||'当前筛选范围'}</strong> 区域。</div><section className="metric-grid">{metrics.map(([name,value])=><button key={String(name)} className="metric-card" onClick={()=>open(String(name),name==='未对清'?rows.filter(x=>!x.cleared):name==='逾期客户'?rows.filter(overdue):name==='发票校验异常'?rows.filter(x=>x.transitInvoiceFail||x.returnInvoiceFail||x.duplicateInvoice):rows)}><span>{name}</span><b>{value}</b><i>点击查看明细</i></button>)}</section><section className="cockpit-three"><article className="panel risks"><h3>A. 核心风险与异常提醒</h3>{risks.map((x,i)=><button key={x.name} onClick={()=>open(x.name,x.list)}><span className={i<2?'danger':i<5?'warning':'normal'}>{i+1}</span><b>{x.name}</b><em>{x.list.length} 家</em><small>{x.list.some(r=>level(r)==='高风险')?'高风险':'需关注'}</small></button>)}<a onClick={()=>open('全部风险客户',priority)}>查看全部风险 ›</a></article><article className="panel region-panel"><h3>B. 区域对账表现</h3><div className="table-wrap"><table><thead><tr><th>区域</th><th>客户数</th><th>对清率</th><th>未解决差额</th><th>异常</th><th>逾期</th></tr></thead><tbody>{regionRows.map(x=><tr key={x.region} onClick={()=>change('region',x.region)}><td>{x.region}</td><td>{x.x.length}</td><td><span className={`rate ${x.rate>=90?'green':x.rate>=80?'blue':x.rate>=70?'orange':'red'}`}><i style={{width:`${x.rate}%`}}></i>{x.rate.toFixed(1)}%</span></td><td>{money(x.unresolved)}</td><td>{x.invoice}</td><td>{x.overdue}</td></tr>)}<tr className="total"><td>合计</td><td>{m.total}</td><td>{m.rate.toFixed(1)}%</td><td>{money(m.unresolved)}</td><td>{m.invoice}</td><td>{m.overdue}</td></tr></tbody></table></div></article><article className="panel donut-panel"><h3>C. 差额结构分析 <small>（单位：元）</small></h3><div className="donut-wrap"><button className="donut" style={{background:conic}} onClick={()=>open('未解决差额客户',rows.filter(x=>!x.cleared))}><span><b>{money(m.unresolved)}</b><small>未解决差额</small></span></button><div>{cats.map(x=><button className="legend" key={x.name} onClick={()=>open(x.name,rows.filter(r=>Number(r[x.key])>0))}><i style={{background:x.color}}></i>{x.name}<b>{money(x.value)}</b><small>{m.unresolved?`${(x.value/m.unresolved*100).toFixed(1)}%`:'0%'}</small></button>)}</div></div></article></section><section className="cockpit-lower"><article className="panel follow-panel"><h3>D. 未解决客户跟进 <button onClick={()=>open('全部未解决客户',priority)}>查看全部（{m.unclear}家）›</button></h3><div className="table-wrap"><table><thead><tr><th>客户</th><th>区域</th><th>负责人</th><th>对账差额</th><th>状态</th><th>预计完成</th><th>风险</th></tr></thead><tbody>{priority.slice(0,6).map(r=><tr key={r.id} onClick={()=>open(r.customer,[r])}><td>{r.customer}</td><td>{r.region}</td><td>{r.owner}</td><td>{money(r.difference)}</td><td><span className="status">{r.followStatus}</span></td><td>{r.expectedDate}</td><td><span className={`risk-badge ${level(r)==='高风险'?'high':''}`}>{level(r)}</span></td></tr>)}</tbody></table></div></article><article className="panel trend-panel"><h3>E. 历史趋势 <span><button onClick={()=>setRange(4)} className={range===4?'picked':''}>最近4季</button><button onClick={()=>setRange(2)} className={range===2?'picked':''}>最近2季</button></span></h3><div className="trend">{trend.map(x=><div key={x.quarter}><b>{x.rate}%</b><i style={{height:`${x.unresolved/50000}px`}}></i><span>{money(x.unresolved)}</span><small>{x.quarter}</small></div>)}</div><p>对清率较上季 <b className={compare>=0?'up':'down'}>{compare>=0?'提升':'下降'} {Math.abs(compare).toFixed(1)} 个百分点</b>，未解决差额呈 <b>{compare>=0?'收窄':'扩大'}</b> 趋势。</p></article><article className="panel analysis"><h3>F. 自动财务分析结论</h3><ol><li>本季度对清率为 <b>{m.rate.toFixed(1)}%</b>，较上季{compare>=0?'提升':'下降'} <b>{Math.abs(compare).toFixed(1)}</b> 个百分点；</li><li>{regionRows[0]?.region||'当前'}区域未解决差额最高，占比 <b>{m.unresolved?`${(regionRows[0]?.unresolved/m.unresolved*100).toFixed(1)}%`:'0%'}</b>；</li><li>高风险客户 <b>{priority.filter(x=>level(x)==='高风险').length}</b> 家，优先处理逾期与连续未对清客户；</li><li>发票校验异常 <b>{m.invoice}</b> 笔，需完成票号、日期和金额一致性核验；</li><li>建议先推进 <b>{priority.slice(0,2).map(x=>x.customer).join('、')||'当前筛选客户'}</b> 的方案闭环。</li></ol><footer>数据统计截止：2026-05-20 18:00　数据仅供参考</footer></article></section>{f.quarter==='2026 Q1'&&<section className="q1-cockpit-extra"><b>2026 Q1 专项信息</b><span>资料收集、丢票与不对账客户专项数据已联动至左侧历史看板；可继续查看专属行动清单与区域完成率。</span></section>}{modal&&<div className="cockpit-modal" role="dialog"><div><button className="modal-close" onClick={()=>setModal(null)}>×</button><h2>{modal.title}</h2><p>当前筛选范围内共 {modal.rows.length} 条记录</p><div className="table-wrap"><table><thead><tr><th>客户</th><th>区域</th><th>账套</th><th>负责人</th><th>差额</th><th>差额说明</th><th>解决方案</th><th>风险</th></tr></thead><tbody>{modal.rows.map(r=><tr key={r.id}><td>{r.customer}</td><td>{r.region}</td><td>{r.accountSet}</td><td>{r.owner}</td><td>{money(r.difference)}</td><td>{r.cause}</td><td>{r.solution||'待填写'}</td><td>{level(r)}</td></tr>)}</tbody></table></div></div></div>}</div>}
+type Props = {
+  activeTab: "cockpit" | "review" | "issue";
+  onTabChange: (tab: "cockpit" | "review" | "issue") => void;
+};
+type Filters = {
+  quarter: string;
+  region: string;
+  accountSet: string;
+  owner: string;
+  customer: string;
+  cleared: string;
+  follow: string;
+};
+const money = (n: number) =>
+    `${(n / 10000).toLocaleString("zh-CN", { maximumFractionDigits: 1 })}万`,
+  today = new Date("2026-05-20").getTime(),
+  overdue = (r: CockpitRow) =>
+    new Date(r.expectedDate).getTime() < today && !r.actualDate;
+const score = (r: CockpitRow) =>
+  Math.min(
+    100,
+    (r.difference ? 30 : 0) +
+      (r.consecutiveUnclear ? 20 : 0) +
+      (overdue(r) ? 20 : 0) +
+      (r.transitInvoiceFail || r.returnInvoiceFail || r.duplicateInvoice
+        ? 15
+        : 0) +
+      (r.difference && r.otherNoInvoice / r.difference > 0.2 ? 10 : 0) +
+      (!r.solution ? 5 : 0),
+  );
+const level = (r: CockpitRow) =>
+  score(r) >= 80
+    ? "高风险"
+    : score(r) >= 60
+      ? "中风险"
+      : score(r) >= 40
+        ? "需关注"
+        : "低风险";
+const getRisks = (r: CockpitRow) =>
+  [
+    r.difference !==
+      r.transit +
+        r.returned +
+        r.otherInvoice +
+        r.otherNoInvoice +
+        r.badDebt +
+        r.adjustment && "四类差额合计不一致",
+    r.transitInvoiceFail && "在途发票校验失败",
+    r.returnInvoiceFail && "退回发票校验失败",
+    r.consecutiveUnclear && "连续两季度未对清",
+    r.difference && r.otherNoInvoice / r.difference > 0.4 && "其他无票占比过高",
+    overdue(r) && "逾期未解决",
+    !r.solution && "未填写解决方案",
+    r.duplicateInvoice && "存在重复发票",
+  ].filter(Boolean) as string[];
+export function ManagementCockpit({ activeTab, onTabChange }: Props) {
+  const [f, setF] = useState<Filters>({
+      quarter: "2026 Q2",
+      region: "全部",
+      accountSet: "全部",
+      owner: "全部",
+      customer: "",
+      cleared: "全部",
+      follow: "全部",
+    }),
+    [modal, setModal] = useState<{ title: string; rows: CockpitRow[] } | null>(
+      null,
+    ),
+    [range, setRange] = useState(4);
+  const [availableQuarters, setAvailableQuarters] = useState<string[]>([]);
+  useEffect(() => {
+    const syncQuarter = () => { setAvailableQuarters(quarterOptions()); setF((value) => ({ ...value, quarter: selectedQuarter() || value.quarter })); };
+    syncQuarter();
+    window.addEventListener("reconciliation-quarter-selected", syncQuarter);
+    window.addEventListener("reconciliation-quarter-updated", syncQuarter);
+    window.addEventListener("reconciliation-dashboard-updated", syncQuarter);
+    return () => { window.removeEventListener("reconciliation-quarter-selected", syncQuarter); window.removeEventListener("reconciliation-quarter-updated", syncQuarter); window.removeEventListener("reconciliation-dashboard-updated", syncQuarter); };
+  }, []);
+  const regions = [...new Set(cockpitRows.map((x) => x.region))],
+    owners = [...new Set(cockpitRows.map((x) => x.owner))];
+  const rows = useMemo(
+    () =>
+      cockpitRows.filter(
+        (r) =>
+          r.quarter === f.quarter &&
+          (f.region === "全部" || r.region === f.region) &&
+          (f.accountSet === "全部" || r.accountSet === f.accountSet) &&
+          (f.owner === "全部" || r.owner === f.owner) &&
+          (!f.customer || r.customer.includes(f.customer)) &&
+          (f.cleared === "全部" ||
+            (f.cleared === "已对清" ? r.cleared : !r.cleared)) &&
+          (f.follow === "全部" || r.followStatus === f.follow),
+      ),
+    [f],
+  );
+  const m = useMemo(() => {
+    let clear = rows.filter((x) => x.cleared).length,
+      unclear = rows.length - clear;
+    return {
+      total: rows.length,
+      clear,
+      unclear,
+      filled: rows.filter((x) => x.filled).length,
+      unfilled: rows.filter((x) => !x.filled).length,
+      rate: rows.length ? (clear / rows.length) * 100 : 0,
+      unresolved: rows
+        .filter((x) => !x.cleared)
+        .reduce((s, x) => s + x.difference, 0),
+      invoice: rows.filter(
+        (x) =>
+          x.transitInvoiceFail || x.returnInvoiceFail || x.duplicateInvoice,
+      ).length,
+      overdue: rows.filter(overdue).length,
+      resolved: rows.filter((x) => x.followStatus === "已解决").length,
+    };
+  }, [rows]);
+  const regionRows = regions
+    .map((region) => {
+      const x = rows.filter((r) => r.region === region),
+        clear = x.filter((r) => r.cleared).length;
+      return {
+        region,
+        x,
+        clear,
+        rate: x.length ? (clear / x.length) * 100 : 0,
+        unresolved: x
+          .filter((r) => !r.cleared)
+          .reduce((s, r) => s + r.difference, 0),
+        invoice: x.filter(
+          (r) =>
+            r.transitInvoiceFail || r.returnInvoiceFail || r.duplicateInvoice,
+        ).length,
+        overdue: x.filter(overdue).length,
+        risk: x.reduce((s, r) => s + getRisks(r).length, 0),
+      };
+    })
+    .filter((x) => x.x.length)
+    .sort((a, b) => b.risk - a.risk);
+  const cats = [
+    ["在途金额", "transit", "#2c78f6"],
+    ["退票金额", "returned", "#18b79b"],
+    ["其他（有发票）", "otherInvoice", "#f7af2d"],
+    ["其他（无发票）", "otherNoInvoice", "#8d70e8"],
+    ["坏账金额", "badDebt", "#f16f78"],
+    ["调整金额", "adjustment", "#5aaeea"],
+  ]
+    .map(([name, key, color]) => ({
+      name,
+      key: key as keyof CockpitRow,
+      color,
+      value: rows.reduce((s, r) => s + Number(r[key]), 0),
+    }))
+    .filter((x) => x.value);
+  const conic = `conic-gradient(${cats
+    .map((x, i) => {
+      const start =
+          (cats.slice(0, i).reduce((s, a) => s + a.value, 0) /
+            Math.max(m.unresolved, 1)) *
+          360,
+        end =
+          (cats.slice(0, i + 1).reduce((s, a) => s + a.value, 0) /
+            Math.max(m.unresolved, 1)) *
+          360;
+      return `${x.color} ${start}deg ${end}deg`;
+    })
+    .join(",")})`;
+  const risks = [
+    "四类差额合计不一致",
+    "在途发票校验失败",
+    "退回发票校验失败",
+    "连续两季度未对清",
+    "其他无票占比过高",
+    "逾期未解决",
+    "未填写解决方案",
+    "存在重复发票",
+  ]
+    .map((name) => ({
+      name,
+      list: rows.filter((r) => getRisks(r).includes(name)),
+    }))
+    .filter((x) => x.list.length);
+  const priority = [...rows]
+      .filter((x) => !x.cleared)
+      .sort((a, b) => score(b) - score(a) || b.difference - a.difference),
+    trend = trendData.slice(-range),
+    compare = trend.at(-1)!.rate - trend.at(-2)!.rate;
+  const change = (key: keyof Filters, value: string) => { if (key === "quarter") selectQuarter(value); setF((v) => ({ ...v, [key]: value })); },
+    open = (title: string, list: CockpitRow[]) =>
+      setModal({ title, rows: list });
+  const download = () => {
+    const data = [
+        "客户,区域,账套,负责人,差额,状态,风险等级",
+        ...rows.map((r) =>
+          [
+            r.customer,
+            r.region,
+            r.accountSet,
+            r.owner,
+            r.difference,
+            r.cleared ? "已对清" : "未对清",
+            level(r),
+          ].join(","),
+        ),
+      ].join("\n"),
+      a = document.createElement("a");
+    a.href = URL.createObjectURL(
+      new Blob(["\ufeff" + data], { type: "text/csv" }),
+    );
+    a.download = `${f.quarter}-管理层驾驶舱.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  const metrics = [
+    ["客户总数", m.total],
+    ["已填报", m.filled],
+    ["未填报", m.unfilled],
+    ["已对清", m.clear],
+    ["未对清", m.unclear],
+    ["对清率", `${m.rate.toFixed(1)}%`],
+    ["未解决差额", money(m.unresolved)],
+    ["发票校验异常", m.invoice],
+    ["逾期客户", m.overdue],
+    ["已解决客户", m.resolved],
+  ];
+  return (
+    <div className="cockpit">
+      <div className="cockpit-tabs">
+        <button
+          className={activeTab === "cockpit" ? "active" : ""}
+          onClick={() => onTabChange("cockpit")}
+        >
+          管理层驾驶舱
+        </button>
+        <button
+          className={activeTab === "review" ? "active" : ""}
+          onClick={() => onTabChange("review")}
+        >
+          财务复核看板
+        </button>
+        <button
+          className={activeTab === "issue" ? "active" : ""}
+          onClick={() => onTabChange("issue")}
+        >
+          问题解决看板
+        </button>
+      </div>
+      {activeTab !== "cockpit" && (
+        <div className="cockpit-subnotice">
+          当前为{activeTab === "review" ? "财务复核" : "问题解决"}
+          视图，已复用同一筛选范围；完整业务操作可从左侧对账明细和客户跟进进入。
+        </div>
+      )}
+      <section className="cockpit-filter">
+        <label>
+          季度
+          <select
+            value={f.quarter}
+            onChange={(e) => change("quarter", e.target.value)}
+          >
+            {(availableQuarters.length ? availableQuarters : [f.quarter]).map((quarter) => <option key={quarter}>{quarter}</option>)}
+          </select>
+        </label>
+        <label>
+          区域
+          <select
+            value={f.region}
+            onChange={(e) => change("region", e.target.value)}
+          >
+            <option>全部</option>
+            {regions.map((x) => (
+              <option key={x}>{x}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          账套
+          <select
+            value={f.accountSet}
+            onChange={(e) => change("accountSet", e.target.value)}
+          >
+            <option>全部</option>
+            <option>华东医疗</option>
+            <option>工业客户</option>
+          </select>
+        </label>
+        <label>
+          对账负责人
+          <select
+            value={f.owner}
+            onChange={(e) => change("owner", e.target.value)}
+          >
+            <option>全部</option>
+            {owners.map((x) => (
+              <option key={x}>{x}</option>
+            ))}
+          </select>
+        </label>
+        <label className="customer-search">
+          客户名称
+          <input
+            value={f.customer}
+            onChange={(e) => change("customer", e.target.value)}
+            placeholder="请输入客户名称"
+          />
+        </label>
+        <label>
+          对清状态
+          <select
+            value={f.cleared}
+            onChange={(e) => change("cleared", e.target.value)}
+          >
+            <option>全部</option>
+            <option>已对清</option>
+            <option>未对清</option>
+          </select>
+        </label>
+        <label>
+          跟进状态
+          <select
+            value={f.follow}
+            onChange={(e) => change("follow", e.target.value)}
+          >
+            <option>全部</option>
+            <option>待资料</option>
+            <option>待跟进</option>
+            <option>待财务复核</option>
+            <option>已解决</option>
+          </select>
+        </label>
+        <div className="filter-actions">
+          <button
+            onClick={() =>
+              setF({
+                quarter: selectedQuarter() || f.quarter,
+                region: "全部",
+                accountSet: "全部",
+                owner: "全部",
+                customer: "",
+                cleared: "全部",
+                follow: "全部",
+              })
+            }
+          >
+            重置筛选
+          </button>
+          <button onClick={download}>导出看板</button>
+          <button className="primary" onClick={() => setF((v) => ({ ...v }))}>
+            刷新数据
+          </button>
+        </div>
+      </section>
+      <div className="cockpit-conclusion">
+        📣 <b>{f.quarter}</b> 共完成 <em>{m.total}</em> 家客户对账，对清率{" "}
+        <em>{m.rate.toFixed(1)}%</em>，未对清 <strong>{m.unclear}</strong>{" "}
+        家，未解决差额 <strong>{money(m.unresolved)}</strong>，风险主要集中在{" "}
+        <strong>
+          {regionRows
+            .slice(0, 2)
+            .map((x) => x.region)
+            .join("和") || "当前筛选范围"}
+        </strong>{" "}
+        区域。
+      </div>
+      <section className="metric-grid">
+        {metrics.map(([name, value]) => (
+          <button
+            key={String(name)}
+            className="metric-card"
+            onClick={() =>
+              open(
+                String(name),
+                name === "未对清"
+                  ? rows.filter((x) => !x.cleared)
+                  : name === "逾期客户"
+                    ? rows.filter(overdue)
+                    : name === "发票校验异常"
+                      ? rows.filter(
+                          (x) =>
+                            x.transitInvoiceFail ||
+                            x.returnInvoiceFail ||
+                            x.duplicateInvoice,
+                        )
+                      : rows,
+              )
+            }
+          >
+            <span>{name}</span>
+            <b>{value}</b>
+            <i>点击查看明细</i>
+          </button>
+        ))}
+      </section>
+      <section className="cockpit-three">
+        <article className="panel risks">
+          <h3>A. 核心风险与异常提醒</h3>
+          {risks.map((x, i) => (
+            <button key={x.name} onClick={() => open(x.name, x.list)}>
+              <span className={i < 2 ? "danger" : i < 5 ? "warning" : "normal"}>
+                {i + 1}
+              </span>
+              <b>{x.name}</b>
+              <em>{x.list.length} 家</em>
+              <small>
+                {x.list.some((r) => level(r) === "高风险")
+                  ? "高风险"
+                  : "需关注"}
+              </small>
+            </button>
+          ))}
+          <a onClick={() => open("全部风险客户", priority)}>查看全部风险 ›</a>
+        </article>
+        <article className="panel region-panel">
+          <h3>B. 区域对账表现</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>区域</th>
+                  <th>客户数</th>
+                  <th>对清率</th>
+                  <th>未解决差额</th>
+                  <th>异常</th>
+                  <th>逾期</th>
+                </tr>
+              </thead>
+              <tbody>
+                {regionRows.map((x) => (
+                  <tr key={x.region} onClick={() => change("region", x.region)}>
+                    <td>{x.region}</td>
+                    <td>{x.x.length}</td>
+                    <td>
+                      <span
+                        className={`rate ${x.rate >= 90 ? "green" : x.rate >= 80 ? "blue" : x.rate >= 70 ? "orange" : "red"}`}
+                      >
+                        <i style={{ width: `${x.rate}%` }}></i>
+                        {x.rate.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td>{money(x.unresolved)}</td>
+                    <td>{x.invoice}</td>
+                    <td>{x.overdue}</td>
+                  </tr>
+                ))}
+                <tr className="total">
+                  <td>合计</td>
+                  <td>{m.total}</td>
+                  <td>{m.rate.toFixed(1)}%</td>
+                  <td>{money(m.unresolved)}</td>
+                  <td>{m.invoice}</td>
+                  <td>{m.overdue}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+        <article className="panel donut-panel">
+          <h3>
+            C. 差额结构分析 <small>（单位：元）</small>
+          </h3>
+          <div className="donut-wrap">
+            <button
+              className="donut"
+              style={{ background: conic }}
+              onClick={() =>
+                open(
+                  "未解决差额客户",
+                  rows.filter((x) => !x.cleared),
+                )
+              }
+            >
+              <span>
+                <b>{money(m.unresolved)}</b>
+                <small>未解决差额</small>
+              </span>
+            </button>
+            <div>
+              {cats.map((x) => (
+                <button
+                  className="legend"
+                  key={x.name}
+                  onClick={() =>
+                    open(
+                      x.name,
+                      rows.filter((r) => Number(r[x.key]) > 0),
+                    )
+                  }
+                >
+                  <i style={{ background: x.color }}></i>
+                  {x.name}
+                  <b>{money(x.value)}</b>
+                  <small>
+                    {m.unresolved
+                      ? `${((x.value / m.unresolved) * 100).toFixed(1)}%`
+                      : "0%"}
+                  </small>
+                </button>
+              ))}
+            </div>
+          </div>
+        </article>
+      </section>
+      <section className="cockpit-lower">
+        <article className="panel follow-panel">
+          <h3>
+            D. 未解决客户跟进{" "}
+            <button onClick={() => open("全部未解决客户", priority)}>
+              查看全部（{m.unclear}家）›
+            </button>
+          </h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>客户</th>
+                  <th>区域</th>
+                  <th>负责人</th>
+                  <th>对账差额</th>
+                  <th>状态</th>
+                  <th>预计完成</th>
+                  <th>风险</th>
+                </tr>
+              </thead>
+              <tbody>
+                {priority.slice(0, 6).map((r) => (
+                  <tr key={r.id} onClick={() => open(r.customer, [r])}>
+                    <td>{r.customer}</td>
+                    <td>{r.region}</td>
+                    <td>{r.owner}</td>
+                    <td>{money(r.difference)}</td>
+                    <td>
+                      <span className="status">{r.followStatus}</span>
+                    </td>
+                    <td>{r.expectedDate}</td>
+                    <td>
+                      <span
+                        className={`risk-badge ${level(r) === "高风险" ? "high" : ""}`}
+                      >
+                        {level(r)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+        <article className="panel trend-panel">
+          <h3>
+            E. 历史趋势{" "}
+            <span>
+              <button
+                onClick={() => setRange(4)}
+                className={range === 4 ? "picked" : ""}
+              >
+                最近4季
+              </button>
+              <button
+                onClick={() => setRange(2)}
+                className={range === 2 ? "picked" : ""}
+              >
+                最近2季
+              </button>
+            </span>
+          </h3>
+          <div className="trend">
+            {trend.map((x) => (
+              <div key={x.quarter}>
+                <b>{x.rate}%</b>
+                <i style={{ height: `${x.unresolved / 50000}px` }}></i>
+                <span>{money(x.unresolved)}</span>
+                <small>{x.quarter}</small>
+              </div>
+            ))}
+          </div>
+          <p>
+            对清率较上季{" "}
+            <b className={compare >= 0 ? "up" : "down"}>
+              {compare >= 0 ? "提升" : "下降"} {Math.abs(compare).toFixed(1)}{" "}
+              个百分点
+            </b>
+            ，未解决差额呈 <b>{compare >= 0 ? "收窄" : "扩大"}</b> 趋势。
+          </p>
+        </article>
+        <article className="panel analysis">
+          <h3>F. 自动财务分析结论</h3>
+          <ol>
+            <li>
+              本季度对清率为 <b>{m.rate.toFixed(1)}%</b>，较上季
+              {compare >= 0 ? "提升" : "下降"}{" "}
+              <b>{Math.abs(compare).toFixed(1)}</b> 个百分点；
+            </li>
+            <li>
+              {regionRows[0]?.region || "当前"}区域未解决差额最高，占比{" "}
+              <b>
+                {m.unresolved
+                  ? `${((regionRows[0]?.unresolved / m.unresolved) * 100).toFixed(1)}%`
+                  : "0%"}
+              </b>
+              ；
+            </li>
+            <li>
+              高风险客户{" "}
+              <b>{priority.filter((x) => level(x) === "高风险").length}</b>{" "}
+              家，优先处理逾期与连续未对清客户；
+            </li>
+            <li>
+              发票校验异常 <b>{m.invoice}</b>{" "}
+              笔，需完成票号、日期和金额一致性核验；
+            </li>
+            <li>
+              建议先推进{" "}
+              <b>
+                {priority
+                  .slice(0, 2)
+                  .map((x) => x.customer)
+                  .join("、") || "当前筛选客户"}
+              </b>{" "}
+              的方案闭环。
+            </li>
+          </ol>
+          <footer>数据统计截止：2026-05-20 18:00　数据仅供参考</footer>
+        </article>
+      </section>
+      {f.quarter === "2026 Q1" && (
+        <section className="q1-cockpit-extra">
+          <b>2026 Q1 专项信息</b>
+          <span>
+            资料收集、丢票与不对账客户专项数据已联动至左侧历史看板；可继续查看专属行动清单与区域完成率。
+          </span>
+        </section>
+      )}
+      {modal && (
+        <div className="cockpit-modal" role="dialog">
+          <div>
+            <button className="modal-close" onClick={() => setModal(null)}>
+              ×
+            </button>
+            <h2>{modal.title}</h2>
+            <p>当前筛选范围内共 {modal.rows.length} 条记录</p>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>客户</th>
+                    <th>区域</th>
+                    <th>账套</th>
+                    <th>负责人</th>
+                    <th>差额</th>
+                    <th>差额说明</th>
+                    <th>解决方案</th>
+                    <th>风险</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modal.rows.map((r) => (
+                    <tr key={r.id}>
+                      <td>{r.customer}</td>
+                      <td>{r.region}</td>
+                      <td>{r.accountSet}</td>
+                      <td>{r.owner}</td>
+                      <td>{money(r.difference)}</td>
+                      <td>{r.cause}</td>
+                      <td>{r.solution || "待填写"}</td>
+                      <td>{level(r)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

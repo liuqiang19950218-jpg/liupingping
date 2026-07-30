@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import "./issue-tracker.css";
+import { selectedQuarter, sheetForQuarter } from "./quarter-storage";
 
 const KEY = "local-quarterly-reconciliation";
 const VIEW_KEY = "local-quarterly-reconciliation-issue-tracker-view";
@@ -61,10 +62,25 @@ type TrackerColumn = {
 };
 
 const columns: TrackerColumn[] = [
-  { key: "quarter", label: "季度", width: 86, className: "tracker-sticky-left" },
-  { key: "accountSet", label: "账套", width: 110, className: "tracker-sticky-left" },
+  {
+    key: "quarter",
+    label: "季度",
+    width: 86,
+    className: "tracker-sticky-left",
+  },
+  {
+    key: "accountSet",
+    label: "账套",
+    width: 110,
+    className: "tracker-sticky-left",
+  },
   { key: "region", label: "区域", width: 88, className: "tracker-sticky-left" },
-  { key: "customer", label: "客户", width: 190, className: "tracker-customer tracker-sticky-left" },
+  {
+    key: "customer",
+    label: "客户",
+    width: 190,
+    className: "tracker-customer tracker-sticky-left",
+  },
   { key: "owner", label: "负责人", width: 113 },
   { key: "amount", label: "对账差额", width: 189, className: "tracker-money" },
   { key: "time", label: "初步解决时间", width: 189 },
@@ -85,14 +101,17 @@ const columns: TrackerColumn[] = [
   { key: "actions", label: "操作", width: 160 },
 ];
 
-function read(): Item[] {
+function read(source?: Sheet | null): Item[] {
   try {
-    const sheet = JSON.parse(
+    const sheet = source ?? (JSON.parse(
       localStorage.getItem(KEY) || "null",
-    ) as Sheet | null;
+    ) as Sheet | null);
     if (!sheet) return [];
     const at = (name: string) => sheet.headers.indexOf(name);
-    const contains = (name: string) => sheet.headers.findIndex((header) => String(header).replace(/\s/g, "").includes(name));
+    const contains = (name: string) =>
+      sheet.headers.findIndex((header) =>
+        String(header).replace(/\s/g, "").includes(name),
+      );
     const match = String(sheet.fileName).match(/(\d{2,4}).*?([1-4])季度/);
     const quarter = match
       ? `${match[1].length === 2 ? `20${match[1]}` : match[1]} Q${match[2]}`
@@ -121,7 +140,8 @@ function read(): Item[] {
           amount: String(row[at("对账差额")] ?? ""),
           solution,
           time,
-          resolved: detail.resolved === true || (!time && detail.reopened !== true),
+          resolved:
+            detail.resolved === true || (!time && detail.reopened !== true),
           followUps,
         };
       })
@@ -181,8 +201,17 @@ function OverdueFollowUpDashboard({ items }: { items: Item[] }) {
         entry.days !== null && entry.days > 7,
     )
     .sort((a, b) => b.days - a.days);
-  const regions = [...new Set(overdue.map(entry => entry.item.region.trim() || "未填写区域"))];
-  const shown = region === "全部区域" ? overdue : overdue.filter(entry => (entry.item.region.trim() || "未填写区域") === region);
+  const regions = [
+    ...new Set(
+      overdue.map((entry) => entry.item.region.trim() || "未填写区域"),
+    ),
+  ];
+  const shown =
+    region === "全部区域"
+      ? overdue
+      : overdue.filter(
+          (entry) => (entry.item.region.trim() || "未填写区域") === region,
+        );
   return (
     <section className="overdue-followup-dashboard" aria-label="超期未跟进预警">
       <header>
@@ -195,31 +224,45 @@ function OverdueFollowUpDashboard({ items }: { items: Item[] }) {
           </span>
         </div>
         <div className="overdue-followup-controls">
-          <label>区域<select value={region} onChange={event => setRegion(event.target.value)}><option>全部区域</option>{regions.map(value => <option key={value}>{value}</option>)}</select></label>
+          <label>
+            区域
+            <select
+              value={region}
+              onChange={(event) => setRegion(event.target.value)}
+            >
+              <option>全部区域</option>
+              {regions.map((value) => (
+                <option key={value}>{value}</option>
+              ))}
+            </select>
+          </label>
           <strong>{shown.length} 家</strong>
-          <button type="button" onClick={() => setExpanded(value => !value)}>{expanded ? "收起预警明细" : "展开预警明细"}</button>
+          <button type="button" onClick={() => setExpanded((value) => !value)}>
+            {expanded ? "收起预警明细" : "展开预警明细"}
+          </button>
         </div>
       </header>
-      {expanded && (shown.length ? (
-        <div className="overdue-followup-list">
-          {shown.map(({ item, lastTime, days }) => (
-            <article key={item.id}>
-              <b>{item.customer}</b>
-              <span>
-                {item.region || "未填写区域"} · {item.owner || "未填写负责人"}
-              </span>
-              <em>对账差额：{item.amount || "—"}</em>
-              <small>
-                最后跟进：{lastTime} · 已超期 {days} 天
-              </small>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <p className="overdue-followup-empty">
-          当前没有超过 7 天未跟进的待解决客户。
-        </p>
-      ))}
+      {expanded &&
+        (shown.length ? (
+          <div className="overdue-followup-list">
+            {shown.map(({ item, lastTime, days }) => (
+              <article key={item.id}>
+                <b>{item.customer}</b>
+                <span>
+                  {item.region || "未填写区域"} · {item.owner || "未填写负责人"}
+                </span>
+                <em>对账差额：{item.amount || "—"}</em>
+                <small>
+                  最后跟进：{lastTime} · 已超期 {days} 天
+                </small>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="overdue-followup-empty">
+            当前没有超过 7 天未跟进的待解决客户。
+          </p>
+        ))}
     </section>
   );
 }
@@ -313,12 +356,16 @@ export function LiveIssueTracker() {
     Partial<Record<ColumnKey, number>>
   >({});
   const [filterKey, setFilterKey] = useState<ColumnKey | null>(null);
-  const [columnFilters, setColumnFilters] = useState<Partial<Record<ColumnKey, string>>>({});
-  const sync = () => setItems(read());
+  const [columnFilters, setColumnFilters] = useState<
+    Partial<Record<ColumnKey, string>>
+  >({});
+  const sync = () => setItems(read(sheetForQuarter(selectedQuarter()) as Sheet | undefined));
   useEffect(() => {
     sync();
     window.addEventListener("reconciliation-updated", sync);
-    return () => window.removeEventListener("reconciliation-updated", sync);
+    window.addEventListener("reconciliation-quarter-selected", sync);
+    window.addEventListener("reconciliation-quarter-updated", sync);
+    return () => { window.removeEventListener("reconciliation-updated", sync); window.removeEventListener("reconciliation-quarter-selected", sync); window.removeEventListener("reconciliation-quarter-updated", sync); };
   }, []);
   useEffect(() => {
     try {
@@ -344,12 +391,23 @@ export function LiveIssueTracker() {
     if (key === "amount") return item.amount;
     if (key === "time") return item.time;
     if (key === "solution") return item.solution;
-    if (key === "followUpTime") return item.followUps.map(entry => entry.time).join(" ");
-    if (key === "followUpSolution") return item.followUps.map(entry => entry.solution).join(" ");
-    if (key === "followUpActions") return item.followUps.length ? "修改 删除" : "";
+    if (key === "followUpTime")
+      return item.followUps.map((entry) => entry.time).join(" ");
+    if (key === "followUpSolution")
+      return item.followUps.map((entry) => entry.solution).join(" ");
+    if (key === "followUpActions")
+      return item.followUps.length ? "修改 删除" : "";
     return item.resolved ? "已解决" : "待解决";
   };
-  const filteredRows = rows.filter(item => Object.entries(columnFilters).every(([key, value]) => !value || valueOf(item, key as ColumnKey).toLocaleLowerCase().includes(value.toLocaleLowerCase().trim())));
+  const filteredRows = rows.filter((item) =>
+    Object.entries(columnFilters).every(
+      ([key, value]) =>
+        !value ||
+        valueOf(item, key as ColumnKey)
+          .toLocaleLowerCase()
+          .includes(value.toLocaleLowerCase().trim()),
+    ),
+  );
   const startColumnResize = (
     event: ReactPointerEvent<HTMLButtonElement>,
     key: ColumnKey,
@@ -428,9 +486,20 @@ export function LiveIssueTracker() {
   };
   const widthOf = (column: TrackerColumn): CSSProperties => {
     const width = columnWidths[column.key] ?? column.width;
-    const index = columns.findIndex(item => item.key === column.key);
-    const left = columns.slice(0, index).reduce((total, item) => total + (columnWidths[item.key] ?? item.width), 0);
-    return { width: `${width}px`, minWidth: `${width}px`, ...(column.className?.includes("tracker-sticky-left") ? { "--tracker-sticky-left": `${left}px` } : {}) } as CSSProperties;
+    const index = columns.findIndex((item) => item.key === column.key);
+    const left = columns
+      .slice(0, index)
+      .reduce(
+        (total, item) => total + (columnWidths[item.key] ?? item.width),
+        0,
+      );
+    return {
+      width: `${width}px`,
+      minWidth: `${width}px`,
+      ...(column.className?.includes("tracker-sticky-left")
+        ? { "--tracker-sticky-left": `${left}px` }
+        : {}),
+    } as CSSProperties;
   };
   const cell = (column: TrackerColumn, content: ReactNode) => (
     <td key={column.key} className={column.className} style={widthOf(column)}>
@@ -509,7 +578,11 @@ export function LiveIssueTracker() {
                     className={`tracker-column-filter${columnFilters[column.key] ? " is-filtered" : ""}`}
                     type="button"
                     aria-label={`筛选${column.label}`}
-                    onClick={() => setFilterKey(current => current === column.key ? null : column.key)}
+                    onClick={() =>
+                      setFilterKey((current) =>
+                        current === column.key ? null : column.key,
+                      )
+                    }
                   >
                     ⌕
                   </button>
@@ -520,9 +593,25 @@ export function LiveIssueTracker() {
                         aria-label={`筛选${column.label}`}
                         value={columnFilters[column.key] ?? ""}
                         placeholder={`筛选${column.label}`}
-                        onChange={event => setColumnFilters(current => ({ ...current, [column.key]: event.target.value }))}
+                        onChange={(event) =>
+                          setColumnFilters((current) => ({
+                            ...current,
+                            [column.key]: event.target.value,
+                          }))
+                        }
                       />
-                      <button type="button" onClick={() => { setColumnFilters(current => ({ ...current, [column.key]: "" })); setFilterKey(null); }}>清除</button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setColumnFilters((current) => ({
+                            ...current,
+                            [column.key]: "",
+                          }));
+                          setFilterKey(null);
+                        }}
+                      >
+                        清除
+                      </button>
                     </div>
                   )}
                   <button

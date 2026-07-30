@@ -1,3 +1,5 @@
+import { ensureArchiveFromActive } from "./quarter-storage";
+
 export type CockpitRow = {
   id: string;
   quarter: string;
@@ -438,12 +440,12 @@ type LiveSheet = {
   fileName?: string;
   details?: Record<string, LiveDetail>;
 };
-const liveCockpitRows = (): CockpitRow[] | null => {
+const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
   if (typeof window === "undefined") return null;
   try {
-    const saved = JSON.parse(
+    const saved = source ?? (JSON.parse(
       localStorage.getItem("local-quarterly-reconciliation") || "null",
-    ) as LiveSheet | null;
+    ) as LiveSheet | null);
     if (!saved?.headers?.length || !saved.rows?.length) return null;
     const headers = saved.headers,
       at = (name: string) => headers.indexOf(name),
@@ -537,6 +539,12 @@ const liveCockpitRows = (): CockpitRow[] | null => {
   }
 };
 const DASHBOARD_KEY = "local-quarterly-reconciliation-dashboard";
+const archivedCockpitRows = (): CockpitRow[] => {
+  if (typeof window === "undefined") return [];
+  return Object.values(ensureArchiveFromActive()).flatMap((sheet) =>
+    liveCockpitRows(sheet as LiveSheet) ?? [],
+  );
+};
 const dashboardRows = (): CockpitRow[] | null => {
   if (typeof window === "undefined") return null;
   try {
@@ -547,7 +555,7 @@ const dashboardRows = (): CockpitRow[] | null => {
   }
 };
 export const updateDashboardSnapshot = () => {
-  const rows = liveCockpitRows();
+  const rows = archivedCockpitRows();
   if (rows?.length) localStorage.setItem(DASHBOARD_KEY, JSON.stringify(rows));
   window.dispatchEvent(new Event("reconciliation-dashboard-updated"));
   return rows?.length ?? 0;
@@ -557,7 +565,7 @@ export const updateDashboardSnapshot = () => {
 // until the user explicitly clicks "一键更新其他看板" again.
 export const cockpitRows = new Proxy([] as CockpitRow[], {
   get(_, property) {
-    const rows = dashboardRows() ?? liveCockpitRows() ?? fallbackCockpitRows;
+    const rows = dashboardRows() ?? archivedCockpitRows() ?? fallbackCockpitRows;
     const value = Reflect.get(rows, property);
     return typeof value === "function" ? value.bind(rows) : value;
   },
