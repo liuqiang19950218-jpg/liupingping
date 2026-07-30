@@ -7,7 +7,7 @@ import "./reconciliation.css";
 type InvoiceEntry = { date: string; invoice: string; amount: string; note: string };
 type LedgerLookup = Record<string,{amount:number;dates:string[]}>;
 type OtherEntry = { amount: string; note: string; image?: string };
-type DetailForm = { customerAmount: string; responsible: string; transit: InvoiceEntry[]; returned: InvoiceEntry[]; lost: InvoiceEntry[]; instrument: InvoiceEntry[]; otherInvoice: InvoiceEntry[]; other: OtherEntry[]; badDebt: string; badDebtReason: string; adjustment: string; adjustmentReason: string; resolutionSolution: string; resolutionTime: string; resolved: boolean };
+type DetailForm = { customerAmount: string; responsible: string; transit: InvoiceEntry[]; returned: InvoiceEntry[]; lost: InvoiceEntry[]; instrument: InvoiceEntry[]; otherInvoice: InvoiceEntry[]; other: OtherEntry[]; badDebt: string; badDebtReason: string; adjustment: string; adjustmentReason: string; resolutionSolution: string; resolutionTime: string; resolved: boolean; followUps: {time:string;solution:string}[] };
 type LocalSheet = { headers: string[]; rows: unknown[][]; fileName: string; details?: Record<string, DetailForm> };
 type LedgerUpload = { keys: string[]; fileNames: string[]; updatedAt: string };
 
@@ -22,7 +22,7 @@ let historicalLedgerKeys: Set<string> | null = null;
 let historicalLedgerLookup: LedgerLookup = {};
 const blankInvoice = (): InvoiceEntry => ({ date:"", invoice:"", amount:"", note:"" });
 const blankOther = (): OtherEntry => ({ amount:"", note:"", image:"" });
-const empty = (): DetailForm => ({ customerAmount:"", responsible:"", transit:[blankInvoice()], returned:[blankInvoice()], lost:[blankInvoice()], instrument:[blankInvoice()], otherInvoice:[blankInvoice()], other:[blankOther()], badDebt:"", badDebtReason:"", adjustment:"", adjustmentReason:"", resolutionSolution:"", resolutionTime:"", resolved:false });
+const empty = (): DetailForm => ({ customerAmount:"", responsible:"", transit:[blankInvoice()], returned:[blankInvoice()], lost:[blankInvoice()], instrument:[blankInvoice()], otherInvoice:[blankInvoice()], other:[blankOther()], badDebt:"", badDebtReason:"", adjustment:"", adjustmentReason:"", resolutionSolution:"", resolutionTime:"", resolved:false, followUps:[] });
 const num = (value: unknown) => { const n = Number(String(value ?? "").replace(/,/g, "")); return Number.isFinite(n) ? n : 0; };
 const hasValue = (value: unknown) => String(value ?? "").trim() !== "";
 const money = (value: number) => value.toLocaleString("zh-CN", { minimumFractionDigits:2, maximumFractionDigits:2 });
