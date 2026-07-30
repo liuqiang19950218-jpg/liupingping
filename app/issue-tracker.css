@@ -22,6 +22,10 @@
 .issue-table .follow-up-entry{white-space:normal;overflow-wrap:anywhere;word-break:break-word}
 .issue-table .issue-actions{display:flex;justify-content:center;gap:6px;white-space:nowrap}
 .issue-table .issue-actions button+button{margin-left:0}
+.issue-table th:last-child,.issue-table td:last-child{position:sticky;right:0;border-left:1px solid #dce8f5;box-shadow:-8px 0 12px rgba(26,73,117,.08)}
+.issue-table th:last-child{z-index:6;background:#123e63}
+.issue-table td:last-child{z-index:2;background:#fff}
+.issue-table tbody tr:hover td:last-child{background:#f3f8ff}
 @media (prefers-reduced-motion:reduce){.issue-table tbody tr{transition:none}}
 
 .overdue-followup-dashboard{margin-top:18px;padding:18px;border:1px solid #ffd6b0;border-radius:12px;background:linear-gradient(135deg,#fffaf3,#fff)}
