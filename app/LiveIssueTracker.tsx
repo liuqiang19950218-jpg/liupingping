@@ -28,6 +28,7 @@ type Sheet = {
 type Item = {
   id: number;
   quarter: string;
+  accountSet: string;
   region: string;
   customer: string;
   owner: string;
@@ -40,6 +41,7 @@ type Item = {
 type RegionStat = { region: string; customers: number; amount: number };
 type ColumnKey =
   | "quarter"
+  | "accountSet"
   | "region"
   | "customer"
   | "owner"
@@ -59,6 +61,7 @@ type TrackerColumn = {
 
 const columns: TrackerColumn[] = [
   { key: "quarter", label: "季度", width: 86 },
+  { key: "accountSet", label: "账套", width: 110 },
   { key: "region", label: "区域", width: 88 },
   { key: "customer", label: "客户", width: 190, className: "tracker-customer" },
   { key: "owner", label: "负责人", width: 113 },
@@ -88,6 +91,7 @@ function read(): Item[] {
     ) as Sheet | null;
     if (!sheet) return [];
     const at = (name: string) => sheet.headers.indexOf(name);
+    const contains = (name: string) => sheet.headers.findIndex((header) => String(header).replace(/\s/g, "").includes(name));
     const match = String(sheet.fileName).match(/(\d{2,4}).*?([1-4])季度/);
     const quarter = match
       ? `${match[1].length === 2 ? `20${match[1]}` : match[1]} Q${match[2]}`
@@ -109,6 +113,7 @@ function read(): Item[] {
         return {
           id,
           quarter,
+          accountSet: String(row[contains("账套")] ?? ""),
           region: String(row[at("区域")] ?? ""),
           customer: String(row[at("客户名称")] ?? ""),
           owner: String(row[at("对账负责人")] ?? ""),
@@ -298,6 +303,8 @@ export function LiveIssueTracker() {
   const [columnWidths, setColumnWidths] = useState<
     Partial<Record<ColumnKey, number>>
   >({});
+  const [filterKey, setFilterKey] = useState<ColumnKey | null>(null);
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<ColumnKey, string>>>({});
   const sync = () => setItems(read());
   useEffect(() => {
     sync();
@@ -319,6 +326,21 @@ export function LiveIssueTracker() {
   const pending = items.filter((item) => !item.resolved);
   const resolved = items.filter((item) => item.resolved);
   const rows = tab === "待解决清单" ? pending : resolved;
+  const valueOf = (item: Item, key: ColumnKey) => {
+    if (key === "quarter") return item.quarter;
+    if (key === "accountSet") return item.accountSet;
+    if (key === "region") return item.region;
+    if (key === "customer") return item.customer;
+    if (key === "owner") return item.owner;
+    if (key === "amount") return item.amount;
+    if (key === "time") return item.time;
+    if (key === "solution") return item.solution;
+    if (key === "followUpTime") return item.followUps.map(entry => entry.time).join(" ");
+    if (key === "followUpSolution") return item.followUps.map(entry => entry.solution).join(" ");
+    if (key === "followUpActions") return item.followUps.length ? "修改 删除" : "";
+    return item.resolved ? "已解决" : "待解决";
+  };
+  const filteredRows = rows.filter(item => Object.entries(columnFilters).every(([key, value]) => !value || valueOf(item, key as ColumnKey).toLocaleLowerCase().includes(value.toLocaleLowerCase().trim())));
   const startColumnResize = (
     event: ReactPointerEvent<HTMLButtonElement>,
     key: ColumnKey,
@@ -473,6 +495,26 @@ export function LiveIssueTracker() {
                 >
                   <span>{column.label}</span>
                   <button
+                    className={`tracker-column-filter${columnFilters[column.key] ? " is-filtered" : ""}`}
+                    type="button"
+                    aria-label={`筛选${column.label}`}
+                    onClick={() => setFilterKey(current => current === column.key ? null : column.key)}
+                  >
+                    ⌕
+                  </button>
+                  {filterKey === column.key && (
+                    <div className="tracker-filter-popover">
+                      <input
+                        autoFocus
+                        aria-label={`筛选${column.label}`}
+                        value={columnFilters[column.key] ?? ""}
+                        placeholder={`筛选${column.label}`}
+                        onChange={event => setColumnFilters(current => ({ ...current, [column.key]: event.target.value }))}
+                      />
+                      <button type="button" onClick={() => { setColumnFilters(current => ({ ...current, [column.key]: "" })); setFilterKey(null); }}>清除</button>
+                    </div>
+                  )}
+                  <button
                     className="tracker-column-resize"
                     type="button"
                     aria-label={`调整${column.label}列宽`}
@@ -485,13 +527,15 @@ export function LiveIssueTracker() {
             </tr>
           </thead>
           <tbody>
-            {rows.length ? (
-              rows.map((item) => (
+            {filteredRows.length ? (
+              filteredRows.map((item) => (
                 <tr key={item.id}>
                   {columns.map((column) => {
                     switch (column.key) {
                       case "quarter":
                         return cell(column, item.quarter);
+                      case "accountSet":
+                        return cell(column, item.accountSet || "—");
                       case "region":
                         return cell(column, item.region);
                       case "customer":
