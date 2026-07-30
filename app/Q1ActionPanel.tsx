@@ -13,8 +13,14 @@ function valueAt(row: unknown[], headers: string[], name: string) {
   return index < 0 ? "" : String(row[index] ?? "").trim();
 }
 
-function valueFromMarkedColumn(row: unknown[], headers: string[], names: string[]) {
-  return names.map(name => valueAt(row, headers, name)).find(Boolean) ?? "";
+function splitResolutionSolution(value: string) {
+  const solution = value.trim();
+  if (!solution) return { cause: "—", action: "待填写" };
+  const causeMatch = solution.match(/(?:核心)?原因\s*[：:]\s*([\s\S]*?)(?=(?:措施|解决措施|处理措施|下一步动作)\s*[：:]|$)/);
+  const actionMatch = solution.match(/(?:措施|解决措施|处理措施|下一步动作)\s*[：:]\s*([\s\S]*)$/);
+  if (causeMatch || actionMatch) return { cause: causeMatch?.[1].trim() || "—", action: actionMatch?.[1].trim() || "待填写" };
+  const parts = solution.split(/[；;。]/).map(part => part.trim()).filter(Boolean);
+  return { cause: parts[0] || "—", action: parts.slice(1).join("；") || "待填写" };
 }
 
 function actionRows(): ActionItem[] {
@@ -25,13 +31,10 @@ function actionRows(): ActionItem[] {
     if (!sheet.headers.some(header => String(header).replace(/\s/g, "") === statusHeader)) return [];
     return sheet.rows
       .filter(row => valueAt(row, sheet.headers!, statusHeader) === "未对清")
-      .map(row => ({
-        region: valueAt(row, sheet.headers!, "区域") || "未填写",
-        customer: valueAt(row, sheet.headers!, "客户名称") || "—",
-        companyReceivable: valueAt(row, sheet.headers!, "公司应收") || "—",
-        cause: valueFromMarkedColumn(row, sheet.headers!, ["原因", "核心原因", "差额原因备注"]) || "—",
-        action: valueFromMarkedColumn(row, sheet.headers!, ["措施", "解决措施", "处理措施", "下一步动作", "解决方案"]) || "待填写",
-      }));
+      .map(row => {
+        const split = splitResolutionSolution(valueAt(row, sheet.headers!, "解决方案"));
+        return { region: valueAt(row, sheet.headers!, "区域") || "未填写", customer: valueAt(row, sheet.headers!, "客户名称") || "—", companyReceivable: valueAt(row, sheet.headers!, "公司应收") || "—", cause: split.cause, action: split.action };
+      });
   } catch { return []; }
 }
 
