@@ -6,7 +6,7 @@ import { ReconciliationHistoryDashboard } from "./ReconciliationHistoryDashboard
 import { DashboardOverview } from "./DashboardOverview";
 import { Q1ActionPanel } from "./Q1ActionPanel";
 import { Q1SpecialPanels } from "./Q1SpecialPanels";
-import { LiveIssueTracker } from "./LiveIssueTracker";
+import { UnresolvedFollowupDashboard } from "./UnresolvedFollowupDashboard";
 import { ManagementCockpit } from "./ManagementCockpit";
 import { CurrentYearLinkedSummary } from "./CurrentYearLinkedSummary";
 import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
@@ -44,7 +44,7 @@ export default function Home() {
       <nav>
         <button className={view === "history" ? "selected" : ""} onClick={() => setView("history")}><i>◈</i>{T.history}</button>
         <button className={view === "current" ? "selected" : ""} onClick={() => setView("current")}><i>≡</i>{T.current}</button>
-        <button className={view === "tracker" ? "selected" : ""} onClick={() => setView("tracker")}><i>●</i>{T.tracker}</button>
+        <button className={view === "tracker" ? "selected" : ""} aria-current={view === "tracker" ? "page" : undefined} onClick={() => setView("tracker")}><i>●</i>{T.tracker}</button>
         <button className={view === "cockpit" && tab === "cockpit" ? "selected" : ""} onClick={() => cockpit("cockpit")}><i>◴</i>{T.cockpit}</button>
         <button className={view === "cockpit" && tab === "review" ? "selected" : ""} onClick={() => cockpit("review")}><i>✓</i>{T.review}</button>
         <button className={view === "cockpit" && tab === "issue" ? "selected" : ""} onClick={() => cockpit("issue")}><i>!</i>{T.issue}</button>
@@ -57,7 +57,7 @@ export default function Home() {
       <header className="work-header"><div><h1>{title}</h1><p>{hint}</p></div><div className="header-status"><span>◷ {T.local}</span><small>{`更新时间：${updatedAt}`}</small></div></header>
       <div className="work-content">
         {view !== "current" && view !== "import" && <GlobalQuarterFilter />}
-        {view === "history" ? <><CurrentYearLinkedSummary/><DashboardOverview selected={6}/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <LiveIssueTracker/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>} 
+        {view === "history" ? <><CurrentYearLinkedSummary/><DashboardOverview selected={6}/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>} 
       </div>
     </section>
   </main>;
