@@ -103,7 +103,7 @@
 .column-menu input { width: 16px; height: 16px; }
 .hidden-columns { display: flex !important; flex-wrap: wrap !important; gap: 6px; width: auto !important; margin: -8px 0 12px !important; padding: 0 4px; color: #6b7a90; }
 .local-table { max-height: min(66vh, 680px); overflow: auto; border: 1px solid #e5edf6; border-radius: 12px 12px 0 0; background: #fff; }
-.detail-table-tool .local-table table { min-width: 1900px; table-layout: fixed; }
+.detail-table-tool .local-table table { min-width: 100%; table-layout: fixed; }
 .detail-table-tool .local-table th { position: sticky; top: 0; z-index: 5; height: 52px; padding: 8px 26px 8px 10px; border-bottom: 0; background: #123e63; color: #fff; font-size: 12px; text-align: left !important; vertical-align: middle !important; white-space: nowrap !important; }
 .detail-table-tool .local-table td { height: 52px; max-height: 64px; padding: 8px 10px; border-bottom-color: #edf2f7; background: #fff; color: #263b57; font-size: 12px; text-align: left !important; vertical-align: middle !important; }
 .detail-table-tool .local-table tbody tr:hover td { background: #f1f7ff; }
@@ -140,6 +140,9 @@
 .column-filter-icon:hover, .column-filter-icon.active { background: rgb(255 255 255 / 18%); color: #fff; }
 .column-resize-handle { position: absolute; top: 0; right: -3px; z-index: 12; width: 7px; height: 100%; margin: 0; padding: 0; border: 0; background: transparent; cursor: col-resize; touch-action: none; }
 .column-resize-handle:hover, .column-resize-handle:focus-visible { background: #78b7ff; outline: 0; }
+.detail-table-tool .local-table th.is-resized { white-space: normal !important; overflow-wrap: anywhere; word-break: break-word; }
+.detail-table-tool .local-table th.is-resized > span:first-child { min-width: 0; white-space: normal !important; overflow-wrap: anywhere; }
+.detail-table-tool .local-table td.is-resized .cell-value { overflow-wrap: anywhere; white-space: normal; word-break: break-word; }
 .fill-button { height: 30px !important; min-height: 30px; padding: 0 10px !important; border: 1px solid #b8d7ff !important; border-radius: 6px !important; background: #f4f9ff !important; color: #1677ff !important; font-size: 12px; }
 .table-empty { height: 180px !important; color: #6b7a90 !important; text-align: center !important; }
 .table-empty button { width: auto; height: 32px; margin-left: 10px; padding: 0 9px; background: #1677ff; font-size: 12px; }
