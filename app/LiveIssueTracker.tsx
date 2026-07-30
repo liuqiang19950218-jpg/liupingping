@@ -1,18 +1,86 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import "./issue-tracker.css";
 
-const KEY="local-quarterly-reconciliation";
-type FollowUp={time:string;solution:string};
-type Detail={resolutionSolution?:string;resolutionTime?:string;resolved?:boolean;followUps?:FollowUp[]};
-type Sheet={headers:string[];rows:unknown[][];fileName:string;details?:Record<string,Detail>};
-type Item={id:number;quarter:string;region:string;customer:string;owner:string;amount:string;solution:string;time:string;resolved:boolean;followUps:FollowUp[]};
-type RegionStat={region:string;customers:number;amount:number};
+const KEY = "local-quarterly-reconciliation";
+const VIEW_KEY = "local-quarterly-reconciliation-issue-tracker-view";
 
-function read(){try{const sheet=JSON.parse(localStorage.getItem(KEY)||"null") as Sheet|null;if(!sheet)return[] as Item[];const at=(name:string)=>sheet.headers.indexOf(name),match=String(sheet.fileName).match(/(\d{2,4}).*?([1-4])季度/),quarter=match?`${match[1].length===2?`20${match[1]}`:match[1]} Q${match[2]}`:"2026 Q2";return sheet.rows.map((row,id)=>{const detail=sheet.details?.[String(id)]??{},solution=detail.resolutionSolution||String(row[at("解决方案")]??""),time=detail.resolutionTime||String(row[at("解决时间")]??""),followUps=Array.isArray(detail.followUps)?detail.followUps.filter(entry=>entry&&typeof entry.solution==="string").map(entry=>({time:String(entry.time??""),solution:String(entry.solution??"")})):[];return{id,quarter,region:String(row[at("区域")]??""),customer:String(row[at("客户名称")]??""),owner:String(row[at("对账负责人")]??""),amount:String(row[at("对账差额")]??""),solution,time,resolved:detail.resolved===true||!time,followUps}}).filter(item=>item.customer&&item.solution.trim()!=="")}catch{return[] as Item[]}}
-function updateDetail(id:number,changes:Partial<Detail>){const sheet=JSON.parse(localStorage.getItem(KEY)||"null") as Sheet|null;if(!sheet)return;sheet.details={...(sheet.details??{}),[String(id)]:{...(sheet.details?.[String(id)]??{}),...changes}};localStorage.setItem(KEY,JSON.stringify(sheet));window.dispatchEvent(new Event("reconciliation-updated"));}
-function amountOf(value:string){const amount=Number(value.replace(/,/g,""));return Number.isFinite(amount)?Math.abs(amount):0;}
-function RegionDashboard({items}:{items:Item[]}){const byRegion=new Map<string,RegionStat>();items.forEach(item=>{const region=item.region.trim()||"未填写区域",current=byRegion.get(region)??{region,customers:0,amount:0};current.customers+=1;current.amount+=amountOf(item.amount);byRegion.set(region,current);});const stats=[...byRegion.values()],totalCustomers=items.length,totalAmount=stats.reduce((total,item)=>total+item.amount,0),byCustomer=[...stats].sort((a,b)=>b.customers-a.customers),byAmount=[...stats].sort((a,b)=>b.amount-a.amount);const rows=(list:RegionStat[],kind:"customers"|"amount",total:number)=>list.length?list.map(item=>{const value=kind==="customers"?item.customers:item.amount,percent=total?value/total*100:0;return <div className="region-row" key={item.region}><span>{item.region}</span><div className="region-progress"><i style={{width:`${percent}%`}}/></div><strong>{kind==="customers"?`${item.customers} 家`:`${item.amount.toLocaleString("zh-CN",{maximumFractionDigits:2})}`}</strong><small>{percent.toFixed(1)}%</small></div>}):<p className="region-empty">暂无待解决数据</p>;return <section className="region-dashboard"><article><header><h3>待解决客户区域占比</h3><span>共 {totalCustomers} 家</span></header>{rows(byCustomer,"customers",totalCustomers)}</article><article><header><h3>待解决金额区域占比</h3><span>合计 {totalAmount.toLocaleString("zh-CN",{maximumFractionDigits:2})}</span></header>{rows(byAmount,"amount",totalAmount)}</article></section>}
+type FollowUp = { time: string; solution: string };
+type Detail = { resolutionSolution?: string; resolutionTime?: string; resolved?: boolean; followUps?: FollowUp[] };
+type Sheet = { headers: string[]; rows: unknown[][]; fileName: string; details?: Record<string, Detail> };
+type Item = { id: number; quarter: string; region: string; customer: string; owner: string; amount: string; solution: string; time: string; resolved: boolean; followUps: FollowUp[] };
+type RegionStat = { region: string; customers: number; amount: number };
+type ColumnKey = "quarter" | "region" | "customer" | "owner" | "amount" | "time" | "solution" | "followUpTime" | "followUpSolution" | "followUpActions" | "actions";
+type TrackerColumn = { key: ColumnKey; label: string; width: number; className?: string };
 
-export function LiveIssueTracker(){const [items,setItems]=useState<Item[]>([]),[tab,setTab]=useState("待解决清单"),[editing,setEditing]=useState<Item|null>(null),[editingFollowUp,setEditingFollowUp]=useState<number|null>(null),[followUpSolution,setFollowUpSolution]=useState(""),[followUpTime,setFollowUpTime]=useState(""),[message,setMessage]=useState("");const sync=()=>setItems(read());useEffect(()=>{sync();window.addEventListener("reconciliation-updated",sync);return()=>window.removeEventListener("reconciliation-updated",sync)},[]);const pending=items.filter(item=>!item.resolved),resolved=items.filter(item=>item.resolved),rows=tab==="待解决清单"?pending:resolved;const startFollowUp=(item:Item)=>{setEditing(item);setEditingFollowUp(null);setFollowUpSolution("");setFollowUpTime("");setMessage("");};const editFollowUp=(item:Item,index:number)=>{const entry=item.followUps[index];setEditing(item);setEditingFollowUp(index);setFollowUpSolution(entry.solution);setFollowUpTime(entry.time);setMessage("");};const closeEditor=()=>{setEditing(null);setEditingFollowUp(null);};const saveFollowUp=()=>{if(!editing)return;if(!followUpSolution.trim()){setMessage("请填写继续解决方案。");return;}const followUps=[...editing.followUps],next={time:followUpTime,solution:followUpSolution.trim()};if(editingFollowUp===null)followUps.push(next);else followUps[editingFollowUp]=next;updateDetail(editing.id,{followUps,resolved:false});closeEditor();setMessage(editingFollowUp===null?"已新增一条继续跟进记录，首次填写的信息保持不变。":"已修改这条继续跟进记录。");};const deleteFollowUp=(item:Item,index:number)=>{const followUps=item.followUps.filter((_,entryIndex)=>entryIndex!==index);updateDetail(item.id,{followUps});if(editing?.id===item.id&&editingFollowUp===index)closeEditor();setMessage("已删除这条继续跟进记录。");};const complete=(item:Item)=>{updateDetail(item.id,{resolved:true});setMessage("已转入已解决档案。");};return <section className="issue-tracker"><div className="tracker-top"><div><p>与对账明细自动同步</p><h2>未解决客户跟进</h2><span>继续跟进记录可随时修改或删除，首次填写的解决时间和方案不会被覆盖。</span></div></div><div className="tracker-tabs"><button type="button" className={tab==="待解决清单"?"active":""} onClick={()=>setTab("待解决清单")}>{`待解决清单 (${pending.length})`}</button><button type="button" className={tab==="已解决档案"?"active":""} onClick={()=>setTab("已解决档案")}>{`已解决档案 (${resolved.length})`}</button></div>{editing&&<div className="resolve-box"><div><label>继续解决时间<input type="date" value={followUpTime} onChange={event=>setFollowUpTime(event.target.value)}/></label><label className="follow-solution">继续解决方案<input value={followUpSolution} placeholder="填写本次继续跟进方案" onChange={event=>setFollowUpSolution(event.target.value)}/></label></div><button type="button" onClick={saveFollowUp}>{editingFollowUp===null?"新增跟进":"保存修改"}</button><button type="button" className="secondary" onClick={closeEditor}>取消</button></div>}{message&&<p className="tracker-message" role="status">{message}</p>}<div className="issue-table"><table><thead><tr><th>季度</th><th>区域</th><th>客户</th><th>负责人</th><th>对账差额</th><th>初步解决时间</th><th>首次解决方案</th><th>继续解决时间</th><th>继续解决方案</th><th>跟进记录操作</th><th>操作</th></tr></thead><tbody>{rows.length?rows.map(item=><tr key={item.id}><td>{item.quarter}</td><td>{item.region}</td><td>{item.customer}</td><td>{item.owner||"—"}</td><td>{item.amount||"—"}</td><td>{item.time||"—"}</td><td>{item.solution}</td><td>{item.followUps.length?item.followUps.map((entry,index)=><span className="follow-up-entry" key={index}>{entry.time||"—"}</span>):"—"}</td><td>{item.followUps.length?item.followUps.map((entry,index)=><span className="follow-up-entry" key={index}>{entry.solution}</span>):"—"}</td><td>{item.followUps.length?item.followUps.map((_,index)=><span className="follow-up-entry follow-up-actions" key={index}><button type="button" onClick={()=>editFollowUp(item,index)}>修改</button><button type="button" className="delete-follow-up" onClick={()=>deleteFollowUp(item,index)}>删除</button></span>):"—"}</td><td className="issue-actions">{!item.resolved&&<><button type="button" onClick={()=>startFollowUp(item)}>继续填写</button><button type="button" className="resolve-button" onClick={()=>complete(item)}>已解决</button></>}{item.resolved&&<span className="resolved-label">已解决</span>}</td></tr>):<tr><td className="issue-empty" colSpan={11}>{tab==="待解决清单"?"暂无待解决客户。请先在对账明细中填写解决方案和初步解决时间。":"暂无已解决档案。"}</td></tr>}</tbody></table></div><RegionDashboard items={pending}/></section>}
+const columns: TrackerColumn[] = [
+  { key: "quarter", label: "季度", width: 86 },
+  { key: "region", label: "区域", width: 88 },
+  { key: "customer", label: "客户", width: 190, className: "tracker-customer" },
+  { key: "owner", label: "负责人", width: 113 },
+  { key: "amount", label: "对账差额", width: 189, className: "tracker-money" },
+  { key: "time", label: "初步解决时间", width: 189 },
+  { key: "solution", label: "首次解决方案", width: 378, className: "tracker-long-text" },
+  { key: "followUpTime", label: "继续解决时间", width: 150 },
+  { key: "followUpSolution", label: "继续解决方案", width: 240, className: "tracker-long-text" },
+  { key: "followUpActions", label: "跟进记录操作", width: 150 },
+  { key: "actions", label: "操作", width: 160 },
+];
+
+function read(): Item[] {
+  try {
+    const sheet = JSON.parse(localStorage.getItem(KEY) || "null") as Sheet | null;
+    if (!sheet) return [];
+    const at = (name: string) => sheet.headers.indexOf(name);
+    const match = String(sheet.fileName).match(/(\d{2,4}).*?([1-4])季度/);
+    const quarter = match ? `${match[1].length === 2 ? `20${match[1]}` : match[1]} Q${match[2]}` : "2026 Q2";
+    return sheet.rows.map((row, id) => {
+      const detail = sheet.details?.[String(id)] ?? {};
+      const solution = detail.resolutionSolution || String(row[at("解决方案")] ?? "");
+      const time = detail.resolutionTime || String(row[at("解决时间")] ?? "");
+      const followUps = Array.isArray(detail.followUps)
+        ? detail.followUps.filter(entry => entry && typeof entry.solution === "string").map(entry => ({ time: String(entry.time ?? ""), solution: String(entry.solution ?? "") }))
+        : [];
+      return { id, quarter, region: String(row[at("区域")] ?? ""), customer: String(row[at("客户名称")] ?? ""), owner: String(row[at("对账负责人")] ?? ""), amount: String(row[at("对账差额")] ?? ""), solution, time, resolved: detail.resolved === true || !time, followUps };
+    }).filter(item => item.customer && item.solution.trim() !== "");
+  } catch { return []; }
+}
+
+function updateDetail(id: number, changes: Partial<Detail>) {
+  const sheet = JSON.parse(localStorage.getItem(KEY) || "null") as Sheet | null;
+  if (!sheet) return;
+  sheet.details = { ...(sheet.details ?? {}), [String(id)]: { ...(sheet.details?.[String(id)] ?? {}), ...changes } };
+  localStorage.setItem(KEY, JSON.stringify(sheet));
+  window.dispatchEvent(new Event("reconciliation-updated"));
+}
+
+function amountOf(value: string) { const amount = Number(value.replace(/,/g, "")); return Number.isFinite(amount) ? Math.abs(amount) : 0; }
+
+function RegionDashboard({ items }: { items: Item[] }) {
+  const byRegion = new Map<string, RegionStat>();
+  items.forEach(item => { const region = item.region.trim() || "未填写区域"; const current = byRegion.get(region) ?? { region, customers: 0, amount: 0 }; current.customers += 1; current.amount += amountOf(item.amount); byRegion.set(region, current); });
+  const stats = [...byRegion.values()]; const totalCustomers = items.length; const totalAmount = stats.reduce((total, item) => total + item.amount, 0);
+  const renderRows = (list: RegionStat[], kind: "customers" | "amount", total: number) => list.length ? list.map(item => { const value = kind === "customers" ? item.customers : item.amount; const percent = total ? value / total * 100 : 0; return <div className="region-row" key={item.region}><span>{item.region}</span><div className="region-progress"><i style={{ width: `${percent}%` }} /></div><strong>{kind === "customers" ? `${item.customers} 客` : item.amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}</strong><small>{percent.toFixed(1)}%</small></div>; }) : <p className="region-empty">暂无待解决数据</p>;
+  return <section className="region-dashboard"><article><header><h3>待解决客户区域占比</h3><span>共 {totalCustomers} 客</span></header>{renderRows([...stats].sort((a, b) => b.customers - a.customers), "customers", totalCustomers)}</article><article><header><h3>待解决金额区域占比</h3><span>合计 {totalAmount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}</span></header>{renderRows([...stats].sort((a, b) => b.amount - a.amount), "amount", totalAmount)}</article></section>;
+}
+
+export function LiveIssueTracker() {
+  const [items, setItems] = useState<Item[]>([]); const [tab, setTab] = useState("待解决清单"); const [editing, setEditing] = useState<Item | null>(null); const [editingFollowUp, setEditingFollowUp] = useState<number | null>(null); const [followUpSolution, setFollowUpSolution] = useState(""); const [followUpTime, setFollowUpTime] = useState(""); const [message, setMessage] = useState("");
+  const [columnWidths, setColumnWidths] = useState<Partial<Record<ColumnKey, number>>>({});
+  const sync = () => setItems(read());
+  useEffect(() => { sync(); window.addEventListener("reconciliation-updated", sync); return () => window.removeEventListener("reconciliation-updated", sync); }, []);
+  useEffect(() => { try { const saved = JSON.parse(localStorage.getItem(VIEW_KEY) || "{}"); if (saved && typeof saved === "object") setColumnWidths(saved as Partial<Record<ColumnKey, number>>); } catch { /* ignore invalid local preference */ } }, []);
+  useEffect(() => { localStorage.setItem(VIEW_KEY, JSON.stringify(columnWidths)); }, [columnWidths]);
+  const pending = items.filter(item => !item.resolved); const resolved = items.filter(item => item.resolved); const rows = tab === "待解决清单" ? pending : resolved;
+  const startColumnResize = (event: ReactPointerEvent<HTMLButtonElement>, key: ColumnKey) => { event.preventDefault(); event.stopPropagation(); const startX = event.clientX; const initial = columnWidths[key] ?? columns.find(column => column.key === key)?.width ?? 120; const move = (pointer: PointerEvent) => setColumnWidths(current => ({ ...current, [key]: Math.max(72, initial + pointer.clientX - startX) })); const end = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", end); }; window.addEventListener("pointermove", move); window.addEventListener("pointerup", end); };
+  const startFollowUp = (item: Item) => { setEditing(item); setEditingFollowUp(null); setFollowUpSolution(""); setFollowUpTime(""); setMessage(""); };
+  const editFollowUp = (item: Item, index: number) => { const entry = item.followUps[index]; setEditing(item); setEditingFollowUp(index); setFollowUpSolution(entry.solution); setFollowUpTime(entry.time); setMessage(""); };
+  const closeEditor = () => { setEditing(null); setEditingFollowUp(null); };
+  const saveFollowUp = () => { if (!editing) return; if (!followUpSolution.trim()) { setMessage("请填写继续解决方案。"); return; } const followUps = [...editing.followUps]; const next = { time: followUpTime, solution: followUpSolution.trim() }; if (editingFollowUp === null) followUps.push(next); else followUps[editingFollowUp] = next; updateDetail(editing.id, { followUps, resolved: false }); closeEditor(); setMessage(editingFollowUp === null ? "已新增一条继续跟进记录，首次填写的信息保持不变。" : "已修改这条继续跟进记录。"); };
+  const deleteFollowUp = (item: Item, index: number) => { const followUps = item.followUps.filter((_, entryIndex) => entryIndex !== index); updateDetail(item.id, { followUps }); if (editing?.id === item.id && editingFollowUp === index) closeEditor(); setMessage("已删除这条继续跟进记录。"); };
+  const complete = (item: Item) => { updateDetail(item.id, { resolved: true }); setMessage("已转入已解决档案。"); };
+  const widthOf = (column: TrackerColumn) => ({ width: `${columnWidths[column.key] ?? column.width}px`, minWidth: `${columnWidths[column.key] ?? column.width}px` });
+  const cell = (column: TrackerColumn, content: ReactNode) => <td key={column.key} className={column.className} style={widthOf(column)}>{content}</td>;
+  return <section className="issue-tracker"><div className="tracker-top"><div><p>与对账明细自动同步</p><h2>未解决客户跟进</h2><span>继续跟进记录可随时修改或删除，首次填写的解决时间和方案不会被覆盖。</span></div></div><div className="tracker-tabs"><button type="button" className={tab === "待解决清单" ? "active" : ""} onClick={() => setTab("待解决清单")}>{`待解决清单（${pending.length}）`}</button><button type="button" className={tab === "已解决档案" ? "active" : ""} onClick={() => setTab("已解决档案")}>{`已解决档案（${resolved.length}）`}</button></div>{editing && <div className="resolve-box"><div><label>继续解决时间<input type="date" value={followUpTime} onChange={event => setFollowUpTime(event.target.value)} /></label><label className="follow-solution">继续解决方案<input value={followUpSolution} placeholder="填写本次继续跟进方案" onChange={event => setFollowUpSolution(event.target.value)} /></label></div><button type="button" onClick={saveFollowUp}>{editingFollowUp === null ? "新增跟进" : "保存修改"}</button><button type="button" className="secondary" onClick={closeEditor}>取消</button></div>}{message && <p className="tracker-message" role="status">{message}</p>}<div className="issue-table"><table><thead><tr>{columns.map(column => <th key={column.key} className={column.className} style={widthOf(column)} scope="col"><span>{column.label}</span><button className="tracker-column-resize" type="button" aria-label={`调整${column.label}列宽`} onPointerDown={event => startColumnResize(event, column.key)} /></th>)}</tr></thead><tbody>{rows.length ? rows.map(item => <tr key={item.id}>{columns.map(column => { switch (column.key) { case "quarter": return cell(column, item.quarter); case "region": return cell(column, item.region); case "customer": return cell(column, item.customer); case "owner": return cell(column, item.owner || "—"); case "amount": return cell(column, item.amount || "—"); case "time": return cell(column, item.time || "—"); case "solution": return cell(column, item.solution); case "followUpTime": return cell(column, item.followUps.length ? item.followUps.map((entry, index) => <span className="follow-up-entry" key={index}>{entry.time || "—"}</span>) : "—"); case "followUpSolution": return cell(column, item.followUps.length ? item.followUps.map((entry, index) => <span className="follow-up-entry" key={index}>{entry.solution}</span>) : "—"); case "followUpActions": return cell(column, item.followUps.length ? item.followUps.map((_, index) => <span className="follow-up-entry follow-up-actions" key={index}><button type="button" onClick={() => editFollowUp(item, index)}>修改</button><button type="button" className="delete-follow-up" onClick={() => deleteFollowUp(item, index)}>删除</button></span>) : "—"); case "actions": return cell(column, !item.resolved ? <div className="issue-actions"><button type="button" onClick={() => startFollowUp(item)}>继续填写</button><button type="button" className="resolve-button" onClick={() => complete(item)}>已解决</button></div> : <span className="resolved-label">已解决</span>); } })}</tr>) : <tr><td className="issue-empty" colSpan={columns.length}>{tab === "待解决清单" ? "暂无待解决客户。请先在对账明细中填写解决方案和初步解决时间。" : "暂无已解决档案。"}</td></tr>}</tbody></table></div><RegionDashboard items={pending} /></section>;
+}
