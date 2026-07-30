@@ -46,6 +46,8 @@
 .multi-column-filter .filter-item { display: flex; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid #cfe0ec; border-radius: 7px; background: #f6fbff; white-space: nowrap; }
 .multi-column-filter input { width: 150px; }
 .export-button { min-width: 88px; margin: 0; background: #0d66d9 !important; color: #fff !important; }
+.dashboard-sync-button { min-width: 142px; margin: 0; border: 1px solid #0d66d9; border-radius: 7px; background: #0d66d9; color: #fff; font-size: 13px; }
+.dashboard-sync-button:hover { background: #0755ba; }
 .refresh-button { min-width: 72px; margin: 0; border: 1px solid #0d66d9 !important; background: #fff !important; color: #0d66d9 !important; }
 .export-button:disabled { cursor: not-allowed; opacity: .55; }
 .import-status { display: grid; gap: 8px; margin: 22px 40px 30px; padding: 22px; border: 1px solid #d5e6f7; border-radius: 10px; background: #f6fbff; color: #4e6477; line-height: 1.65; }

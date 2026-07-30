@@ -21,5 +21,29 @@ const urgent=[
 ] as const;
 const row=(x:typeof urgent[number],i:number):CockpitRow=>({id:`q2-${i}`,quarter:"2026 Q2",region:x[0],accountSet:x[1],owner:x[2],customer:x[3],companyReceivable:x[4],customerBook:0,difference:x[4],transit:x[5],returned:x[6],otherInvoice:x[7],otherNoInvoice:x[8],badDebt:x[16]||0,adjustment:0,filled:i!==6&&i!==7,cleared:false,cause:x[9],followStatus:x[10],solution:x[11],expectedDate:x[12],updatedAt:"2026-05-19 10:30",transitInvoiceFail:!!x[13],returnInvoiceFail:!!x[14],consecutiveUnclear:!!x[15],duplicateInvoice:i===8});
 const normal=(quarter:string,i:number):CockpitRow=>{const reg=regions[i%6],diff=quarter==="2026 Q1"&&i<25?35000+(i%5)*8000:0;return{id:`${quarter}-${i}`,quarter,region:reg,accountSet:i%2?"华东医疗":"工业客户",owner:owners[i%6],customer:`${reg}${quarter==="2026 Q1"?"一季度":"客户服务"}中心${String(i+1).padStart(3,"0")}`,companyReceivable:80000+(i%9)*7300,customerBook:80000+(i%9)*7300-diff,difference:diff,transit:diff,returned:0,otherInvoice:0,otherNoInvoice:0,badDebt:0,adjustment:0,filled:true,cleared:!diff,cause:diff?"季度资料待补":"账实一致",followStatus:diff?"待跟进":"已解决",solution:diff?"推进客户确认":"已归档",expectedDate:quarter==="2026 Q1"?"2026-03-28":"2026-05-15",actualDate:diff?undefined:"2026-05-15",updatedAt:"2026-05-15 09:00",consecutiveUnclear:!!diff&&i%3===0}};
-export const cockpitRows=[...urgent.map(row),...Array.from({length:111},(_,i)=>normal("2026 Q2",i)),...Array.from({length:120},(_,i)=>normal("2026 Q1",i))];
+const fallbackCockpitRows=[...urgent.map(row),...Array.from({length:111},(_,i)=>normal("2026 Q2",i)),...Array.from({length:120},(_,i)=>normal("2026 Q1",i))];
+const numberOf=(value:unknown)=>{const parsed=Number(String(value??"").replace(/,/g,""));return Number.isFinite(parsed)?parsed:0};
+const hasValue=(value:unknown)=>String(value??"").trim()!=="";
+type LiveInvoice={invoice?:string;date?:string;amount?:string};
+type LiveDetail={resolutionSolution?:string;resolutionTime?:string;resolved?:boolean;transit?:LiveInvoice[];returned?:LiveInvoice[]};
+type LiveSheet={headers?:string[];rows?:unknown[][];fileName?:string;details?:Record<string,LiveDetail>};
+const liveCockpitRows=():CockpitRow[]|null=>{
+  if(typeof window==="undefined")return null;
+  try{
+    const saved=JSON.parse(localStorage.getItem("local-quarterly-reconciliation")||"null") as LiveSheet|null;
+    if(!saved?.headers?.length||!saved.rows?.length)return null;
+    const headers=saved.headers,at=(name:string)=>headers.indexOf(name),contains=(name:string)=>headers.findIndex(header=>String(header).replace(/\s/g,"").includes(name));
+    const quarterMatch=String(saved.fileName??"").match(/(\d{2,4}).*?([1-4])季度/),quarter=quarterMatch?`${quarterMatch[1].length===2?`20${quarterMatch[1]}`:quarterMatch[1]} Q${quarterMatch[2]}`:"本年度";
+    const companyAt=at("公司应收"),customerAt=at("客户账面金额"),differenceAt=at("对账差额"),transitAt=at("在途金额"),returnedAt=at("退票金额"),otherAt=at("其他原因"),badDebtAt=at("死账金额"),adjustmentAt=at("调账金额"),regionAt=at("区域"),accountAt=contains("账套"),ownerAt=contains("对账负责人"),customerNameAt=at("客户名称"),noteAt=at("差额原因备注"),clearedAt=contains("是否对清"),solutionAt=at("解决方案"),timeAt=at("解决时间");
+    const incomplete=(list:LiveInvoice[]|undefined)=>Boolean(list?.some(item=>hasValue(item.invoice)||hasValue(item.date)||hasValue(item.amount))&&list?.some(item=>!item.invoice||!item.date||!hasValue(item.amount)));
+    return saved.rows.map((entry,index)=>{
+      const detail=saved.details?.[String(index)],customerBook=entry[customerAt],difference=hasValue(customerBook)?numberOf(entry[differenceAt]):numberOf(entry[companyAt])-numberOf(customerBook),solution=detail?.resolutionSolution||String(entry[solutionAt]??""),time=detail?.resolutionTime||String(entry[timeAt]??"");
+      return{id:`local-${index}`,quarter,region:String(entry[regionAt]??"未填写"),accountSet:String(entry[accountAt]??"未填写"),owner:String(entry[ownerAt]??"未填写"),customer:String(entry[customerNameAt]??""),companyReceivable:numberOf(entry[companyAt]),customerBook:numberOf(customerBook),difference,transit:numberOf(entry[transitAt]),returned:numberOf(entry[returnedAt]),otherInvoice:0,otherNoInvoice:numberOf(entry[otherAt]),badDebt:numberOf(entry[badDebtAt]),adjustment:numberOf(entry[adjustmentAt]),filled:hasValue(customerBook),cleared:String(entry[clearedAt]??"")==="对清",cause:String(entry[noteAt]??""),followStatus:detail?.resolved===true||Boolean(solution&&!time)?"已解决":solution?"待跟进":"待资料",solution,expectedDate:time||"—",actualDate:detail?.resolved===true?time:undefined,updatedAt:new Date().toLocaleString("zh-CN"),transitInvoiceFail:incomplete(detail?.transit),returnInvoiceFail:incomplete(detail?.returned),consecutiveUnclear:false,duplicateInvoice:false};
+    }).filter(item=>item.customer.trim()!=="");
+  }catch{return null}
+};
+const DASHBOARD_KEY="local-quarterly-reconciliation-dashboard";
+const dashboardRows=():CockpitRow[]|null=>{if(typeof window==="undefined")return null;try{const saved=JSON.parse(localStorage.getItem(DASHBOARD_KEY)||"null");return Array.isArray(saved)?saved as CockpitRow[]:null}catch{return null}};
+export const updateDashboardSnapshot=()=>{const rows=liveCockpitRows();if(rows?.length)localStorage.setItem(DASHBOARD_KEY,JSON.stringify(rows));window.dispatchEvent(new Event("reconciliation-dashboard-updated"));return rows?.length??0};
+export const cockpitRows=new Proxy([] as CockpitRow[],{get(_,property){const rows=dashboardRows()??fallbackCockpitRows;const value=Reflect.get(rows,property);return typeof value==="function"?value.bind(rows):value;}});
 export const trendData=[{quarter:"2025 Q3",rate:75.8,unresolved:4210500},{quarter:"2025 Q4",rate:79.6,unresolved:3912300},{quarter:"2026 Q1",rate:82.5,unresolved:3758400},{quarter:"2026 Q2",rate:86.7,unresolved:3286000}];

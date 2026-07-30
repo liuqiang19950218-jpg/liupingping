@@ -8,6 +8,7 @@ import { Q1ActionPanel } from "./Q1ActionPanel";
 import { Q1SpecialPanels } from "./Q1SpecialPanels";
 import { LiveIssueTracker } from "./LiveIssueTracker";
 import { ManagementCockpit } from "./ManagementCockpit";
+import { CurrentYearLinkedSummary } from "./CurrentYearLinkedSummary";
 import "./app-shell.css";
 import "./shell-overrides.css";
 
@@ -40,7 +41,7 @@ export default function Home() {
     <section className="work-area">
       <header className="work-header"><div><h1>{title}</h1><p>{hint}</p></div><div className="header-status"><span>◷ {T.local}</span><small>{`更新时间：${updatedAt}`}</small></div></header>
       <div className="work-content">
-        {view === "history" ? <><DashboardOverview selected={6}/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <LiveIssueTracker/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>} 
+        {view === "history" ? <><CurrentYearLinkedSummary/><DashboardOverview selected={6}/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <LiveIssueTracker/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>} 
       </div>
     </section>
   </main>;
