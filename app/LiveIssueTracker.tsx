@@ -57,12 +57,31 @@ function updateDetail(id: number, changes: Partial<Detail>) {
 
 function amountOf(value: string) { const amount = Number(value.replace(/,/g, "")); return Number.isFinite(amount) ? Math.abs(amount) : 0; }
 
+function latestFollowUpTime(item: Item) {
+  for (let index = item.followUps.length - 1; index >= 0; index -= 1) {
+    const value = item.followUps[index].time.trim();
+    if (value) return value;
+  }
+  return item.time.trim();
+}
+
+function daysSince(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.floor((Date.now() - date.getTime()) / 86_400_000);
+}
+
+function OverdueFollowUpDashboard({ items }: { items: Item[] }) {
+  const overdue = items.map(item => ({ item, lastTime: latestFollowUpTime(item) })).map(entry => ({ ...entry, days: daysSince(entry.lastTime) })).filter((entry): entry is { item: Item; lastTime: string; days: number } => entry.days !== null && entry.days > 7).sort((a, b) => b.days - a.days);
+  return <section className="overdue-followup-dashboard" aria-label="超期未跟进预警"><header><div><p>跟进时效预警</p><h3>超期未跟进预警</h3><span>以最后一次继续解决时间为准；没有继续记录时，使用初步解决时间。超过 7 天未跟进将触发预警。</span></div><strong>{overdue.length} 家</strong></header>{overdue.length ? <div className="overdue-followup-list">{overdue.map(({ item, lastTime, days }) => <article key={item.id}><b>{item.customer}</b><span>{item.region || "未填写区域"} · {item.owner || "未填写负责人"}</span><em>对账差额：{item.amount || "—"}</em><small>最后跟进：{lastTime} · 已超期 {days} 天</small></article>)}</div> : <p className="overdue-followup-empty">当前没有超过 7 天未跟进的待解决客户。</p>}</section>;
+}
+
 function RegionDashboard({ items }: { items: Item[] }) {
   const byRegion = new Map<string, RegionStat>();
   items.forEach(item => { const region = item.region.trim() || "未填写区域"; const current = byRegion.get(region) ?? { region, customers: 0, amount: 0 }; current.customers += 1; current.amount += amountOf(item.amount); byRegion.set(region, current); });
   const stats = [...byRegion.values()]; const totalCustomers = items.length; const totalAmount = stats.reduce((total, item) => total + item.amount, 0);
   const renderRows = (list: RegionStat[], kind: "customers" | "amount", total: number) => list.length ? list.map(item => { const value = kind === "customers" ? item.customers : item.amount; const percent = total ? value / total * 100 : 0; return <div className="region-row" key={item.region}><span>{item.region}</span><div className="region-progress"><i style={{ width: `${percent}%` }} /></div><strong>{kind === "customers" ? `${item.customers} 客` : item.amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}</strong><small>{percent.toFixed(1)}%</small></div>; }) : <p className="region-empty">暂无待解决数据</p>;
-  return <section className="region-dashboard"><article><header><h3>待解决客户区域占比</h3><span>共 {totalCustomers} 客</span></header>{renderRows([...stats].sort((a, b) => b.customers - a.customers), "customers", totalCustomers)}</article><article><header><h3>待解决金额区域占比</h3><span>合计 {totalAmount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}</span></header>{renderRows([...stats].sort((a, b) => b.amount - a.amount), "amount", totalAmount)}</article></section>;
+  return <><OverdueFollowUpDashboard items={items} /><section className="region-dashboard"><article><header><h3>待解决客户区域占比</h3><span>共 {totalCustomers} 客</span></header>{renderRows([...stats].sort((a, b) => b.customers - a.customers), "customers", totalCustomers)}</article><article><header><h3>待解决金额区域占比</h3><span>合计 {totalAmount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}</span></header>{renderRows([...stats].sort((a, b) => b.amount - a.amount), "amount", totalAmount)}</article></section></>;
 }
 
 export function LiveIssueTracker() {

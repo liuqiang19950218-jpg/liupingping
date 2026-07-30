@@ -23,3 +23,15 @@
 .issue-table .issue-actions{display:flex;justify-content:center;gap:6px;white-space:nowrap}
 .issue-table .issue-actions button+button{margin-left:0}
 @media (prefers-reduced-motion:reduce){.issue-table tbody tr{transition:none}}
+
+.overdue-followup-dashboard{margin-top:18px;padding:18px;border:1px solid #ffd6b0;border-radius:12px;background:linear-gradient(135deg,#fffaf3,#fff)}
+.overdue-followup-dashboard header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.overdue-followup-dashboard p{margin:0 0 5px;color:#c76a11;font-size:12px;font-weight:800;letter-spacing:.08em}
+.overdue-followup-dashboard h3{margin:0;color:#213c5a;font-size:17px}
+.overdue-followup-dashboard header span{display:block;max-width:720px;margin-top:7px;color:#6b7a90;font-size:13px;line-height:1.55}
+.overdue-followup-dashboard header>strong{flex:0 0 auto;padding:8px 12px;border-radius:999px;background:#fff0df;color:#db7619;font-size:14px}
+.overdue-followup-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:10px;margin-top:16px}
+.overdue-followup-list article{display:grid;gap:5px;padding:13px 14px;border:1px solid #ffe0c1;border-radius:9px;background:#fff}
+.overdue-followup-list b{color:#254568;font-size:14px}.overdue-followup-list span,.overdue-followup-list em{color:#61738a;font-size:12px;font-style:normal}.overdue-followup-list small{color:#d56b13;font-size:12px;font-weight:800}
+.overdue-followup-empty{margin:18px 0 2px!important;color:#78899d!important;font-weight:500!important;letter-spacing:0!important}
+@media(max-width:760px){.overdue-followup-dashboard header{flex-direction:column}.overdue-followup-dashboard header>strong{align-self:flex-start}}
