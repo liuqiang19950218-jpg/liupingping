@@ -45,5 +45,8 @@ const liveCockpitRows=():CockpitRow[]|null=>{
 const DASHBOARD_KEY="local-quarterly-reconciliation-dashboard";
 const dashboardRows=():CockpitRow[]|null=>{if(typeof window==="undefined")return null;try{const saved=JSON.parse(localStorage.getItem(DASHBOARD_KEY)||"null");return Array.isArray(saved)?saved as CockpitRow[]:null}catch{return null}};
 export const updateDashboardSnapshot=()=>{const rows=liveCockpitRows();if(rows?.length)localStorage.setItem(DASHBOARD_KEY,JSON.stringify(rows));window.dispatchEvent(new Event("reconciliation-dashboard-updated"));return rows?.length??0};
-export const cockpitRows=new Proxy([] as CockpitRow[],{get(_,property){const rows=dashboardRows()??fallbackCockpitRows;const value=Reflect.get(rows,property);return typeof value==="function"?value.bind(rows):value;}});
+// Before the first manual sync, use the current annual-detail sheet instead of
+// demo rows. Once a snapshot exists, it remains the source for every board
+// until the user explicitly clicks "一键更新其他看板" again.
+export const cockpitRows=new Proxy([] as CockpitRow[],{get(_,property){const rows=dashboardRows()??liveCockpitRows()??fallbackCockpitRows;const value=Reflect.get(rows,property);return typeof value==="function"?value.bind(rows):value;}});
 export const trendData=[{quarter:"2025 Q3",rate:75.8,unresolved:4210500},{quarter:"2025 Q4",rate:79.6,unresolved:3912300},{quarter:"2026 Q1",rate:82.5,unresolved:3758400},{quarter:"2026 Q2",rate:86.7,unresolved:3286000}];
