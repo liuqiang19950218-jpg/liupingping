@@ -3,6 +3,7 @@
 import {
   useEffect,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
@@ -60,10 +61,10 @@ type TrackerColumn = {
 };
 
 const columns: TrackerColumn[] = [
-  { key: "quarter", label: "季度", width: 86 },
-  { key: "accountSet", label: "账套", width: 110 },
-  { key: "region", label: "区域", width: 88 },
-  { key: "customer", label: "客户", width: 190, className: "tracker-customer" },
+  { key: "quarter", label: "季度", width: 86, className: "tracker-sticky-left" },
+  { key: "accountSet", label: "账套", width: 110, className: "tracker-sticky-left" },
+  { key: "region", label: "区域", width: 88, className: "tracker-sticky-left" },
+  { key: "customer", label: "客户", width: 190, className: "tracker-customer tracker-sticky-left" },
   { key: "owner", label: "负责人", width: 113 },
   { key: "amount", label: "对账差额", width: 189, className: "tracker-money" },
   { key: "time", label: "初步解决时间", width: 189 },
@@ -417,10 +418,12 @@ export function LiveIssueTracker() {
     updateDetail(item.id, { resolved: false, reopened: true });
     setMessage("已撤销已解决，该客户已返回待解决清单。");
   };
-  const widthOf = (column: TrackerColumn) => ({
-    width: `${columnWidths[column.key] ?? column.width}px`,
-    minWidth: `${columnWidths[column.key] ?? column.width}px`,
-  });
+  const widthOf = (column: TrackerColumn): CSSProperties => {
+    const width = columnWidths[column.key] ?? column.width;
+    const index = columns.findIndex(item => item.key === column.key);
+    const left = columns.slice(0, index).reduce((total, item) => total + (columnWidths[item.key] ?? item.width), 0);
+    return { width: `${width}px`, minWidth: `${width}px`, ...(column.className?.includes("tracker-sticky-left") ? { "--tracker-sticky-left": `${left}px` } : {}) } as CSSProperties;
+  };
   const cell = (column: TrackerColumn, content: ReactNode) => (
     <td key={column.key} className={column.className} style={widthOf(column)}>
       {column.key === "amount" ? formatAmount(String(content ?? "")) : content}
