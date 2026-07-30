@@ -126,6 +126,7 @@
 .local-table .money-cell .cell-value { color: #52667f; font-weight: 700; }
 .local-table .primary-money .cell-value { color: #1677ff; }
 .local-table .has-difference .difference-cell .cell-value { color: #f04438; }
+.local-table .difference-cell .cell-value.is-empty-money { color: #7a8797; font-weight: 500; }
 .local-table .status-cell { width: 110px; min-width: 110px; text-align: center !important; }
 .status-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 56px; padding: 4px 7px; border-radius: 5px; font-size: 11px; font-weight: 800; }
 .status-badge.is-cleared { color: #1677ff; background: #eaf3ff; }
