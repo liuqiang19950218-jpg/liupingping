@@ -171,6 +171,8 @@ function daysSince(value: string) {
 }
 
 function OverdueFollowUpDashboard({ items }: { items: Item[] }) {
+  const [region, setRegion] = useState("全部区域");
+  const [expanded, setExpanded] = useState(false);
   const overdue = items
     .map((item) => ({ item, lastTime: latestFollowUpTime(item) }))
     .map((entry) => ({ ...entry, days: daysSince(entry.lastTime) }))
@@ -179,6 +181,8 @@ function OverdueFollowUpDashboard({ items }: { items: Item[] }) {
         entry.days !== null && entry.days > 7,
     )
     .sort((a, b) => b.days - a.days);
+  const regions = [...new Set(overdue.map(entry => entry.item.region.trim() || "未填写区域"))];
+  const shown = region === "全部区域" ? overdue : overdue.filter(entry => (entry.item.region.trim() || "未填写区域") === region);
   return (
     <section className="overdue-followup-dashboard" aria-label="超期未跟进预警">
       <header>
@@ -190,11 +194,15 @@ function OverdueFollowUpDashboard({ items }: { items: Item[] }) {
             天未跟进将触发预警。
           </span>
         </div>
-        <strong>{overdue.length} 家</strong>
+        <div className="overdue-followup-controls">
+          <label>区域<select value={region} onChange={event => setRegion(event.target.value)}><option>全部区域</option>{regions.map(value => <option key={value}>{value}</option>)}</select></label>
+          <strong>{shown.length} 家</strong>
+          <button type="button" onClick={() => setExpanded(value => !value)}>{expanded ? "收起预警明细" : "展开预警明细"}</button>
+        </div>
       </header>
-      {overdue.length ? (
+      {expanded && (shown.length ? (
         <div className="overdue-followup-list">
-          {overdue.map(({ item, lastTime, days }) => (
+          {shown.map(({ item, lastTime, days }) => (
             <article key={item.id}>
               <b>{item.customer}</b>
               <span>
@@ -211,7 +219,7 @@ function OverdueFollowUpDashboard({ items }: { items: Item[] }) {
         <p className="overdue-followup-empty">
           当前没有超过 7 天未跟进的待解决客户。
         </p>
-      )}
+      ))}
     </section>
   );
 }

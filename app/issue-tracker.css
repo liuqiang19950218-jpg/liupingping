@@ -42,9 +42,9 @@
 .overdue-followup-dashboard p{margin:0 0 5px;color:#c76a11;font-size:12px;font-weight:800;letter-spacing:.08em}
 .overdue-followup-dashboard h3{margin:0;color:#213c5a;font-size:17px}
 .overdue-followup-dashboard header span{display:block;max-width:720px;margin-top:7px;color:#6b7a90;font-size:13px;line-height:1.55}
-.overdue-followup-dashboard header>strong{flex:0 0 auto;padding:8px 12px;border-radius:999px;background:#fff0df;color:#db7619;font-size:14px}
+.overdue-followup-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.overdue-followup-controls label{display:flex;align-items:center;gap:6px;color:#687991;font-size:12px;font-weight:700}.overdue-followup-controls select{height:32px;padding:0 8px;border:1px solid #f0cda6;border-radius:7px;background:#fff;color:#405b78;font:inherit}.overdue-followup-controls strong{flex:0 0 auto;padding:8px 12px;border-radius:999px;background:#fff0df;color:#db7619;font-size:14px}.overdue-followup-controls button{height:32px;margin:0;padding:0 10px;border:1px solid #eab473;border-radius:7px;background:#fff;color:#b8630b;font-size:12px;font-weight:800}
 .overdue-followup-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:10px;margin-top:16px}
 .overdue-followup-list article{display:grid;gap:5px;padding:13px 14px;border:1px solid #ffe0c1;border-radius:9px;background:#fff}
 .overdue-followup-list b{color:#254568;font-size:14px}.overdue-followup-list span,.overdue-followup-list em{color:#61738a;font-size:12px;font-style:normal}.overdue-followup-list small{color:#d56b13;font-size:12px;font-weight:800}
 .overdue-followup-empty{margin:18px 0 2px!important;color:#78899d!important;font-weight:500!important;letter-spacing:0!important}
-@media(max-width:760px){.overdue-followup-dashboard header{flex-direction:column}.overdue-followup-dashboard header>strong{align-self:flex-start}}
+@media(max-width:760px){.overdue-followup-dashboard header{flex-direction:column}.overdue-followup-controls{justify-content:flex-start}}
