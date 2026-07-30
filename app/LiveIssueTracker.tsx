@@ -149,7 +149,7 @@ function formatAmount(value: string) {
   const amount = Number(value.replace(/,/g, ""));
   return Number.isFinite(amount)
     ? amount.toLocaleString("zh-CN", {
-        minimumFractionDigits: 2,
+        minimumFractionDigits: 0,
         maximumFractionDigits: 2,
       })
     : value || "—";
