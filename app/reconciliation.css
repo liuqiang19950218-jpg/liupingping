@@ -143,6 +143,8 @@
 .detail-table-tool .local-table th.is-resized { white-space: normal !important; overflow-wrap: anywhere; word-break: break-word; }
 .detail-table-tool .local-table th.is-resized > span:first-child { min-width: 0; white-space: normal !important; overflow-wrap: anywhere; }
 .detail-table-tool .local-table td.is-resized .cell-value { overflow-wrap: anywhere; white-space: normal; word-break: break-word; }
+.detail-table-tool .local-table .resolution-heading, .detail-table-tool .local-table .resolution-cell { width: 5cm; min-width: 5cm; max-width: 5cm; white-space: normal !important; overflow-wrap: anywhere; word-break: break-word; line-height: 1.6; }
+.detail-table-tool .local-table .resolution-cell .cell-value { overflow: visible; text-overflow: clip; white-space: normal; }
 .fill-button { height: 30px !important; min-height: 30px; padding: 0 10px !important; border: 1px solid #b8d7ff !important; border-radius: 6px !important; background: #f4f9ff !important; color: #1677ff !important; font-size: 12px; }
 .table-empty { height: 180px !important; color: #6b7a90 !important; text-align: center !important; }
 .table-empty button { width: auto; height: 32px; margin-left: 10px; padding: 0 9px; background: #1677ff; font-size: 12px; }
