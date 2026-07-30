@@ -1,14 +1,46 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import "./q1-action-panel.css";
-const items=[
-  ["\u5357\u4eac","\u5357\u4eac\u533b\u79d1\u5927\u5b66\u7b2c\u4e8c\u9644\u5c5e\u533b\u9662-\u82f1\u79d1","54.35\u4e07","\u5bf9\u65b9\u53ef\u80fd\u4e00\u7968\u5206\u6b21\u5165\u8d26","\u9500\u552e\u7ee7\u7eed\u83b7\u53d6\u8d22\u52a1\u660e\u7ec6\uff0c\u6309\u6cf0\u8302\u5e73\u53f0\u7968\u636e\u9010\u5f20\u6838\u5bf9"],
-  ["\u5357\u4eac","\u6d66\u53e3\u533a\u4e2d\u533b\u9662","\u672a\u63d0\u4f9b","\u5ba2\u6237\u62d2\u7edd\u63d0\u4f9b\u8d26\u9762\u91d1\u989d","\u51fa\u5177\u542b2\u4e07\u5143\u7684\u5bf9\u8d26\u51fd\uff0c\u53d6\u5f97\u5ba2\u6237\u91d1\u989d\u540e\u5907\u6848\u6838\u5bf9"],
-  ["\u5357\u901a","\u5357\u901a\u5927\u5b66\u9644\u5c5e\u533b\u9662-\u56fd\u63a7","77.96\u4e07","\u8fd4\u5229\u3001\u8d1f\u7968\u4e0d\u5165\u8d26\uff0c\u8d22\u52a1\u914d\u5408\u5ea6\u4f4e","\u56fd\u63a7\u5546\u52a1\u9010\u5f20\u5bf9\u5e94\u6b63\u7968\u4e0e\u8d1f\u7968\uff0c\u63d0\u4f9b\u7ed9\u8d27\u7968\u8d26\u6b3e\u590d\u6838"],
-  ["\u626c\u5dde","\u9ad8\u90ae\u5e02\u4eba\u6c11\u533b\u9662","\u672a\u63d0\u4f9b","\u5df2\u53d625\u5e74\u7968\u4ecd\u6838\u5bf9\u4e0d\u4e0a","\u7ee7\u7eed\u83b7\u53d6\u5f80\u5e74\u7968\u636e\uff0c\u8d27\u7968\u8d26\u6b3e\u4e13\u5458\u4e13\u804c\u5bf9\u8d26"],
-  ["\u65e0\u9521","\u65e0\u9521\u5e02\u7b2c\u4e8c\u4e2d\u533b\u533b\u9662","7.00\u4e07","\u4e8c\u6708\u7968\u4e22\u7968","\u8865\u9f50\u4e09\u6708\u81f3\u4e94\u6708\u53d1\u7968\u53ca\u5165\u5e93\u8bb0\u5f55\uff0c\u6301\u7eed\u5904\u7406"],
-  ["\u6cf0\u5dde","\u6cf0\u5174\u5e02\u4eba\u6c11\u533b\u9662","20.64\u4e07","\u672a\u5165\u5e93\u7968\u3001\u8fd4\u5229\u3001\u6c47\u8d39\u53ca\u964d\u4ef7\u7ea2\u51b2","\u53d6\u5f97\u5165\u5e93\u660e\u7ec6\u4e0e\u8d22\u52a1\u660e\u7ec6\uff0c\u62c6\u5206\u5728\u9014\u3001\u8fd4\u5229\u3001\u6c47\u8d39\u548c\u7ea2\u51b2"]
-] as const;
-const regionClass:Record<string,string>={"\u5357\u4eac":"nanjing","\u5357\u901a":"nantong","\u626c\u5dde":"yangzhou","\u65e0\u9521":"wuxi","\u6cf0\u5dde":"taizhou"};
-function exportList(){const content=[["\u533a\u57df","\u5ba2\u6237","\u5df2\u62ab\u9732\u5dee\u989d","\u6838\u5fc3\u539f\u56e0","\u4e0b\u4e00\u6b65\u52a8\u4f5c"],...items].map(row=>row.map(value=>`"${value.replaceAll('"','""')}"`).join(",")).join("\n");const url=URL.createObjectURL(new Blob([`\ufeff${content}`],{type:"text/csv;charset=utf-8"}));const link=document.createElement("a");link.href=url;link.download="2026Q1-\u672a\u5bf9\u6e05\u5ba2\u6237\u91cd\u70b9\u884c\u52a8\u6e05\u5355.csv";link.click();URL.revokeObjectURL(url)}
-export function Q1ActionPanel(){const [selected,setSelected]=useState(6);useEffect(()=>{const handler=(event:Event)=>setSelected((event as CustomEvent<number>).detail);window.addEventListener("quarter-selected",handler);return()=>window.removeEventListener("quarter-selected",handler)},[]);if(selected!==6)return null;return <section className="q1-actions"><div className="action-heading"><div><p>{"2026 Q1 \u4e13\u9879\u8ddf\u8fdb"}</p><h2>{"\u672a\u5bf9\u6e05\u5ba2\u6237\u91cd\u70b9\u884c\u52a8\u6e05\u5355"}</h2><span>{"Word\u8bf4\u660e\u4e2d\u5217\u660e6\u5bb6\u5ba2\u6237\uff0c\u5df2\u62ab\u9732\u5dee\u989d\u81f3\u5c11\u7ea6159.94\u4e07\u5143\u3002"}</span></div><button type="button" className="export-button" onClick={exportList}>↓ {"\u5bfc\u51fa\u6e05\u5355"}</button></div><div className="action-table"><table><thead><tr><th>{"\u533a\u57df"}</th><th>{"\u5ba2\u6237"}</th><th>{"\u5df2\u62ab\u9732\u5dee\u989d"}</th><th>{"\u6838\u5fc3\u539f\u56e0"}</th><th>{"\u4e0b\u4e00\u6b65\u52a8\u4f5c"}</th></tr></thead><tbody>{items.map(item=><tr key={item[1]}><td><span className={`region-tag ${regionClass[item[0]]}`}>{item[0]}</span></td>{item.slice(1).map((cell,index)=><td key={index}>{cell}</td>)}</tr>)}</tbody></table></div></section>}
+
+const SHEET_KEY = "local-quarterly-reconciliation";
+type ActionItem = { region: string; customer: string; companyReceivable: string; cause: string; action: string };
+type SavedSheet = { headers?: string[]; rows?: unknown[][] };
+const regionClass: Record<string, string> = { "南京": "nanjing", "南通": "nantong", "扬州": "yangzhou", "无锡": "wuxi", "泰州": "taizhou" };
+
+function valueAt(row: unknown[], headers: string[], name: string) {
+  const index = headers.findIndex(header => String(header).replace(/\s/g, "") === name.replace(/\s/g, ""));
+  return index < 0 ? "" : String(row[index] ?? "").trim();
+}
+
+function actionRows(): ActionItem[] {
+  try {
+    const sheet = JSON.parse(localStorage.getItem(SHEET_KEY) || "null") as SavedSheet | null;
+    if (!sheet?.headers?.length || !sheet.rows?.length) return [];
+    const statusHeader = "26年1季度是否对清";
+    if (!sheet.headers.some(header => String(header).replace(/\s/g, "") === statusHeader)) return [];
+    return sheet.rows
+      .filter(row => valueAt(row, sheet.headers!, statusHeader) === "未对清")
+      .map(row => ({
+        region: valueAt(row, sheet.headers!, "区域") || "未填写",
+        customer: valueAt(row, sheet.headers!, "客户名称") || "—",
+        companyReceivable: valueAt(row, sheet.headers!, "公司应收") || "—",
+        cause: valueAt(row, sheet.headers!, "差额原因备注") || "—",
+        action: valueAt(row, sheet.headers!, "解决方案") || "待填写",
+      }));
+  } catch { return []; }
+}
+
+function exportList(items: ActionItem[]) {
+  const content = [["区域", "客户", "公司应收金额", "核心原因", "下一步动作"], ...items.map(item => [item.region, item.customer, item.companyReceivable, item.cause, item.action])]
+    .map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([`\ufeff${content}`], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a"); link.href = url; link.download = "2026Q1-未对清客户重点行动清单.csv"; link.click(); URL.revokeObjectURL(url);
+}
+
+export function Q1ActionPanel() {
+  const [selected, setSelected] = useState(6); const [items, setItems] = useState<ActionItem[]>([]);
+  useEffect(() => { const sync = () => setItems(actionRows()); sync(); const quarter = (event: Event) => setSelected((event as CustomEvent<number>).detail); window.addEventListener("quarter-selected", quarter); window.addEventListener("reconciliation-updated", sync); return () => { window.removeEventListener("quarter-selected", quarter); window.removeEventListener("reconciliation-updated", sync); }; }, []);
+  if (selected !== 6) return null;
+  return <section className="q1-actions"><div className="action-heading"><div><p>2026 Q1 专项跟进</p><h2>未对清客户重点行动清单</h2><span>仅统计“26年1季度是否对清”明确为“未对清”的客户，共 {items.length} 家；金额口径为公司应收金额。</span></div><button type="button" className="export-button" onClick={() => exportList(items)} disabled={!items.length}>↓ 导出清单</button></div><div className="action-table"><table><thead><tr><th>区域</th><th>客户</th><th>公司应收金额</th><th>核心原因</th><th>下一步动作</th></tr></thead><tbody>{items.length ? items.map(item => <tr key={`${item.region}-${item.customer}`}><td><span className={`region-tag ${regionClass[item.region] ?? ""}`}>{item.region}</span></td><td>{item.customer}</td><td>{item.companyReceivable}</td><td>{item.cause}</td><td>{item.action}</td></tr>) : <tr><td colSpan={5}>暂无“26年1季度是否对清”为“未对清”的客户数据。</td></tr>}</tbody></table></div></section>;
+}
