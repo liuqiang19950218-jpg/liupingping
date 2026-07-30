@@ -13,6 +13,10 @@ function valueAt(row: unknown[], headers: string[], name: string) {
   return index < 0 ? "" : String(row[index] ?? "").trim();
 }
 
+function valueFromMarkedColumn(row: unknown[], headers: string[], names: string[]) {
+  return names.map(name => valueAt(row, headers, name)).find(Boolean) ?? "";
+}
+
 function actionRows(): ActionItem[] {
   try {
     const sheet = JSON.parse(localStorage.getItem(SHEET_KEY) || "null") as SavedSheet | null;
@@ -25,8 +29,8 @@ function actionRows(): ActionItem[] {
         region: valueAt(row, sheet.headers!, "区域") || "未填写",
         customer: valueAt(row, sheet.headers!, "客户名称") || "—",
         companyReceivable: valueAt(row, sheet.headers!, "公司应收") || "—",
-        cause: valueAt(row, sheet.headers!, "差额原因备注") || "—",
-        action: valueAt(row, sheet.headers!, "解决方案") || "待填写",
+        cause: valueFromMarkedColumn(row, sheet.headers!, ["原因", "核心原因", "差额原因备注"]) || "—",
+        action: valueFromMarkedColumn(row, sheet.headers!, ["措施", "解决措施", "处理措施", "下一步动作", "解决方案"]) || "待填写",
       }));
   } catch { return []; }
 }
