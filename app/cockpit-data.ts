@@ -18,6 +18,8 @@ export type CockpitRow = {
   otherNoInvoice: number;
   badDebt: number;
   adjustment: number;
+  badDebtReason?: string;
+  adjustmentReason?: string;
   filled: boolean;
   cleared: boolean;
   cause: string;
@@ -481,6 +483,8 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
       otherAt = at("其他原因"),
       badDebtAt = at("死账金额"),
       adjustmentAt = at("调账金额"),
+      badDebtReasonAt = at("死账原因"),
+      adjustmentReasonAt = at("调账原因"),
       regionAt = at("区域"),
       accountAt = contains("账套"),
       ownerAt = contains("对账负责人"),
@@ -536,6 +540,8 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
             : numberOf(entry[otherAt]),
           badDebt: numberOf(entry[badDebtAt]),
           adjustment: numberOf(entry[adjustmentAt]),
+          badDebtReason: String(entry[badDebtReasonAt] ?? ""),
+          adjustmentReason: String(entry[adjustmentReasonAt] ?? ""),
           filled: hasValue(customerBook),
           cleared: String(entry[clearedAt] ?? "") === "对清",
           cause: String(entry[noteAt] ?? ""),

@@ -761,6 +761,37 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
               </button>
             </header>
             <div className="cockpit-detail-table-wrap">
+              {modal.title === "调账金额" || modal.title === "死账金额" ? (
+                <table className="cockpit-detail-table cockpit-amount-reason-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">序号</th>
+                      <th scope="col">季度</th>
+                      <th scope="col">区域</th>
+                      <th scope="col">客户名称</th>
+                      <th scope="col">对账负责人</th>
+                      <th scope="col">{modal.title}</th>
+                      <th scope="col">{modal.title === "调账金额" ? "调账原因" : "死账原因"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modal.rows.map((r, index) => {
+                      const isAdjustment = modal.title === "调账金额";
+                      const amount = isAdjustment ? r.adjustment : r.badDebt;
+                      const reason = isAdjustment ? r.adjustmentReason : r.badDebtReason;
+                      return <tr key={r.id}>
+                        <td>{index + 1}</td>
+                        <td>{r.quarter}</td>
+                        <td>{r.region}</td>
+                        <td className="detail-customer" title={r.customer}>{r.customer}</td>
+                        <td>{r.owner}</td>
+                        <td className="detail-money difference-money">{detailMoney(amount)}</td>
+                        <td><span className="detail-clamp" title={reason}>{reason || "—"}</span></td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              ) : (
               <table className="cockpit-detail-table">
                 <thead>
                   <tr>
@@ -811,6 +842,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   ))}
                 </tbody>
               </table>
+              )}
             </div>
           </section>
         </div>
