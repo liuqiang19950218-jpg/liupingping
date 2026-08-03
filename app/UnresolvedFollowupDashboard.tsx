@@ -87,14 +87,7 @@ const text = (item: Item) =>
   [item.firstSolution, ...item.followUps.map((entry) => entry.solution)].join(
     " ",
   );
-const financeOf = (item: Item): Finance => {
-  if (item.financeAttention) return item.financeAttention;
-  const note = text(item);
-  if (item.amount >= HIGH_AMOUNT || /死账|调账|退票|发票|核销/.test(note))
-    return "需财务复核";
-  if (item.amount > 0) return "一般关注";
-  return "无需关注";
-};
+const financeOf = (item: Item): Finance => item.financeAttention ?? "无需关注";
 const riskOf = (item: Item): Risk => {
   const days = dayDistance(latest(item)) ?? 0;
   if (
