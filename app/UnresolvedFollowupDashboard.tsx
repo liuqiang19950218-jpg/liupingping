@@ -967,38 +967,20 @@ export function UnresolvedFollowupDashboard() {
                       key={item.id}
                       onClick={() => setDetail(item)}
                     >
-                      <div>
-                        <strong title={item.customer}>{item.customer}</strong>
-                        <Badge type={riskOf(item)}>{riskOf(item)}</Badge>
-                      </div>
-                      <span>
-                        区域：{item.region}　负责人：{item.owner || "未填写"}
-                      </span>
-                      <span>
-                        对账差额：<b>{money(item.amount)}</b>
-                      </span>
-                      <span>
-                        超期金额：<b>{money(Math.abs(item.amount))}</b>
-                      </span>
+                      <strong title={item.customer}>{item.customer}</strong>
+                      <span>区域：<b>{item.region}</b></span>
+                      <span>负责人：<b>{item.owner || "未填写"}</b></span>
+                      <span>对账差额：<b>{money(item.amount)}</b></span>
                       <span>
                         超期天数：
-                        <b className="uf-overdue">
-                          {dayDistance(latest(item)) ?? 0} 天
-                        </b>
+                        <b className="uf-overdue">{dayDistance(latest(item)) ?? 0} 天</b>
                       </span>
                       <span>
                         财务关注：
-                        <b
-                          className={
-                            financeOf(item) === "一般关注"
-                              ? "uf-finance-general"
-                              : ""
-                          }
-                        >
+                        <b className={financeOf(item) === "一般关注" ? "uf-finance-general" : ""}>
                           {financeOf(item)}
                         </b>
                       </span>
-                      <span>最近跟进：{latest(item) || "—"}</span>
                     </button>
                   ))}
                   </div>
