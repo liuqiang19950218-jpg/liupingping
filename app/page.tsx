@@ -13,6 +13,7 @@ import { CurrentYearLinkedSummary } from "./CurrentYearLinkedSummary";
 import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
 import "./app-shell.css";
 import "./shell-overrides.css";
+import "./problem-dashboard-header.css";
 
 const T = { brand:"对账管理", sub:"季度对账与复核工具", history:"对账看板", current:"本年度对账详细情况", import:"数据导入", tracker:"未解决客户跟进", cockpit:"管理层驾驶舱", issue:"问题解决看板", local:"本机数据自动保存" };
 type View = "history" | "current" | "import" | "tracker" | "cockpit" | "problem";
@@ -60,9 +61,9 @@ export default function Home() {
       <div className="side-note"><b>使用说明</b><span>已解决客户会从待解决清单移出，并保留解决时间和方案供后续查看。</span></div>
     </aside>
     <section className="work-area">
-      <header className="work-header"><div><h1>{title}</h1><p>{hint}</p></div><div className="header-status"><span>◷ {T.local}</span><small>{`更新时间：${updatedAt}`}</small></div></header>
+      <header className="work-header"><div><h1>{title}</h1><p>{hint}</p></div>{view === "problem" ? <div className="problem-header-actions"><small>{`◷ 数据更新时间：${updatedAt}`}</small><button onClick={() => window.dispatchEvent(new Event("problem-dashboard-refresh"))}>↻ 刷新数据</button><button className="primary" onClick={() => openTracker()}>进入未解决客户跟进 ›</button></div> : <div className="header-status"><span>◷ {T.local}</span><small>{`更新时间：${updatedAt}`}</small></div>}</header>
       <div className="work-content">
-        {view !== "current" && view !== "import" && <GlobalQuarterFilter />}
+        {view !== "current" && view !== "import" && view !== "problem" && <GlobalQuarterFilter />}
         {view === "history" ? <><CurrentYearLinkedSummary/><DashboardOverview selected={6}/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>} 
       </div>
     </section>
