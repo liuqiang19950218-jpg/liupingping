@@ -18,6 +18,12 @@ type Filters = {
 };
 const money = (n: number) =>
     `${(n / 10000).toLocaleString("zh-CN", { maximumFractionDigits: 1 })}万`,
+  detailMoney = (n: number) =>
+    n === 0
+      ? "0"
+      : n.toLocaleString("zh-CN", { maximumFractionDigits: 2 }),
+  reconciliationStatus = (r: CockpitRow) =>
+    !r.filled ? "未对账" : r.cleared ? "对清" : "未对清",
   today = new Date("2026-05-20").getTime(),
   overdue = (r: CockpitRow) =>
     new Date(r.expectedDate).getTime() < today && !r.actualDate;
@@ -629,44 +635,81 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         </section>
       )}
       {modal && (
-        <div className="cockpit-modal" role="dialog">
-          <div>
-            <button className="modal-close" onClick={() => setModal(null)}>
+        <div
+          className="cockpit-modal"
+          role="presentation"
+          onMouseDown={() => setModal(null)}
+        >
+          <section
+            className="cockpit-detail-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${modal.title}明细`}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="cockpit-detail-head">
+              <div>
+                <span>指标明细</span>
+                <h2>{modal.title}</h2>
+                <p>当前筛选范围内共 {modal.rows.length} 条记录</p>
+              </div>
+              <button
+                className="modal-close"
+                aria-label="关闭明细"
+                onClick={() => setModal(null)}
+              >
               ×
-            </button>
-            <h2>{modal.title}</h2>
-            <p>当前筛选范围内共 {modal.rows.length} 条记录</p>
-            <div className="table-wrap">
-              <table>
+              </button>
+            </header>
+            <div className="cockpit-detail-table-wrap">
+              <table className="cockpit-detail-table">
                 <thead>
                   <tr>
-                    <th>客户</th>
+                    <th scope="col">序号</th>
+                    <th scope="col">季度</th>
+                    <th scope="col">账套</th>
                     <th>区域</th>
-                    <th>账套</th>
-                    <th>负责人</th>
-                    <th>差额</th>
-                    <th>差额说明</th>
-                    <th>解决方案</th>
-                    <th>风险</th>
+                    <th scope="col">客户名称</th>
+                    <th scope="col">对账负责人</th>
+                    <th scope="col">公司应收</th>
+                    <th scope="col">客户账面金额</th>
+                    <th scope="col">对账差额</th>
+                    <th scope="col">在途金额</th>
+                    <th scope="col">退票金额</th>
+                    <th scope="col">其他（有发票）</th>
+                    <th scope="col">其他（无发票）</th>
+                    <th scope="col">差额原因备注</th>
+                    <th scope="col">是否对清</th>
+                    <th scope="col">解决方案</th>
+                    <th scope="col">解决时间</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {modal.rows.map((r) => (
-                    <tr key={r.id}>
-                      <td>{r.customer}</td>
+                  {modal.rows.map((r, index) => (
+                    <tr key={r.id} className={r.difference ? "has-difference" : ""}>
+                      <td>{index + 1}</td>
+                      <td>{r.quarter}</td>
+                      <td>{r.accountSet || "—"}</td>
                       <td>{r.region}</td>
-                      <td>{r.accountSet}</td>
+                      <td className="detail-customer" title={r.customer}>{r.customer}</td>
                       <td>{r.owner}</td>
-                      <td>{money(r.difference)}</td>
-                      <td>{r.cause}</td>
-                      <td>{r.solution || "待填写"}</td>
-                      <td>{level(r)}</td>
+                      <td className="detail-money primary-money">{detailMoney(r.companyReceivable)}</td>
+                      <td className="detail-money primary-money">{r.filled ? detailMoney(r.customerBook) : "—"}</td>
+                      <td className={`detail-money ${r.difference ? "difference-money" : "muted-money"}`}>{r.filled ? detailMoney(r.difference) : "—"}</td>
+                      <td className="detail-money">{detailMoney(r.transit)}</td>
+                      <td className="detail-money">{detailMoney(r.returned)}</td>
+                      <td className="detail-money">{detailMoney(r.otherInvoice)}</td>
+                      <td className="detail-money">{detailMoney(r.otherNoInvoice)}</td>
+                      <td><span className="detail-clamp" title={r.cause}>{r.cause || "—"}</span></td>
+                      <td><span className={`detail-status ${reconciliationStatus(r)}`}>{reconciliationStatus(r)}</span></td>
+                      <td><span className="detail-clamp" title={r.solution}>{r.solution || "—"}</span></td>
+                      <td>{r.actualDate || r.expectedDate || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
+          </section>
         </div>
       )}
     </div>
