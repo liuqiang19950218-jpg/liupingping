@@ -28,6 +28,9 @@ export type CockpitRow = {
   updatedAt: string;
   transitInvoiceFail?: boolean;
   returnInvoiceFail?: boolean;
+  lostInvoiceFail?: boolean;
+  instrumentInvoiceFail?: boolean;
+  otherInvoiceFail?: boolean;
   consecutiveUnclear?: boolean;
   duplicateInvoice?: boolean;
 };
@@ -486,18 +489,16 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
       clearedAt = contains("是否对清"),
       solutionAt = at("解决方案"),
       timeAt = at("解决时间");
-    const incomplete = (list: LiveInvoice[] | undefined) =>
-      Boolean(
-        list?.some(
+    const incomplete = (list: LiveInvoice[] | undefined) => {
+      const started =
+        list?.filter(
           (item) =>
-            hasValue(item.invoice) ||
-            hasValue(item.date) ||
-            hasValue(item.amount),
-        ) &&
-        list?.some(
-          (item) => !item.invoice || !item.date || !hasValue(item.amount),
-        ),
+            hasValue(item.invoice) || hasValue(item.date) || hasValue(item.amount),
+        ) ?? [];
+      return started.some(
+        (item) => !item.invoice || !item.date || !hasValue(item.amount),
       );
+    };
     const totalOf = (list: LiveInvoice[] | undefined) =>
       list?.reduce((total, item) => total + numberOf(item.amount), 0) ?? 0;
     return saved.rows
@@ -551,6 +552,9 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           updatedAt: new Date().toLocaleString("zh-CN"),
           transitInvoiceFail: incomplete(detail?.transit),
           returnInvoiceFail: incomplete(detail?.returned),
+          lostInvoiceFail: incomplete(detail?.lost),
+          instrumentInvoiceFail: incomplete(detail?.instrument),
+          otherInvoiceFail: incomplete(detail?.otherInvoice),
           consecutiveUnclear: false,
           duplicateInvoice: false,
         };

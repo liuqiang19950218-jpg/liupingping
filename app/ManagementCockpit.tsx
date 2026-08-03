@@ -27,15 +27,33 @@ const money = (n: number) =>
   today = new Date("2026-05-20").getTime(),
   overdue = (r: CockpitRow) =>
     new Date(r.expectedDate).getTime() < today && !r.actualDate;
+const hasInvoiceException = (r: CockpitRow) =>
+  Boolean(
+    r.transitInvoiceFail ||
+      r.returnInvoiceFail ||
+      r.lostInvoiceFail ||
+      r.instrumentInvoiceFail ||
+      r.otherInvoiceFail ||
+      r.duplicateInvoice,
+  );
+const invoiceExceptionReason = (r: CockpitRow) =>
+  [
+    r.transitInvoiceFail && "在途明细缺少发票号、日期或金额",
+    r.returnInvoiceFail && "退票明细缺少发票号、日期或金额",
+    r.lostInvoiceFail && "丢票明细缺少发票号、日期或金额",
+    r.instrumentInvoiceFail && "仪器设备明细缺少发票号、日期或金额",
+    r.otherInvoiceFail && "其他（有发票）明细缺少发票号、日期或金额",
+    r.duplicateInvoice && "存在重复发票号",
+  ]
+    .filter(Boolean)
+    .join("；");
 const score = (r: CockpitRow) =>
   Math.min(
     100,
     (r.difference ? 30 : 0) +
       (r.consecutiveUnclear ? 20 : 0) +
       (overdue(r) ? 20 : 0) +
-      (r.transitInvoiceFail || r.returnInvoiceFail || r.duplicateInvoice
-        ? 15
-        : 0) +
+      (hasInvoiceException(r) ? 15 : 0) +
       (r.difference && r.otherNoInvoice / r.difference > 0.2 ? 10 : 0) +
       (!r.solution ? 5 : 0),
   );
@@ -96,12 +114,14 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   }, []);
   // The cockpit only reports customers that have been reconciled.  A blank
   // customer-book amount is "未对账"; even a customer-book amount of 0 is valid.
+  const sourceQuarterRows = useMemo(
+    () => cockpitRows.filter((row) => row.quarter === f.quarter),
+    [f.quarter, dataVersion],
+  );
   const quarterRows = useMemo(
     () =>
-      cockpitRows.filter(
-        (row) => row.quarter === f.quarter && row.filled,
-      ),
-    [f.quarter, dataVersion],
+      sourceQuarterRows.filter((row) => row.filled),
+    [sourceQuarterRows],
   );
   const regions = useMemo(
       () => [...new Set(quarterRows.map((row) => row.region))],
@@ -130,25 +150,36 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       ),
     [f, quarterRows],
   );
+  const unaccountedRows = useMemo(
+    () =>
+      sourceQuarterRows.filter(
+        (row) =>
+          !row.filled &&
+          (f.region === "全部" || row.region === f.region) &&
+          (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
+          (f.owner === "全部" || row.owner === f.owner) &&
+          (!f.customer || row.customer.includes(f.customer)) &&
+          (f.follow === "全部" || row.followStatus === f.follow),
+      ),
+    [f, sourceQuarterRows],
+  );
   const m = useMemo(() => {
     let clear = rows.filter((x) => x.cleared).length,
       unclear = rows.length - clear;
     return {
       total: rows.length,
+      unaccounted: unaccountedRows.length,
       clear,
       unclear,
       rate: rows.length ? (clear / rows.length) * 100 : 0,
       unresolved: rows
         .filter((x) => !x.cleared)
         .reduce((s, x) => s + x.difference, 0),
-      invoice: rows.filter(
-        (x) =>
-          x.transitInvoiceFail || x.returnInvoiceFail || x.duplicateInvoice,
-      ).length,
+      invoice: rows.filter(hasInvoiceException).length,
       overdue: rows.filter(overdue).length,
       resolved: rows.filter((x) => x.followStatus === "已解决").length,
     };
-  }, [rows]);
+  }, [rows, unaccountedRows]);
   const regionRows = regions
     .map((region) => {
       const x = rows.filter((r) => r.region === region),
@@ -161,10 +192,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         unresolved: x
           .filter((r) => !r.cleared)
           .reduce((s, r) => s + r.difference, 0),
-        invoice: x.filter(
-          (r) =>
-            r.transitInvoiceFail || r.returnInvoiceFail || r.duplicateInvoice,
-        ).length,
+        invoice: x.filter(hasInvoiceException).length,
         overdue: x.filter(overdue).length,
         risk: x.reduce((s, r) => s + getRisks(r).length, 0),
       };
@@ -291,14 +319,15 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     URL.revokeObjectURL(a.href);
   };
   const metrics = [
-    ["客户总数", m.total],
-    ["已对清", m.clear],
-    ["未对清", m.unclear],
-    ["对清率", `${m.rate.toFixed(1)}%`],
-    ["未解决差额", money(m.unresolved)],
-    ["发票校验异常", m.invoice],
-    ["逾期客户", m.overdue],
-    ["已解决客户", m.resolved],
+    { name: "客户总数", value: m.total, list: rows },
+    { name: "已对清", value: m.clear, list: rows.filter((row) => row.cleared) },
+    { name: "未对清", value: m.unclear, list: rows.filter((row) => !row.cleared) },
+    { name: "未对账", value: m.unaccounted, list: unaccountedRows },
+    { name: "对清率", value: `${m.rate.toFixed(1)}%`, list: rows },
+    { name: "未解决差额", value: money(m.unresolved), list: rows.filter((row) => !row.cleared) },
+    { name: "发票校验异常", value: m.invoice, list: rows.filter(hasInvoiceException) },
+    { name: "逾期客户", value: m.overdue, list: rows.filter(overdue) },
+    { name: "已解决客户", value: m.resolved, list: rows.filter((row) => row.followStatus === "已解决") },
   ];
   return (
     <div className="cockpit">
@@ -435,27 +464,11 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         区域。
       </div>
       <section className="metric-grid">
-        {metrics.map(([name, value]) => (
+        {metrics.map(({ name, value, list }) => (
           <button
             key={String(name)}
             className="metric-card"
-            onClick={() =>
-              open(
-                String(name),
-                name === "未对清"
-                  ? rows.filter((x) => !x.cleared)
-                  : name === "逾期客户"
-                    ? rows.filter(overdue)
-                    : name === "发票校验异常"
-                      ? rows.filter(
-                          (x) =>
-                            x.transitInvoiceFail ||
-                            x.returnInvoiceFail ||
-                            x.duplicateInvoice,
-                        )
-                      : rows,
-              )
-            }
+            onClick={() => open(name, list)}
           >
             <span>{name}</span>
             <b>{value}</b>
@@ -768,7 +781,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                       <td className="detail-money">{detailMoney(r.returned)}</td>
                       <td className="detail-money">{detailMoney(r.otherInvoice)}</td>
                       <td className="detail-money">{detailMoney(r.otherNoInvoice)}</td>
-                      <td><span className="detail-clamp" title={r.cause}>{r.cause || "—"}</span></td>
+                      <td><span className="detail-clamp" title={modal.title === "发票校验异常" ? invoiceExceptionReason(r) : r.cause}>{modal.title === "发票校验异常" ? invoiceExceptionReason(r) : r.cause || "—"}</span></td>
                       <td><span className={`detail-status ${reconciliationStatus(r)}`}>{reconciliationStatus(r)}</span></td>
                       <td><span className="detail-clamp" title={r.solution}>{r.solution || "—"}</span></td>
                       <td>{r.actualDate || r.expectedDate || "—"}</td>
