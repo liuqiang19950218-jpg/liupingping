@@ -767,6 +767,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                     <tr>
                       <th scope="col">序号</th>
                       <th scope="col">季度</th>
+                      <th scope="col">账套</th>
                       <th scope="col">区域</th>
                       <th scope="col">客户名称</th>
                       <th scope="col">对账负责人</th>
@@ -782,6 +783,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                       return <tr key={r.id}>
                         <td>{index + 1}</td>
                         <td>{r.quarter}</td>
+                        <td>{r.accountSet || "—"}</td>
                         <td>{r.region}</td>
                         <td className="detail-customer" title={r.customer}>{r.customer}</td>
                         <td>{r.owner}</td>
