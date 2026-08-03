@@ -72,7 +72,7 @@ export function buildProblemDashboard(items: ReconciliationIssue[], closedItems:
       ? closedItems.length
       : items.filter((item) => stageOf(item) === name).length;
     return { name, count, ratio: stageTotal ? count / stageTotal : 0, color };
-  });
+  }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN"));
   const blockers: CountItem[] = summary.blockers.map((item, index) => ({
     ...item,
     color: ["#1677ff", "#13c2c2", "#f6bd16", "#ef6a6a", "#a49adf"][index] ?? "#94a3b8",

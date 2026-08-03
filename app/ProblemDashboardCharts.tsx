@@ -26,7 +26,7 @@ export function IssueStageFunnelChart({ data, onSelect }: ChartProps<StageItem>)
   const host = useRef<HTMLDivElement>(null);
   useChart(host, {
     tooltip: { trigger: "item", formatter: (p: { name: string; value: number; percent: number }) => `${p.name}<br/>问题数：${p.value}<br/>占比：${p.percent}%` },
-    series: [{ type: "funnel", left: "16%", top: 8, bottom: 8, width: "68%", min: 0, max: Math.max(1, ...data.map((item) => item.count)), minSize: "28%", maxSize: "100%", sort: "none", gap: 2, label: { show: true, position: "inside", color: "#fff", fontSize: 10, formatter: "{c}" }, labelLine: { show: false }, itemStyle: { borderColor: "#fff", borderWidth: 2 }, data: data.map((item) => ({ name: item.name, value: item.count, itemStyle: { color: item.color } })) }],
+    series: [{ type: "funnel", left: "16%", top: 8, bottom: 8, width: "68%", min: 0, max: Math.max(1, ...data.map((item) => item.count)), minSize: "18%", maxSize: "100%", sort: "descending", gap: 2, label: { show: true, position: "inside", color: "#fff", fontSize: 10, formatter: "{c}" }, labelLine: { show: false }, itemStyle: { borderColor: "#fff", borderWidth: 2 }, data: data.map((item) => ({ name: item.name, value: item.count, itemStyle: { color: item.color } })) }],
   }, onSelect);
   return <div className="pd-chart pd-funnel-chart" ref={host} role="img" aria-label="问题处理阶段分布漏斗图" />;
 }
