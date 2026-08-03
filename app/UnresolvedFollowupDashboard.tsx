@@ -272,6 +272,8 @@ export function UnresolvedFollowupDashboard() {
   const [followSolution, setFollowSolution] = useState("");
   const [detail, setDetail] = useState<Item | null>(null);
   const [message, setMessage] = useState("");
+  const overdueCardsRef = useRef<HTMLDivElement>(null);
+  const scrollOverdueCards = (direction: number) => overdueCardsRef.current?.scrollBy({ left: direction * Math.max(260, overdueCardsRef.current.clientWidth * 0.72), behavior: "smooth" });
   const sync = () =>
     setItems(toItems(sheetForQuarter(selectedQuarter()) as Sheet | undefined));
   useEffect(() => {
@@ -863,7 +865,9 @@ export function UnresolvedFollowupDashboard() {
                 </b>
               </div>
               {selectedOverdue.length ? (
-                <div className="uf-overdue-cards">
+                <div className="uf-overdue-slider">
+                  <button type="button" className="uf-card-scroll" aria-label="查看上一批超期客户" onClick={() => scrollOverdueCards(-1)}>‹</button>
+                  <div className="uf-overdue-cards" ref={overdueCardsRef}>
                   {selectedOverdue.map((item) => (
                     <button
                       className="uf-customer-card"
@@ -896,6 +900,8 @@ export function UnresolvedFollowupDashboard() {
                       <small>下一步建议：{nextAction(item)}</small>
                     </button>
                   ))}
+                  </div>
+                  <button type="button" className="uf-card-scroll" aria-label="查看下一批超期客户" onClick={() => scrollOverdueCards(1)}>›</button>
                 </div>
               ) : (
                 <p className="uf-no-data">当前区域暂无超期客户。</p>
