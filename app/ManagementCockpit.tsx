@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { CockpitRow, cockpitRows, trendData } from "./cockpit-data";
+import { CockpitRow, cockpitRows, updateDashboardSnapshot } from "./cockpit-data";
 import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
 import "./management-cockpit.css";
 type Props = {
@@ -79,19 +79,43 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     ),
     [range, setRange] = useState(4);
   const [availableQuarters, setAvailableQuarters] = useState<string[]>([]);
+  const [dataVersion, setDataVersion] = useState(0);
   useEffect(() => {
-    const syncQuarter = () => { setAvailableQuarters(quarterOptions()); setF((value) => ({ ...value, quarter: selectedQuarter() || value.quarter })); };
+    const syncQuarter = () => {
+      setAvailableQuarters(quarterOptions());
+      setF((value) => ({ ...value, quarter: selectedQuarter() || value.quarter }));
+      setDataVersion((value) => value + 1);
+    };
     syncQuarter();
     window.addEventListener("reconciliation-quarter-selected", syncQuarter);
     window.addEventListener("reconciliation-quarter-updated", syncQuarter);
     window.addEventListener("reconciliation-dashboard-updated", syncQuarter);
     return () => { window.removeEventListener("reconciliation-quarter-selected", syncQuarter); window.removeEventListener("reconciliation-quarter-updated", syncQuarter); window.removeEventListener("reconciliation-dashboard-updated", syncQuarter); };
   }, []);
-  const regions = [...new Set(cockpitRows.map((x) => x.region))],
-    owners = [...new Set(cockpitRows.map((x) => x.owner))];
-  const rows = useMemo(
+  // The cockpit only reports customers that have been reconciled.  A blank
+  // customer-book amount is "未对账"; even a customer-book amount of 0 is valid.
+  const quarterRows = useMemo(
     () =>
       cockpitRows.filter(
+        (row) => row.quarter === f.quarter && row.filled,
+      ),
+    [f.quarter, dataVersion],
+  );
+  const regions = useMemo(
+      () => [...new Set(quarterRows.map((row) => row.region))],
+      [quarterRows],
+    ),
+    owners = useMemo(
+      () => [...new Set(quarterRows.map((row) => row.owner))],
+      [quarterRows],
+    ),
+    accountSets = useMemo(
+      () => [...new Set(quarterRows.map((row) => row.accountSet))],
+      [quarterRows],
+    );
+  const rows = useMemo(
+    () =>
+      quarterRows.filter(
         (r) =>
           r.quarter === f.quarter &&
           (f.region === "全部" || r.region === f.region) &&
@@ -102,7 +126,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             (f.cleared === "已对清" ? r.cleared : !r.cleared)) &&
           (f.follow === "全部" || r.followStatus === f.follow),
       ),
-    [f],
+    [f, quarterRows],
   );
   const m = useMemo(() => {
     let clear = rows.filter((x) => x.cleared).length,
@@ -111,8 +135,6 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       total: rows.length,
       clear,
       unclear,
-      filled: rows.filter((x) => x.filled).length,
-      unfilled: rows.filter((x) => !x.filled).length,
       rate: rows.length ? (clear / rows.length) * 100 : 0,
       unresolved: rows
         .filter((x) => !x.cleared)
@@ -193,9 +215,56 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   const priority = [...rows]
       .filter((x) => !x.cleared)
       .sort((a, b) => score(b) - score(a) || b.difference - a.difference),
-    trend = trendData.slice(-range),
-    compare = trend.at(-1)!.rate - trend.at(-2)!.rate;
-  const change = (key: keyof Filters, value: string) => { if (key === "quarter") selectQuarter(value); setF((v) => ({ ...v, [key]: value })); },
+    trend = quarterOptions()
+      .slice()
+      .sort((a, b) => a.localeCompare(b))
+      .map((quarter) => {
+        const reconciled = cockpitRows.filter(
+          (row) =>
+            row.quarter === quarter &&
+            row.filled &&
+            (f.region === "全部" || row.region === f.region) &&
+            (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
+            (f.owner === "全部" || row.owner === f.owner) &&
+            (!f.customer || row.customer.includes(f.customer)) &&
+            (f.cleared === "全部" ||
+              (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
+            (f.follow === "全部" || row.followStatus === f.follow),
+        );
+        const cleared = reconciled.filter((row) => row.cleared).length;
+        return {
+          quarter,
+          rate: reconciled.length ? (cleared / reconciled.length) * 100 : 0,
+          unresolved: reconciled
+            .filter((row) => !row.cleared)
+            .reduce((sum, row) => sum + row.difference, 0),
+        };
+      })
+      .slice(-range),
+    compare = trend.length > 1 ? trend.at(-1)!.rate - trend.at(-2)!.rate : 0;
+  const change = (key: keyof Filters, value: string) => {
+      if (key === "quarter") {
+        selectQuarter(value);
+        setF((current) => ({
+          ...current,
+          quarter: value,
+          region: "全部",
+          accountSet: "全部",
+          owner: "全部",
+        }));
+        return;
+      }
+      setF((current) => ({ ...current, [key]: value }));
+    },
+    refreshData = () => {
+      updateDashboardSnapshot();
+      setAvailableQuarters(quarterOptions());
+      setF((current) => ({
+        ...current,
+        quarter: selectedQuarter() || current.quarter,
+      }));
+      setDataVersion((current) => current + 1);
+    },
     open = (title: string, list: CockpitRow[]) =>
       setModal({ title, rows: list });
   const download = () => {
@@ -223,8 +292,6 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   };
   const metrics = [
     ["客户总数", m.total],
-    ["已填报", m.filled],
-    ["未填报", m.unfilled],
     ["已对清", m.clear],
     ["未对清", m.unclear],
     ["对清率", `${m.rate.toFixed(1)}%`],
@@ -284,8 +351,9 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             onChange={(e) => change("accountSet", e.target.value)}
           >
             <option>全部</option>
-            <option>华东医疗</option>
-            <option>工业客户</option>
+            {accountSets.map((x) => (
+              <option key={x}>{x}</option>
+            ))}
           </select>
         </label>
         <label>
@@ -349,7 +417,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             重置筛选
           </button>
           <button onClick={download}>导出看板</button>
-          <button className="primary" onClick={() => setF((v) => ({ ...v }))}>
+          <button className="primary" onClick={refreshData}>
             刷新数据
           </button>
         </div>
