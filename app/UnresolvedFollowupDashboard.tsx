@@ -315,13 +315,28 @@ export function UnresolvedFollowupDashboard() {
     setItems(toItems(sheetForQuarter(selectedQuarter()) as Sheet | undefined));
   useEffect(() => {
     sync();
+    const initialFilter = Object.fromEntries(new URLSearchParams(window.location.search));
+    if (initialFilter.region) setRegion(initialFilter.region);
+    if (initialFilter.owner || initialFilter.customer) setQuery(initialFilter.owner || initialFilter.customer || "");
+    if (initialFilter.filter === "finance") setFinance("需财务复核");
+    const applyDashboardFilter = (event: Event) => {
+      const filter = (event as CustomEvent<Record<string, string>>).detail;
+      if (!filter) return;
+      if (filter.region) setRegion(filter.region);
+      if (filter.owner || filter.customer) setQuery(filter.owner || filter.customer || "");
+      if (filter.filter === "finance") setFinance("需财务复核");
+      if (filter.filter === "overdue") setQuery("");
+      setTab("pending");
+    };
     window.addEventListener("reconciliation-updated", sync);
     window.addEventListener("reconciliation-quarter-selected", sync);
     window.addEventListener("reconciliation-quarter-updated", sync);
+    window.addEventListener("reconciliation-followup-filter", applyDashboardFilter);
     return () => {
       window.removeEventListener("reconciliation-updated", sync);
       window.removeEventListener("reconciliation-quarter-selected", sync);
       window.removeEventListener("reconciliation-quarter-updated", sync);
+      window.removeEventListener("reconciliation-followup-filter", applyDashboardFilter);
     };
   }, []);
   useEffect(() => {

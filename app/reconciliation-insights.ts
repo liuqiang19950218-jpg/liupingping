@@ -1,0 +1,67 @@
+import { type CockpitRow, cockpitRows } from "./cockpit-data";
+
+export type RiskLevel = "高风险" | "中风险" | "低风险";
+export type IssueStage = "等待客户回复" | "等待内部资料" | "待财务调账" | "核查中" | "已解决待复核";
+
+export type ReconciliationIssue = CockpitRow & {
+  riskLevel: RiskLevel;
+  stage: IssueStage;
+  overdueDays: number;
+};
+
+const NOW = new Date("2026-08-03T00:00:00").getTime();
+
+export const formatMoney = (value: number, unit: "元" | "万元" = "元") =>
+  unit === "万元"
+    ? `${(value / 10000).toLocaleString("zh-CN", { maximumFractionDigits: 1 })} 万`
+    : value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+
+export const formatRate = (value: number) => `${value.toFixed(1)}%`;
+
+export const getOverdueDays = (date: string) => {
+  const value = new Date(`${date}T00:00:00`).getTime();
+  return Number.isFinite(value) ? Math.max(0, Math.floor((NOW - value) / 86_400_000)) : 0;
+};
+
+export const issueStageOf = (row: CockpitRow): IssueStage => {
+  if (row.followStatus.includes("财务")) return "待财务调账";
+  if (row.followStatus.includes("资料")) return "等待内部资料";
+  if (row.followStatus.includes("已解决")) return "已解决待复核";
+  if (!row.solution) return "核查中";
+  return "等待客户回复";
+};
+
+export const issueRiskOf = (row: CockpitRow): RiskLevel => {
+  const overdue = getOverdueDays(row.expectedDate);
+  const invoiceIssue = Boolean(row.transitInvoiceFail || row.returnInvoiceFail || row.lostInvoiceFail || row.instrumentInvoiceFail || row.otherInvoiceFail || row.duplicateInvoice);
+  if (overdue > 90 || row.difference >= 100000 || invoiceIssue || row.consecutiveUnclear) return "高风险";
+  if (overdue > 30 || row.difference > 0) return "中风险";
+  return "低风险";
+};
+
+export function issuesForQuarter(quarter: string): ReconciliationIssue[] {
+  return cockpitRows
+    .filter((row) => row.quarter === quarter && row.filled && row.difference !== 0 && row.followStatus !== "已解决")
+    .map((row) => ({ ...row, riskLevel: issueRiskOf(row), stage: issueStageOf(row), overdueDays: getOverdueDays(row.expectedDate) }));
+}
+
+export function issueSummary(items: ReconciliationIssue[]) {
+  const totalAmount = items.reduce((sum, item) => sum + Math.abs(item.difference), 0);
+  const by = <T extends string>(fn: (item: ReconciliationIssue) => T) =>
+    [...items.reduce((map, item) => map.set(fn(item), (map.get(fn(item)) ?? 0) + 1), new Map<T, number>())]
+      .map(([name, count]) => ({ name, count, ratio: items.length ? count / items.length : 0 }));
+  return {
+    totalAmount,
+    overdue: items.filter((item) => item.overdueDays > 7),
+    untouched: items.filter((item) => item.overdueDays >= 7),
+    finance: items.filter((item) => item.followStatus.includes("财务")),
+    high: items.filter((item) => item.riskLevel === "高风险"),
+    stages: by((item) => item.stage),
+    blockers: by((item) => item.cause || "未填写差额原因").sort((a, b) => b.count - a.count).slice(0, 5),
+    owners: [...items.reduce((map, item) => {
+      const entry = map.get(item.owner) ?? { name: item.owner || "未分配", count: 0, overdue: 0, high: 0 };
+      entry.count += 1; entry.overdue += item.overdueDays > 7 ? 1 : 0; entry.high += item.riskLevel === "高风险" ? 1 : 0;
+      map.set(item.owner, entry); return map;
+    }, new Map<string, { name: string; count: number; overdue: number; high: number }>()).values()].sort((a, b) => b.count - a.count).slice(0, 5),
+  };
+}
