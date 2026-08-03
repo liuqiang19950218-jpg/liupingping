@@ -1277,7 +1277,7 @@ export function QuarterlyReconciliation({
             <p className="eyebrow">
               {mode === "import" ? "数据导入" : T.local}
             </p>
-            <h2>{mode === "import" ? "数据导入" : "本年度对账详细情况"}</h2>
+            <h2>{mode === "import" ? "数据导入" : "本季度对账详细情况"}</h2>
             <p>
               {mode === "import"
                 ? T.importHint
@@ -1411,7 +1411,7 @@ export function QuarterlyReconciliation({
             <strong>{sheet ? "本年度对账表已导入" : T.needImport}</strong>
             <span>
               {sheet
-                ? `${sheet.fileName}，共 ${sheet.rows.length} 条记录。数据已保存在本机，可返回“本年度对账详细情况”继续填写。`
+                ? `${sheet.fileName}，共 ${sheet.rows.length} 条记录。数据已保存在本机，可返回“本季度对账详细情况”继续填写。`
                 : "请先上传对账季度表，再按需要上传或替换本年往来明细。"}
             </span>
           </div>

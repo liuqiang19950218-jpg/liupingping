@@ -15,7 +15,7 @@ import "./app-shell.css";
 import "./shell-overrides.css";
 import "./problem-dashboard-header.css";
 
-const T = { brand:"对账管理", sub:"季度对账与复核工具", history:"对账看板", current:"本年度对账详细情况", import:"数据导入", tracker:"未解决客户跟进", cockpit:"管理层驾驶舱", issue:"问题解决看板", local:"本机数据自动保存" };
+const T = { brand:"对账管理", sub:"季度对账与复核工具", history:"对账看板", current:"本季度对账详细情况", import:"数据导入", tracker:"未解决客户跟进", cockpit:"管理层驾驶舱", issue:"问题解决看板", local:"本机数据自动保存" };
 type View = "history" | "current" | "import" | "tracker" | "cockpit" | "problem";
 
 function GlobalQuarterFilter() {

@@ -28,7 +28,7 @@ export function CurrentYearLinkedSummary() {
   return (
     <section className="current-year-linked-summary">
       <div>
-        <p>本年度对账详细情况 · 手动更新</p>
+        <p>本季度对账详细情况 · 手动更新</p>
         <h2>本年度数据概览</h2>
         <span>
           本次同步共读取 {rows.length}{" "}
