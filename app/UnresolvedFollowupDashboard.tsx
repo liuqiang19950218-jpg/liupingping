@@ -977,7 +977,15 @@ export function UnresolvedFollowupDashboard() {
                       </span>
                       <span>
                         财务关注：
-                        <b className={financeOf(item) === "一般关注" ? "uf-finance-general" : ""}>
+                        <b
+                          className={
+                            financeOf(item) === "需财务复核"
+                              ? "uf-finance-review"
+                              : financeOf(item) === "一般关注"
+                                ? "uf-finance-general"
+                                : "uf-finance-none"
+                          }
+                        >
                           {financeOf(item)}
                         </b>
                       </span>
