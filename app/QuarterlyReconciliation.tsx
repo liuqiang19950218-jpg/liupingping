@@ -12,6 +12,7 @@ import { updateDashboardSnapshot } from "./cockpit-data";
 import {
   ensureArchiveFromActive,
   quarterOptions,
+  quarterOf,
   selectQuarter,
   selectedQuarter,
   sheetForQuarter,
@@ -326,10 +327,11 @@ const materialImportAliases = (header: string) =>
 const sum = (entries: Array<{ amount: string }>) =>
   entries.reduce((total, entry) => total + num(entry.amount), 0);
 const currentQuarterRange = (source: LocalSheet) => {
-  const reference = [...source.headers, source.fileName].join(" ");
-  const match = reference.match(/(\d{2,4})\s*\u5e74\s*([1-4])\s*\u5b63\u5ea6/);
+  const match = quarterOf(source.fileName, source.headers, source.rows).match(
+    /^(\d{4}) Q([1-4])$/,
+  );
   if (!match) return null;
-  const year = Number(match[1].length === 2 ? "20" + match[1] : match[1]);
+  const year = Number(match[1]);
   const quarter = Number(match[2]);
   const months: Record<number, [number, number]> = {
     1: [1, 3],
@@ -856,7 +858,7 @@ export function QuarterlyReconciliation({
     () => (ledgerKeys ? new Set([...ledgerKeys, ...currentLedgerKeys]) : null),
     [ledgerKeys, currentLedgerKeys],
   );
-  const saveSheet = (next: LocalSheet) => {
+  const saveSheet = (next: LocalSheet, syncDashboards = false) => {
     const headers = [...next.headers];
     const solution = "\u89e3\u51b3\u65b9\u6848",
       time = "\u89e3\u51b3\u65f6\u95f4";
@@ -890,6 +892,10 @@ export function QuarterlyReconciliation({
     setSheet(saved);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
     window.dispatchEvent(new Event("reconciliation-updated"));
+    if (syncDashboards) {
+      writeArchivedSheet(saved);
+      updateDashboardSnapshot();
+    }
   };
   const changeQuarter = (quarter: string) => {
     const archived = sheetForQuarter(quarter);
@@ -992,7 +998,7 @@ export function QuarterlyReconciliation({
         throw new Error(
           "\u6ca1\u6709\u8bfb\u53d6\u5230\u53ef\u7528\u7684\u8868\u5934\u6216\u6570\u636e\u3002",
         );
-      saveSheet({ headers, rows, fileName: file.name, details: {} });
+      saveSheet({ headers, rows, fileName: file.name, details: {} }, true);
       setRegion(T.all);
       setMessage(`\u5df2\u5bfc\u5165 ${rows.length} \u6761\u8bb0\u5f55\u3002`);
     } catch (error) {

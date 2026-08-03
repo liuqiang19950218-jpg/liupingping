@@ -60,7 +60,28 @@ function migrateArchive(archive: QuarterArchive) {
   return { archive: next, changed };
 }
 
-export function quarterOf(fileName: string, headers: unknown[] = []) {
+export function quarterOf(
+  fileName: string,
+  headers: unknown[] = [],
+  rows: unknown[][] = [],
+) {
+  const timeIndex = headers.findIndex((header) =>
+    String(header).replace(/\s/g, "").includes("\u5bf9\u8d26\u65f6\u95f4\u70b9"),
+  );
+  const timePoint =
+    timeIndex < 0
+      ? ""
+      : rows
+          .map((row) => String(row[timeIndex] ?? "").trim())
+          .find(Boolean) ?? "";
+  const pointMatch = timePoint.match(
+    /(?:20)?(\d{2})\s*(?:[.\/-]|\u5e74)\s*(0?[1-9]|1[0-2])(?:\s*\u6708)?/,
+  );
+  if (pointMatch) {
+    const year = `20${pointMatch[1]}`;
+    const quarter = Math.ceil(Number(pointMatch[2]) / 3);
+    return `${year} Q${quarter}`;
+  }
   const match = `${fileName} ${headers.join(" ")}`.match(/(\d{2,4})\s*\u5e74?\s*([1-4])\s*\u5b63\u5ea6/);
   return match
     ? `${match[1].length === 2 ? `20${match[1]}` : match[1]} Q${match[2]}`
@@ -82,7 +103,7 @@ export function readArchive(): QuarterArchive {
 
 export function writeArchivedSheet(sheet: ArchivedSheet) {
   const migrated = migrateSpdConfirmationHeader(sheet).sheet;
-  const quarter = quarterOf(migrated.fileName, migrated.headers);
+  const quarter = quarterOf(migrated.fileName, migrated.headers, migrated.rows);
   const archive = readArchive();
   archive[quarter] = migrated;
   localStorage.setItem(QUARTER_ARCHIVE_KEY, JSON.stringify(archive));
@@ -99,7 +120,7 @@ export function ensureArchiveFromActive() {
     const sheet = JSON.parse(localStorage.getItem(ACTIVE_SHEET_KEY) || "null") as ArchivedSheet | null;
     if (sheet?.headers?.length && sheet?.rows) {
       const migrated = migrateSpdConfirmationHeader(sheet).sheet;
-      archive[quarterOf(migrated.fileName, migrated.headers)] = migrated;
+      archive[quarterOf(migrated.fileName, migrated.headers, migrated.rows)] = migrated;
       localStorage.setItem(QUARTER_ARCHIVE_KEY, JSON.stringify(archive));
       localStorage.setItem(ACTIVE_SHEET_KEY, JSON.stringify(migrated));
     }

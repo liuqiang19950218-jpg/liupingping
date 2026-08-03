@@ -1,4 +1,4 @@
-import { ensureArchiveFromActive } from "./quarter-storage";
+import { ensureArchiveFromActive, quarterOf } from "./quarter-storage";
 
 export type CockpitRow = {
   id: string;
@@ -463,12 +463,11 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
         headers.findIndex((header) =>
           String(header).replace(/\s/g, "").includes(name),
         );
-    const quarterMatch = String(saved.fileName ?? "").match(
-        /(\d{2,4}).*?([1-4])季度/,
-      ),
-      quarter = quarterMatch
-        ? `${quarterMatch[1].length === 2 ? `20${quarterMatch[1]}` : quarterMatch[1]} Q${quarterMatch[2]}`
-        : "本年度";
+    const quarter = quarterOf(
+      String(saved.fileName ?? ""),
+      saved.headers,
+      saved.rows,
+    );
     const companyAt = at("公司应收"),
       customerAt = at("客户账面金额"),
       differenceAt = at("对账差额"),
