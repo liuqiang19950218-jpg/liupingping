@@ -442,6 +442,8 @@ type LiveDetail = {
   resolutionTime?: string;
   resolved?: boolean;
   reopened?: boolean;
+  badDebtReason?: string;
+  adjustmentReason?: string;
   transit?: LiveInvoice[];
   returned?: LiveInvoice[];
   lost?: LiveInvoice[];
@@ -540,8 +542,8 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
             : numberOf(entry[otherAt]),
           badDebt: numberOf(entry[badDebtAt]),
           adjustment: numberOf(entry[adjustmentAt]),
-          badDebtReason: String(entry[badDebtReasonAt] ?? ""),
-          adjustmentReason: String(entry[adjustmentReasonAt] ?? ""),
+          badDebtReason: detail?.badDebtReason || String(entry[badDebtReasonAt] ?? ""),
+          adjustmentReason: detail?.adjustmentReason || String(entry[adjustmentReasonAt] ?? ""),
           filled: hasValue(customerBook),
           cleared: String(entry[clearedAt] ?? "") === "对清",
           cause: String(entry[noteAt] ?? ""),
