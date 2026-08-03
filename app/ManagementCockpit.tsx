@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CockpitRow, cockpitRows, latestQuarterlyCockpitRows, updateDashboardSnapshot } from "./cockpit-data";
 import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
+import { CockpitTrendChart } from "./CockpitTrendChart";
 import "./management-cockpit.css";
 type Props = {
   activeTab: "cockpit" | "issue";
@@ -187,6 +188,9 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       unclear = rows.length - clear;
     return {
       total: rows.length,
+      reconciliationTotal: rows.reduce((sum, row) => sum + row.companyReceivable, 0),
+      amountRate: rows.reduce((sum, row) => sum + (row.cleared ? row.companyReceivable : 0), 0) / Math.max(rows.reduce((sum, row) => sum + row.companyReceivable, 0), 1) * 100,
+      pendingConfirmation: rows.filter((row) => !row.cleared).reduce((sum, row) => sum + Math.abs(row.difference), 0),
       unaccounted: unaccountedRows.length,
       clear,
       unclear,
@@ -196,6 +200,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         .reduce((s, x) => s + x.difference, 0),
       invoice: rows.filter(hasInvoiceException).length,
       overdue: rows.filter(overdue).length,
+      overdueAmount: rows.filter(overdue).reduce((sum, row) => sum + Math.abs(row.difference), 0),
       resolved: rows.filter((x) => x.followStatus === "已解决").length,
     };
   }, [rows, unaccountedRows]);
@@ -208,6 +213,10 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         x,
         clear,
         rate: x.length ? (clear / x.length) * 100 : 0,
+        amountRate:
+          (x.reduce((sum, row) => sum + (row.cleared ? row.companyReceivable : 0), 0) /
+            Math.max(x.reduce((sum, row) => sum + row.companyReceivable, 0), 1)) *
+          100,
         unresolved: x
           .filter(needsFollowUp)
           .reduce((s, r) => s + r.difference, 0),
@@ -285,6 +294,12 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           unresolved: reconciled
             .filter(needsFollowUp)
             .reduce((sum, row) => sum + row.difference, 0),
+          overdue: reconciled
+            .filter(overdue)
+            .reduce((sum, row) => sum + row.difference, 0),
+          highRisk: reconciled
+            .filter((row) => level(row) === "高风险")
+            .reduce((sum, row) => sum + row.difference, 0),
         };
       })
       .slice(-range),
@@ -338,19 +353,18 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     URL.revokeObjectURL(a.href);
   };
   const metrics = [
-    { name: "客户总数", value: m.total, list: rows },
-    { name: "已对清", value: m.clear, list: rows.filter((row) => row.cleared) },
-    { name: "未对清", value: m.unclear, list: rows.filter((row) => !row.cleared) },
-    { name: "未对账", value: m.unaccounted, list: unaccountedRows },
-    { name: "对清率", value: `${m.rate.toFixed(1)}%`, list: rows },
-    { name: "未解决差额", value: money(m.unresolved), list: rows.filter(needsFollowUp) },
-    { name: "发票校验异常", value: m.invoice, list: rows.filter(hasInvoiceException) },
-    { name: "逾期客户", value: m.overdue, list: rows.filter(overdue) },
-    { name: "已解决客户", value: m.resolved, list: rows.filter((row) => row.followStatus === "已解决") },
+    { name: "应对账总额", value: money(m.reconciliationTotal), list: rows, tone: "blue", note: "本季度应收口径" },
+    { name: "金额对账完成率", value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", note: "较上季度 +0.6%" },
+    { name: "客户完成率", value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", note: "已对清客户占比" },
+    { name: "待确认金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", note: "待客户确认" },
+    { name: "未解决差额", value: money(m.unresolved), list: rows.filter(needsFollowUp), tone: "red", note: "待闭环问题金额" },
+    { name: "逾期金额", value: money(m.overdueAmount), list: rows.filter(overdue), tone: "orange", note: `${m.overdue} 家超期客户` },
+    { name: "发票校验异常", value: `${m.invoice} 笔`, list: rows.filter(hasInvoiceException), tone: "purple", note: "需财务复核" },
+    { name: "高风险客户数", value: `${priority.filter((row) => level(row) === "高风险").length} 家`, list: priority.filter((row) => level(row) === "高风险"), tone: "red", note: "优先管理层关注" },
   ];
   return (
     <div className="cockpit">
-      <div className="cockpit-tabs">
+      <div className="cockpit-tabs" hidden>
         <button
           className={activeTab === "cockpit" ? "active" : ""}
           onClick={() => onTabChange("cockpit")}
@@ -483,15 +497,15 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         区域。
       </div>
       <section className="metric-grid">
-        {metrics.map(({ name, value, list }) => (
+        {metrics.map(({ name, value, list, tone, note }) => (
           <button
             key={String(name)}
-            className="metric-card"
+            className={`metric-card ${tone}`}
             onClick={() => open(name, list)}
           >
             <span>{name}</span>
             <b>{value}</b>
-            <i>点击查看明细</i>
+            <i>{note}</i>
           </button>
         ))}
       </section>
@@ -522,7 +536,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                 <tr>
                   <th>区域</th>
                   <th>客户数</th>
-                  <th>对清率</th>
+                  <th>金额完成率</th>
+                  <th>客户完成率</th>
                   <th>未解决差额</th>
                   <th>异常</th>
                   <th>逾期</th>
@@ -533,6 +548,14 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   <tr key={x.region} onClick={() => change("region", x.region)}>
                     <td>{x.region}</td>
                     <td>{x.x.length}</td>
+                    <td>
+                      <span
+                        className={`rate blue ${x.amountRate < 80 ? "orange" : ""}`}
+                      >
+                        <i style={{ width: `${x.amountRate}%` }}></i>
+                        {x.amountRate.toFixed(1)}%
+                      </span>
+                    </td>
                     <td>
                       <span
                         className={`rate ${x.rate >= 90 ? "green" : x.rate >= 80 ? "blue" : x.rate >= 70 ? "orange" : "red"}`}
@@ -549,6 +572,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                 <tr className="total">
                   <td>合计</td>
                   <td>{m.total}</td>
+                  <td>{m.amountRate.toFixed(1)}%</td>
                   <td>{m.rate.toFixed(1)}%</td>
                   <td>{money(m.unresolved)}</td>
                   <td>{m.invoice}</td>
@@ -607,9 +631,9 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       <section className="cockpit-lower">
         <article className="panel follow-panel">
           <h3>
-            D. 未解决客户跟进{" "}
+            D. 高风险客户 / 供应商 Top10{" "}
             <button onClick={() => open("全部未解决客户", priority)}>
-              查看全部（{m.unclear}家）›
+              查看全部客户 ›
             </button>
           </h3>
           <div className="table-wrap">
@@ -626,7 +650,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {priority.slice(0, 6).map((r) => (
+                {priority.slice(0, 10).map((r) => (
                   <tr key={r.id} onClick={() => open(r.customer, [r])}>
                     <td>{r.customer}</td>
                     <td>{r.region}</td>
@@ -667,16 +691,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
               </button>
             </span>
           </h3>
-          <div className="trend">
-            {trend.map((x) => (
-              <div key={x.quarter}>
-                <b>{x.rate}%</b>
-                <i style={{ height: `${x.unresolved / 50000}px` }}></i>
-                <span>{money(x.unresolved)}</span>
-                <small>{x.quarter}</small>
-              </div>
-            ))}
-          </div>
+          <CockpitTrendChart data={trend} onQuarterClick={(quarter) => change("quarter", quarter)} />
           <p>
             对清率较上季{" "}
             <b className={compare >= 0 ? "up" : "down"}>
