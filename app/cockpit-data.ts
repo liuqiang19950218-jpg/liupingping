@@ -571,6 +571,10 @@ const archivedCockpitRows = (): CockpitRow[] => {
     liveCockpitRows(sheet as LiveSheet) ?? [],
   );
 };
+// Use the archived annual-detail sheets when a dashboard needs the latest
+// invoice-category amounts instead of an older manually saved dashboard view.
+export const latestQuarterlyCockpitRows = (): CockpitRow[] =>
+  archivedCockpitRows();
 const dashboardRows = (): CockpitRow[] | null => {
   if (typeof window === "undefined") return null;
   try {

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { CockpitRow, cockpitRows, updateDashboardSnapshot } from "./cockpit-data";
+import { CockpitRow, cockpitRows, latestQuarterlyCockpitRows, updateDashboardSnapshot } from "./cockpit-data";
 import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
 import "./management-cockpit.css";
 type Props = {
@@ -163,6 +163,24 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       ),
     [f, sourceQuarterRows],
   );
+  // Difference categories must always use the latest current-year detail
+  // fields, including columns added after an older dashboard snapshot.
+  const categoryRows = useMemo(
+    () =>
+      latestQuarterlyCockpitRows().filter(
+        (row) =>
+          row.quarter === f.quarter &&
+          row.filled &&
+          (f.region === "全部" || row.region === f.region) &&
+          (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
+          (f.owner === "全部" || row.owner === f.owner) &&
+          (!f.customer || row.customer.includes(f.customer)) &&
+          (f.cleared === "全部" ||
+            (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
+          (f.follow === "全部" || row.followStatus === f.follow),
+      ),
+    [f, dataVersion],
+  );
   const m = useMemo(() => {
     let clear = rows.filter((x) => x.cleared).length,
       unclear = rows.length - clear;
@@ -200,14 +218,14 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     .filter((x) => x.x.length)
     .sort((a, b) => b.risk - a.risk);
   const cats = [
-    { name: "在途", color: "#2c78f6", value: rows.reduce((sum, row) => sum + row.transit, 0), matches: (row: CockpitRow) => row.transit > 0 },
-    { name: "退票", color: "#18b79b", value: rows.reduce((sum, row) => sum + row.returned, 0), matches: (row: CockpitRow) => row.returned > 0 },
-    { name: "丢票", color: "#f7af2d", value: rows.reduce((sum, row) => sum + (row.lost ?? 0), 0), matches: (row: CockpitRow) => (row.lost ?? 0) > 0 },
-    { name: "仪器设备", color: "#8d70e8", value: rows.reduce((sum, row) => sum + (row.instrument ?? 0), 0), matches: (row: CockpitRow) => (row.instrument ?? 0) > 0 },
+    { name: "在途金额", color: "#2c78f6", value: categoryRows.reduce((sum, row) => sum + row.transit, 0), matches: (row: CockpitRow) => row.transit > 0 },
+    { name: "退票金额", color: "#18b79b", value: categoryRows.reduce((sum, row) => sum + row.returned, 0), matches: (row: CockpitRow) => row.returned > 0 },
+    { name: "丢票金额", color: "#f7af2d", value: categoryRows.reduce((sum, row) => sum + (row.lost ?? 0), 0), matches: (row: CockpitRow) => (row.lost ?? 0) > 0 },
+    { name: "仪器设备", color: "#8d70e8", value: categoryRows.reduce((sum, row) => sum + (row.instrument ?? 0), 0), matches: (row: CockpitRow) => (row.instrument ?? 0) > 0 },
     {
       name: "其他",
       color: "#5aaeea",
-      value: rows.reduce((sum, row) => sum + row.otherInvoice + row.otherNoInvoice, 0),
+      value: categoryRows.reduce((sum, row) => sum + row.otherInvoice + row.otherNoInvoice, 0),
       matches: (row: CockpitRow) => row.otherInvoice + row.otherNoInvoice > 0,
     },
   ].filter((item) => item.value);
@@ -567,7 +585,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   onClick={() =>
                     open(
                       x.name,
-                      rows.filter(x.matches),
+                      categoryRows.filter(x.matches),
                     )
                   }
                 >
