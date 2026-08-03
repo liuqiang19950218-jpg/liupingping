@@ -1,0 +1,97 @@
+/* Management cockpit visual system: compact financial SaaS layout. */
+.cockpit {
+  max-width: none;
+  color: #17233d;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+}
+
+.cockpit-filter {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(104px, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+  min-height: 72px;
+  padding: 13px 15px;
+  border: 1px solid #dfe7f1;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(15, 35, 65, 0.035);
+}
+
+.cockpit-filter label { gap: 6px; color: #52647e; font-size: 11px; font-weight: 700; }
+.cockpit-filter select, .cockpit-filter input { width: 100%; min-width: 0; height: 30px; font-size: 12px; }
+.cockpit-filter .customer-search input { width: 100%; }
+.filter-actions { margin-left: 0; align-self: end; white-space: nowrap; }
+.filter-actions button { height: 30px; padding: 0 11px; border-color: #bcd5fb; }
+
+.cockpit-conclusion {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  margin: 10px 0;
+  padding: 9px 15px;
+  border-color: #c8dcfb;
+  border-radius: 7px;
+  background: linear-gradient(90deg, #eff6ff, #f7fbff);
+  color: #284665;
+  font-size: 13px;
+}
+
+.metric-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; }
+.metric-card {
+  min-height: 124px;
+  padding: 14px 14px 12px;
+  border: 1px solid #dfe7f1;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(15, 35, 65, 0.04);
+  transition: box-shadow .16s ease, border-color .16s ease;
+}
+.metric-card:hover { transform: none; border-color: #8bb9fb; box-shadow: 0 6px 16px rgba(18, 74, 143, .10); }
+.metric-card::after { display: none; }
+.metric-card > span:not(.metric-icon) { color: #5d6e86; font-size: 12px; font-weight: 700; }
+.metric-card b { margin: 18px 0 10px; color: #17233d; font-size: 25px; line-height: 1; letter-spacing: -.4px; font-variant-numeric: tabular-nums; }
+.metric-card i { color: #8291a6; font-size: 11px; }
+.metric-icon { position: absolute; top: 14px; right: 14px; display: grid !important; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: #eaf3ff; color: #1677ff !important; font-size: 17px !important; font-style: normal; font-weight: 800; }
+.metric-card.green .metric-icon { background: #eaf8f1; color: #16a36a !important; }
+.metric-card.orange .metric-icon { background: #fff4e6; color: #f08a16 !important; }
+.metric-card.red .metric-icon { background: #fff0f0; color: #ef4444 !important; }
+.metric-card.purple .metric-icon { background: #f3efff; color: #805dea !important; }
+.metric-card.blue b { color: #1677ff; }.metric-card.green b { color: #16a36a; }.metric-card.red b { color: #ef4444; }
+
+.cockpit-three { grid-template-columns: minmax(280px, 4fr) minmax(430px, 5fr) minmax(270px, 3fr); gap: 12px; margin-top: 12px; }
+.cockpit-lower { grid-template-columns: minmax(430px, 5fr) minmax(330px, 4fr) minmax(280px, 3fr); gap: 12px; margin-top: 12px; }
+.panel { overflow: hidden; border: 1px solid #dfe7f1; border-radius: 8px; box-shadow: 0 2px 8px rgba(15, 35, 65, .04); }
+.panel h3 { display: flex; align-items: center; min-height: 42px; padding: 0 14px; color: #163c68; font-size: 14px; font-weight: 800; }
+.panel h3 small { margin-left: 7px; color: #8493a6; font-size: 10px; font-weight: 500; }
+.panel th { padding: 9px 8px; background: #f4f7fc; color: #53657e; font-size: 11px; font-weight: 800; }
+.panel td { padding: 9px 8px; font-size: 11px; }
+
+.risks button { grid-template-columns: 21px minmax(0, 1fr) auto auto; min-height: 38px; padding: 8px 13px; }
+.risks button > span { border-radius: 5px; }.risks a { padding: 12px; font-weight: 700; }
+.region-panel .table-wrap { max-height: 265px; }.region-panel .rate { min-width: 94px; }.region-panel .rate i { max-width: 45px; }
+.panel .total td { background: #eff5ff; color: #183f69; }
+
+.donut-wrap { min-height: 255px; padding: 12px; gap: 12px; }
+.difference-chart { width: 156px; height: 178px; flex: 0 0 156px; border: 0; background: transparent; cursor: pointer; }
+.legend { min-height: 23px; border-bottom: 1px solid #f1f4f8; }.legend:last-child { border-bottom: 0; }
+
+.follow-panel .table-wrap { max-height: 294px; }.follow-panel table td:nth-child(4) { color: #ef4444; font-weight: 800; font-variant-numeric: tabular-nums; }
+.trend-panel { min-height: 340px; }.cockpit-trend-chart { height: 274px; min-height: 274px; padding: 2px 8px 0; }
+.trend-panel > p { margin: 3px 14px 12px; border-top: 1px solid #eef2f7; padding-top: 8px; }
+.analysis { min-height: 340px; }.analysis ol { margin: 9px 17px 13px; line-height: 2.08; }.analysis footer { margin-top: auto; }
+
+@media (max-width: 1680px) {
+  .cockpit-filter { grid-template-columns: repeat(4, minmax(120px, 1fr)); }
+  .filter-actions { grid-column: 1 / -1; justify-self: end; }
+  .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 1366px) {
+  .cockpit-three { grid-template-columns: minmax(270px, 4fr) minmax(420px, 6fr); }
+  .donut-panel { grid-column: span 2; }
+  .cockpit-lower { grid-template-columns: 1.2fr 1fr; }
+  .analysis { grid-column: span 2; }
+}
+@media (max-width: 900px) {
+  .cockpit-filter, .metric-grid, .cockpit-three, .cockpit-lower { grid-template-columns: 1fr; }
+  .filter-actions, .donut-panel, .analysis { grid-column: auto; justify-self: stretch; }
+  .filter-actions { justify-content: stretch; }.filter-actions button { flex: 1; }
+}

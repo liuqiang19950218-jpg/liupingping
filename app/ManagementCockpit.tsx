@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import { CockpitRow, cockpitRows, latestQuarterlyCockpitRows, updateDashboardSnapshot } from "./cockpit-data";
 import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
 import { CockpitTrendChart } from "./CockpitTrendChart";
+import { DifferenceStructureChart } from "./DifferenceStructureChart";
 import "./management-cockpit.css";
+import "./management-cockpit-refined.css";
 type Props = {
   activeTab: "cockpit" | "issue";
   onTabChange: (tab: "cockpit" | "issue") => void;
@@ -240,19 +242,6 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     },
   ].filter((item) => item.value);
   const categorizedDifference = cats.reduce((sum, item) => sum + item.value, 0);
-  const conic = `conic-gradient(${cats
-    .map((x, i) => {
-      const start =
-          (cats.slice(0, i).reduce((s, a) => s + a.value, 0) /
-            Math.max(categorizedDifference, 1)) *
-          360,
-        end =
-          (cats.slice(0, i + 1).reduce((s, a) => s + a.value, 0) /
-            Math.max(categorizedDifference, 1)) *
-          360;
-      return `${x.color} ${start}deg ${end}deg`;
-    })
-    .join(",")})`;
   const risks = [
     "四类差额合计不一致",
     "在途发票校验失败",
@@ -353,14 +342,14 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     URL.revokeObjectURL(a.href);
   };
   const metrics = [
-    { name: "应对账总额", value: money(m.reconciliationTotal), list: rows, tone: "blue", note: "本季度应收口径" },
-    { name: "金额对账完成率", value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", note: "较上季度 +0.6%" },
-    { name: "客户完成率", value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", note: "已对清客户占比" },
-    { name: "待确认金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", note: "待客户确认" },
-    { name: "未解决差额", value: money(m.unresolved), list: rows.filter(needsFollowUp), tone: "red", note: "待闭环问题金额" },
-    { name: "逾期金额", value: money(m.overdueAmount), list: rows.filter(overdue), tone: "orange", note: `${m.overdue} 家超期客户` },
-    { name: "发票校验异常", value: `${m.invoice} 笔`, list: rows.filter(hasInvoiceException), tone: "purple", note: "需财务复核" },
-    { name: "高风险客户数", value: `${priority.filter((row) => level(row) === "高风险").length} 家`, list: priority.filter((row) => level(row) === "高风险"), tone: "red", note: "优先管理层关注" },
+    { name: "应对账总额", value: money(m.reconciliationTotal), list: rows, tone: "blue", icon: "¥", note: "本季度应收口径" },
+    { name: "金额对账完成率", value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", icon: "✓", note: "较上季度 +0.6%" },
+    { name: "客户完成率", value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", icon: "◎", note: "已对清客户占比" },
+    { name: "待确认金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", icon: "⌛", note: "待客户确认" },
+    { name: "未解决差额", value: money(m.unresolved), list: rows.filter(needsFollowUp), tone: "red", icon: "△", note: "待闭环问题金额" },
+    { name: "逾期金额", value: money(m.overdueAmount), list: rows.filter(overdue), tone: "orange", icon: "◷", note: `${m.overdue} 家超期客户` },
+    { name: "发票校验异常", value: `${m.invoice} 笔`, list: rows.filter(hasInvoiceException), tone: "purple", icon: "▣", note: "需财务复核" },
+    { name: "高风险客户数", value: `${priority.filter((row) => level(row) === "高风险").length} 家`, list: priority.filter((row) => level(row) === "高风险"), tone: "red", icon: "⛨", note: "优先管理层关注" },
   ];
   return (
     <div className="cockpit">
@@ -497,12 +486,13 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         区域。
       </div>
       <section className="metric-grid">
-        {metrics.map(({ name, value, list, tone, note }) => (
+        {metrics.map(({ name, value, list, tone, icon, note }) => (
           <button
             key={String(name)}
             className={`metric-card ${tone}`}
             onClick={() => open(name, list)}
           >
+            <span className="metric-icon" aria-hidden="true">{icon}</span>
             <span>{name}</span>
             <b>{value}</b>
             <i>{note}</i>
@@ -511,7 +501,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       </section>
       <section className="cockpit-three">
         <article className="panel risks">
-          <h3>A. 核心风险与异常提醒</h3>
+          <h3>A. 核心风险与异常提醒 Top5</h3>
           {risks.map((x, i) => (
             <button key={x.name} onClick={() => open(x.name, x.list)}>
               <span className={i < 2 ? "danger" : i < 5 ? "warning" : "normal"}>
@@ -529,7 +519,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           <a onClick={() => open("全部风险客户", priority)}>查看全部风险 ›</a>
         </article>
         <article className="panel region-panel">
-          <h3>B. 区域对账表现</h3>
+          <h3>B. 区域对账表现 <small>按未解决金额排序</small></h3>
           <div className="table-wrap">
             <table>
               <thead>
@@ -587,21 +577,11 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             C. 差额结构分析 <small>（单位：元）</small>
           </h3>
           <div className="donut-wrap">
-            <button
-              className="donut"
-              style={{ background: conic }}
-              onClick={() =>
-                open(
-                  "未解决差额客户",
-                  rows.filter(needsFollowUp),
-                )
-              }
-            >
-              <span>
-                <b>{money(categorizedDifference)}</b>
-                <small>差额原因合计</small>
-              </span>
-            </button>
+            <DifferenceStructureChart
+              data={cats}
+              total={categorizedDifference}
+              onClick={() => open("未解决差额客户", rows.filter(needsFollowUp))}
+            />
             <div>
               {cats.map((x) => (
                 <button
