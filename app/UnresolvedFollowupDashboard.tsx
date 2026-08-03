@@ -93,14 +93,6 @@ const riskOf = (item: Item): Risk => {
   if (days > 30 || item.amount > 0) return "中风险";
   return "一般关注";
 };
-const nextAction = (item: Item) => {
-  const days = dayDistance(latest(item)) ?? 0;
-  if (financeOf(item) === "需财务复核") return "提交财务专项复核";
-  if (days > 90) return "升级管理层并安排当日跟进";
-  if (days > OVERDUE_DAYS) return "提醒负责人更新跟进记录";
-  return "按当前方案持续推进";
-};
-
 function toItems(source?: Sheet): Item[] {
   if (!source?.headers?.length) return [];
   const match = `${source.fileName} ${source.headers.join(" ")}`.match(
@@ -902,7 +894,6 @@ export function UnresolvedFollowupDashboard() {
                         财务关注：<b>{financeOf(item)}</b>
                       </span>
                       <span>最近跟进：{latest(item) || "—"}</span>
-                      <small>下一步建议：{nextAction(item)}</small>
                     </button>
                   ))}
                   </div>
@@ -1131,10 +1122,6 @@ export function UnresolvedFollowupDashboard() {
                 <dd>
                   <Badge type={financeOf(detail)}>{financeOf(detail)}</Badge>
                 </dd>
-              </div>
-              <div>
-                <dt>下一步建议</dt>
-                <dd>{nextAction(detail)}</dd>
               </div>
             </dl>
             <h3>首次解决方案</h3>
