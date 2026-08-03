@@ -435,8 +435,13 @@ export function UnresolvedFollowupDashboard() {
   );
   const priority = useMemo(
     () => ({
-      top: [...overdue]
-        .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+      top: pending
+        .filter(
+          (item) =>
+            financeOf(item) === "需财务复核" ||
+            financeOf(item) === "一般关注",
+        )
+        .sort((a, b) => b.amount - a.amount)
         .slice(0, 5),
       untouched: pending.filter(
         (item) => (dayDistance(latest(item)) ?? 0) > LONG_UNTOUCHED_DAYS,
@@ -448,7 +453,7 @@ export function UnresolvedFollowupDashboard() {
           (dayDistance(latest(item)) ?? 0) > OVERDUE_DAYS,
       ),
     }),
-    [overdue, pending],
+    [pending],
   );
   const reset = () => {
     setRegion(ALL);
@@ -1008,7 +1013,7 @@ export function UnresolvedFollowupDashboard() {
             </div>
           </header>
           <div className="uf-priority-tabs">
-            <b>大额超期 TOP5</b>
+            <b>财务关注 TOP5</b>
             <span>长期未更新 {priority.untouched.length}</span>
             <span>需财务介入 {priority.finance.length}</span>
             <span>多次无进展 {priority.stalled.length}</span>
