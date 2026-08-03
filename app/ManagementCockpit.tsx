@@ -216,7 +216,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       };
     })
     .filter((x) => x.x.length)
-    .sort((a, b) => b.risk - a.risk);
+    .sort((a, b) => b.unresolved - a.unresolved || b.risk - a.risk);
   const cats = [
     { name: "在途金额", color: "#2c78f6", value: categoryRows.reduce((sum, row) => sum + row.transit, 0), matches: (row: CockpitRow) => row.transit > 0 },
     { name: "退票金额", color: "#18b79b", value: categoryRows.reduce((sum, row) => sum + row.returned, 0), matches: (row: CockpitRow) => row.returned > 0 },
