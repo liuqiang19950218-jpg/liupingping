@@ -125,10 +125,12 @@ const T = {
 };
 const STORAGE_KEY = "local-quarterly-reconciliation";
 const TABLE_VIEW_KEY = "local-quarterly-reconciliation-table-view";
+const SPD_CONFIRMATION_HEADER = "SPD\u786e\u8ba4\u8868";
+const LEGACY_SPD_CONFIRMATION_HEADER = "SPD\u786e\u8ba4\u51fd";
 const MATERIAL_HEADERS = [
   "\u5bf9\u8d26\u51fd",
   "\u5bf9\u8d26\u786e\u8ba4\u51fd",
-  "SPD\u786e\u8ba4\u51fd",
+  SPD_CONFIRMATION_HEADER,
   "SPD\u5e93\u5b58\u786e\u8ba4\u51fd",
   "\u5728\u9014\u8bc1\u660e",
   "\u7cbe\u51c6\u6838\u9500",
@@ -317,6 +319,10 @@ const ensureMaterialHeaders = (source: LocalSheet) =>
     ],
     rows: source.rows.map((row) => [...row]),
   });
+const materialImportAliases = (header: string) =>
+  header === SPD_CONFIRMATION_HEADER
+    ? [SPD_CONFIRMATION_HEADER, LEGACY_SPD_CONFIRMATION_HEADER]
+    : [header];
 const sum = (entries: Array<{ amount: string }>) =>
   entries.reduce((total, entry) => total + num(entry.amount), 0);
 const currentQuarterRange = (source: LocalSheet) => {
@@ -1061,7 +1067,7 @@ export function QuarterlyReconciliation({
         if (matchKey !== "||") sourceByKey.set(matchKey, row);
       });
       const sourceMaterials = MATERIAL_HEADERS.map((header) =>
-        headerIndex(sourceHeaders, [header]),
+        headerIndex(sourceHeaders, materialImportAliases(header)),
       );
       const targetMaterials = MATERIAL_HEADERS.map((header) =>
         prepared.headers.indexOf(header),
