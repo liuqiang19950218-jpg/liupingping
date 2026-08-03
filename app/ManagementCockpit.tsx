@@ -186,6 +186,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     [f, dataVersion],
   );
   const m = useMemo(() => {
+    const currentDetailRows = categoryRows.length ? categoryRows : rows;
     let clear = rows.filter((x) => x.cleared).length,
       unclear = rows.length - clear;
     return {
@@ -203,9 +204,12 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       invoice: rows.filter(hasInvoiceException).length,
       overdue: rows.filter(overdue).length,
       overdueAmount: rows.filter(overdue).reduce((sum, row) => sum + Math.abs(row.difference), 0),
+      adjustmentAmount: currentDetailRows.reduce((sum, row) => sum + Math.abs(row.adjustment), 0),
+      badDebtAmount: currentDetailRows.reduce((sum, row) => sum + Math.abs(row.badDebt), 0),
       resolved: rows.filter((x) => x.followStatus === "已解决").length,
     };
-  }, [rows, unaccountedRows]);
+  }, [rows, unaccountedRows, categoryRows]);
+  const currentDetailRows = categoryRows.length ? categoryRows : rows;
   const regionRows = regions
     .map((region) => {
       const x = rows.filter((r) => r.region === region),
@@ -347,8 +351,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     { name: "客户完成率", value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", icon: "◎", note: "已对清客户占比" },
     { name: "待确认金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", icon: "⌛", note: "待客户确认" },
     { name: "未解决差额", value: money(m.unresolved), list: rows.filter(needsFollowUp), tone: "red", icon: "△", note: "待闭环问题金额" },
-    { name: "逾期金额", value: money(m.overdueAmount), list: rows.filter(overdue), tone: "orange", icon: "◷", note: `${m.overdue} 家超期客户` },
-    { name: "发票校验异常", value: `${m.invoice} 笔`, list: rows.filter(hasInvoiceException), tone: "purple", icon: "▣", note: "需财务复核" },
+    { name: "调账金额", value: money(m.adjustmentAmount), list: currentDetailRows.filter((row) => row.adjustment !== 0), tone: "orange", icon: "⇄", note: "来自本年度对账明细" },
+    { name: "死账金额", value: money(m.badDebtAmount), list: currentDetailRows.filter((row) => row.badDebt !== 0), tone: "purple", icon: "▣", note: "来自本年度对账明细" },
     { name: "高风险客户数", value: `${priority.filter((row) => level(row) === "高风险").length} 家`, list: priority.filter((row) => level(row) === "高风险"), tone: "red", icon: "⛨", note: "优先管理层关注" },
   ];
   return (
@@ -771,6 +775,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                     <th scope="col">对账差额</th>
                     <th scope="col">在途金额</th>
                     <th scope="col">退票金额</th>
+                    <th scope="col">调账金额</th>
+                    <th scope="col">死账金额</th>
                     <th scope="col">其他（有发票）</th>
                     <th scope="col">其他（无发票）</th>
                     <th scope="col">差额原因备注</th>
@@ -793,6 +799,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                       <td className={`detail-money ${r.difference ? "difference-money" : "muted-money"}`}>{r.filled ? detailMoney(r.difference) : "—"}</td>
                       <td className="detail-money">{detailMoney(r.transit)}</td>
                       <td className="detail-money">{detailMoney(r.returned)}</td>
+                      <td className="detail-money">{detailMoney(r.adjustment)}</td>
+                      <td className="detail-money">{detailMoney(r.badDebt)}</td>
                       <td className="detail-money">{detailMoney(r.otherInvoice)}</td>
                       <td className="detail-money">{detailMoney(r.otherNoInvoice)}</td>
                       <td><span className="detail-clamp" title={modal.title === "发票校验异常" ? invoiceExceptionReason(r) : r.cause}>{modal.title === "发票校验异常" ? invoiceExceptionReason(r) : r.cause || "—"}</span></td>
