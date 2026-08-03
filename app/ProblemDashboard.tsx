@@ -95,11 +95,6 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
   const selectAge = (aging: string) => drill({ aging });
 
   return <section className="pd-page" aria-busy={false}>
-    <div className="pd-page-toolbar">
-      <span>数据更新时间：{new Date().toLocaleString("zh-CN", { hour12: false })}</span>
-      <button onClick={() => setRevision((value) => value + 1)}>↻ 刷新数据</button>
-      <button className="primary" onClick={() => drill()}>进入未解决客户跟进 ›</button>
-    </div>
     <section className="pd-filter">
       <label>责任人<select value={filters.owner} onChange={(event) => change("owner", event.target.value)}><option>全部</option>{owners.map((item) => <option key={item}>{item}</option>)}</select></label>
       <label>问题类型<select value={filters.cause} onChange={(event) => change("cause", event.target.value)}><option>全部</option>{causes.map((item) => <option key={item}>{item}</option>)}</select></label>
