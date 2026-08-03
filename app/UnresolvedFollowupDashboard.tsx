@@ -25,6 +25,19 @@ type Sheet = {
 };
 type Risk = "高风险" | "中风险" | "一般关注";
 type Finance = "需财务复核" | "一般关注" | "无需关注";
+const TABLE_FILTER_COLUMNS = [
+  { key: "quarter", label: "季度" },
+  { key: "region", label: "区域" },
+  { key: "customer", label: "客户名称" },
+  { key: "owner", label: "负责人" },
+  { key: "amount", label: "对账差额" },
+  { key: "overdue", label: "超期天数" },
+  { key: "firstSolution", label: "首次解决方案" },
+  { key: "latest", label: "最近跟进时间" },
+  { key: "followUp", label: "跟进解决方案" },
+  { key: "finance", label: "财务关注" },
+] as const;
+type TableFilterKey = (typeof TABLE_FILTER_COLUMNS)[number]["key"];
 type Item = {
   id: number;
   quarter: string;
@@ -92,6 +105,30 @@ const riskOf = (item: Item): Risk => {
     return "高风险";
   if (days > 30 || item.amount > 0) return "中风险";
   return "一般关注";
+};
+const tableFilterValue = (item: Item, key: TableFilterKey) => {
+  switch (key) {
+    case "quarter":
+      return item.quarter;
+    case "region":
+      return item.region;
+    case "customer":
+      return `${item.customer} ${item.accountSet}`;
+    case "owner":
+      return item.owner;
+    case "amount":
+      return money(item.amount);
+    case "overdue":
+      return String(dayDistance(latest(item)) ?? "—");
+    case "firstSolution":
+      return item.firstSolution;
+    case "latest":
+      return latest(item);
+    case "followUp":
+      return item.followUps.map((entry) => entry.solution).join("；");
+    case "finance":
+      return financeOf(item);
+  }
 };
 function toItems(source?: Sheet): Item[] {
   if (!source?.headers?.length) return [];
@@ -259,6 +296,11 @@ export function UnresolvedFollowupDashboard() {
   const [search, setSearch] = useState("");
   const [risk, setRisk] = useState("全部");
   const [finance, setFinance] = useState("全部");
+  const [tableFilters, setTableFilters] = useState<
+    Partial<Record<TableFilterKey, string>>
+  >({});
+  const [openColumnFilter, setOpenColumnFilter] =
+    useState<TableFilterKey | null>(null);
   const [tab, setTab] = useState<"pending" | "resolved">("pending");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -291,7 +333,7 @@ export function UnresolvedFollowupDashboard() {
   }, [query]);
   useEffect(() => {
     setPage(1);
-  }, [region, search, risk, finance, tab, pageSize]);
+  }, [region, search, risk, finance, tableFilters, tab, pageSize]);
   const pending = useMemo(
     () => items.filter((item) => !item.resolved),
     [items],
@@ -312,9 +354,15 @@ export function UnresolvedFollowupDashboard() {
               .toLocaleLowerCase()
               .includes(search)) &&
           (risk === "全部" || riskOf(item) === risk) &&
-          (finance === "全部" || financeOf(item) === finance),
+          (finance === "全部" || financeOf(item) === finance) &&
+          Object.entries(tableFilters).every(([key, filter]) =>
+            !filter ||
+            tableFilterValue(item, key as TableFilterKey)
+              .toLocaleLowerCase()
+              .includes(filter.trim().toLocaleLowerCase()),
+          ),
       ),
-    [base, region, search, risk, finance],
+    [base, region, search, risk, finance, tableFilters],
   );
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const rows = visible.slice((page - 1) * pageSize, page * pageSize);
@@ -407,6 +455,8 @@ export function UnresolvedFollowupDashboard() {
     setQuery("");
     setRisk("全部");
     setFinance("全部");
+    setTableFilters({});
+    setOpenColumnFilter(null);
   };
   const submitFollowUp = () => {
     if (!editing || !followSolution.trim()) {
@@ -639,23 +689,61 @@ export function UnresolvedFollowupDashboard() {
           <table>
             <thead>
               <tr>
-                {[
-                  "季度",
-                  "区域",
-                  "客户名称",
-                  "负责人",
-                  "对账差额",
-                  "超期天数",
-                  "首次解决方案",
-                  "最近跟进时间",
-                  "跟进解决方案",
-                  "财务关注",
-                  "操作",
-                ].map((header) => (
-                  <th key={header} scope="col">
-                    {header}
+                {TABLE_FILTER_COLUMNS.map((column) => (
+                  <th key={column.key} scope="col">
+                    <span className="uf-column-filter">
+                      {column.label}
+                      <button
+                        type="button"
+                        className={`uf-header-filter ${tableFilters[column.key] ? "active" : ""}`}
+                        aria-label={`筛选${column.label}`}
+                        aria-expanded={openColumnFilter === column.key}
+                        onClick={() =>
+                          setOpenColumnFilter((current) =>
+                            current === column.key ? null : column.key,
+                          )
+                        }
+                      >
+                        ⌕
+                      </button>
+                      {openColumnFilter === column.key && (
+                        <span
+                          className="uf-filter-popover"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <input
+                            autoFocus
+                            aria-label={`输入${column.label}筛选内容`}
+                            value={tableFilters[column.key] ?? ""}
+                            placeholder={`筛选${column.label}`}
+                            onChange={(event) =>
+                              setTableFilters((filters) => ({
+                                ...filters,
+                                [column.key]: event.target.value,
+                              }))
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape")
+                                setOpenColumnFilter(null);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setTableFilters((filters) => ({
+                                ...filters,
+                                [column.key]: "",
+                              }))
+                            }
+                          >
+                            清除
+                          </button>
+                        </span>
+                      )}
+                    </span>
                   </th>
                 ))}
+                <th scope="col">操作</th>
               </tr>
             </thead>
             <tbody>
