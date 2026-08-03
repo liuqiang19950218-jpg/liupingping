@@ -52,6 +52,8 @@ const getRisks = (r: CockpitRow) =>
     r.difference !==
       r.transit +
         r.returned +
+        (r.lost ?? 0) +
+        (r.instrument ?? 0) +
         r.otherInvoice +
         r.otherNoInvoice +
         r.badDebt +
@@ -170,29 +172,27 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     .filter((x) => x.x.length)
     .sort((a, b) => b.risk - a.risk);
   const cats = [
-    ["在途金额", "transit", "#2c78f6"],
-    ["退票金额", "returned", "#18b79b"],
-    ["其他（有发票）", "otherInvoice", "#f7af2d"],
-    ["其他（无发票）", "otherNoInvoice", "#8d70e8"],
-    ["坏账金额", "badDebt", "#f16f78"],
-    ["调整金额", "adjustment", "#5aaeea"],
-  ]
-    .map(([name, key, color]) => ({
-      name,
-      key: key as keyof CockpitRow,
-      color,
-      value: rows.reduce((s, r) => s + Number(r[key]), 0),
-    }))
-    .filter((x) => x.value);
+    { name: "在途", color: "#2c78f6", value: rows.reduce((sum, row) => sum + row.transit, 0), matches: (row: CockpitRow) => row.transit > 0 },
+    { name: "退票", color: "#18b79b", value: rows.reduce((sum, row) => sum + row.returned, 0), matches: (row: CockpitRow) => row.returned > 0 },
+    { name: "丢票", color: "#f7af2d", value: rows.reduce((sum, row) => sum + (row.lost ?? 0), 0), matches: (row: CockpitRow) => (row.lost ?? 0) > 0 },
+    { name: "仪器设备", color: "#8d70e8", value: rows.reduce((sum, row) => sum + (row.instrument ?? 0), 0), matches: (row: CockpitRow) => (row.instrument ?? 0) > 0 },
+    {
+      name: "其他",
+      color: "#5aaeea",
+      value: rows.reduce((sum, row) => sum + row.otherInvoice + row.otherNoInvoice, 0),
+      matches: (row: CockpitRow) => row.otherInvoice + row.otherNoInvoice > 0,
+    },
+  ].filter((item) => item.value);
+  const categorizedDifference = cats.reduce((sum, item) => sum + item.value, 0);
   const conic = `conic-gradient(${cats
     .map((x, i) => {
       const start =
           (cats.slice(0, i).reduce((s, a) => s + a.value, 0) /
-            Math.max(m.unresolved, 1)) *
+            Math.max(categorizedDifference, 1)) *
           360,
         end =
           (cats.slice(0, i + 1).reduce((s, a) => s + a.value, 0) /
-            Math.max(m.unresolved, 1)) *
+            Math.max(categorizedDifference, 1)) *
           360;
       return `${x.color} ${start}deg ${end}deg`;
     })
@@ -542,8 +542,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
               }
             >
               <span>
-                <b>{money(m.unresolved)}</b>
-                <small>未解决差额</small>
+                <b>{money(categorizedDifference)}</b>
+                <small>差额原因合计</small>
               </span>
             </button>
             <div>
@@ -554,7 +554,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   onClick={() =>
                     open(
                       x.name,
-                      rows.filter((r) => Number(r[x.key]) > 0),
+                      rows.filter(x.matches),
                     )
                   }
                 >
@@ -562,8 +562,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   {x.name}
                   <b>{money(x.value)}</b>
                   <small>
-                    {m.unresolved
-                      ? `${((x.value / m.unresolved) * 100).toFixed(1)}%`
+                    {categorizedDifference
+                      ? `${((x.value / categorizedDifference) * 100).toFixed(1)}%`
                       : "0%"}
                   </small>
                 </button>

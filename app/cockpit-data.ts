@@ -12,6 +12,8 @@ export type CockpitRow = {
   difference: number;
   transit: number;
   returned: number;
+  lost: number;
+  instrument: number;
   otherInvoice: number;
   otherNoInvoice: number;
   badDebt: number;
@@ -369,6 +371,8 @@ const row = (x: (typeof urgent)[number], i: number): CockpitRow => ({
   difference: x[4],
   transit: x[5],
   returned: x[6],
+  lost: 0,
+  instrument: 0,
   otherInvoice: x[7],
   otherNoInvoice: x[8],
   badDebt: x[16] || 0,
@@ -400,6 +404,8 @@ const normal = (quarter: string, i: number): CockpitRow => {
     difference: diff,
     transit: diff,
     returned: 0,
+    lost: 0,
+    instrument: 0,
     otherInvoice: 0,
     otherNoInvoice: 0,
     badDebt: 0,
@@ -433,6 +439,10 @@ type LiveDetail = {
   reopened?: boolean;
   transit?: LiveInvoice[];
   returned?: LiveInvoice[];
+  lost?: LiveInvoice[];
+  instrument?: LiveInvoice[];
+  otherInvoice?: LiveInvoice[];
+  other?: LiveInvoice[];
 };
 type LiveSheet = {
   headers?: string[];
@@ -464,6 +474,8 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
       differenceAt = at("对账差额"),
       transitAt = at("在途金额"),
       returnedAt = at("退票金额"),
+      lostAt = at("丢票金额"),
+      instrumentAt = at("仪器设备"),
       otherAt = at("其他原因"),
       badDebtAt = at("死账金额"),
       adjustmentAt = at("调账金额"),
@@ -487,6 +499,8 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           (item) => !item.invoice || !item.date || !hasValue(item.amount),
         ),
       );
+    const totalOf = (list: LiveInvoice[] | undefined) =>
+      list?.reduce((total, item) => total + numberOf(item.amount), 0) ?? 0;
     return saved.rows
       .map((entry, index) => {
         const detail = saved.details?.[String(index)],
@@ -496,7 +510,10 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
             : numberOf(entry[companyAt]) - numberOf(customerBook),
           solution =
             detail?.resolutionSolution || String(entry[solutionAt] ?? ""),
-          time = detail?.resolutionTime || String(entry[timeAt] ?? "");
+          time = detail?.resolutionTime || String(entry[timeAt] ?? ""),
+          hasOtherDetail = Boolean(
+            detail?.otherInvoice?.length || detail?.other?.length,
+          );
         return {
           id: `local-${index}`,
           quarter,
@@ -509,8 +526,14 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           difference,
           transit: numberOf(entry[transitAt]),
           returned: numberOf(entry[returnedAt]),
-          otherInvoice: 0,
-          otherNoInvoice: numberOf(entry[otherAt]),
+          lost: detail?.lost?.length ? totalOf(detail.lost) : numberOf(entry[lostAt]),
+          instrument: detail?.instrument?.length
+            ? totalOf(detail.instrument)
+            : numberOf(entry[instrumentAt]),
+          otherInvoice: hasOtherDetail ? totalOf(detail?.otherInvoice) : 0,
+          otherNoInvoice: hasOtherDetail
+            ? totalOf(detail?.other)
+            : numberOf(entry[otherAt]),
           badDebt: numberOf(entry[badDebtAt]),
           adjustment: numberOf(entry[adjustmentAt]),
           filled: hasValue(customerBook),
