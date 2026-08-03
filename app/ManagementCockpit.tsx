@@ -36,6 +36,7 @@ const hasInvoiceException = (r: CockpitRow) =>
       r.otherInvoiceFail ||
       r.duplicateInvoice,
   );
+const needsFollowUp = (r: CockpitRow) => r.followStatus !== "已解决";
 const invoiceExceptionReason = (r: CockpitRow) =>
   [
     r.transitInvoiceFail && "在途明细缺少发票号、日期或金额",
@@ -191,7 +192,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       unclear,
       rate: rows.length ? (clear / rows.length) * 100 : 0,
       unresolved: rows
-        .filter((x) => !x.cleared)
+        .filter(needsFollowUp)
         .reduce((s, x) => s + x.difference, 0),
       invoice: rows.filter(hasInvoiceException).length,
       overdue: rows.filter(overdue).length,
@@ -208,7 +209,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         clear,
         rate: x.length ? (clear / x.length) * 100 : 0,
         unresolved: x
-          .filter((r) => !r.cleared)
+          .filter(needsFollowUp)
           .reduce((s, r) => s + r.difference, 0),
         invoice: x.filter(hasInvoiceException).length,
         overdue: x.filter(overdue).length,
@@ -259,7 +260,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     }))
     .filter((x) => x.list.length);
   const priority = [...rows]
-      .filter((x) => !x.cleared)
+      .filter(needsFollowUp)
       .sort((a, b) => score(b) - score(a) || b.difference - a.difference),
     trend = quarterOptions()
       .slice()
@@ -282,7 +283,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           quarter,
           rate: reconciled.length ? (cleared / reconciled.length) * 100 : 0,
           unresolved: reconciled
-            .filter((row) => !row.cleared)
+            .filter(needsFollowUp)
             .reduce((sum, row) => sum + row.difference, 0),
         };
       })
@@ -342,7 +343,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     { name: "未对清", value: m.unclear, list: rows.filter((row) => !row.cleared) },
     { name: "未对账", value: m.unaccounted, list: unaccountedRows },
     { name: "对清率", value: `${m.rate.toFixed(1)}%`, list: rows },
-    { name: "未解决差额", value: money(m.unresolved), list: rows.filter((row) => !row.cleared) },
+    { name: "未解决差额", value: money(m.unresolved), list: rows.filter(needsFollowUp) },
     { name: "发票校验异常", value: m.invoice, list: rows.filter(hasInvoiceException) },
     { name: "逾期客户", value: m.overdue, list: rows.filter(overdue) },
     { name: "已解决客户", value: m.resolved, list: rows.filter((row) => row.followStatus === "已解决") },
@@ -568,7 +569,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
               onClick={() =>
                 open(
                   "未解决差额客户",
-                  rows.filter((x) => !x.cleared),
+                  rows.filter(needsFollowUp),
                 )
               }
             >
