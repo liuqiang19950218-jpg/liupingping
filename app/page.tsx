@@ -45,7 +45,7 @@ export default function Home() {
     setView("tracker");
   };
 
-  return <main className={`app-shell ${view === "current" ? "reconciliation-page" : ""} dashboard-shell-${view}`}>
+  return <main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
     <aside className="side-nav">
       <div className="side-brand"><i>账</i><div><strong>{T.brand}</strong><span>{T.sub}</span></div></div>
       <nav>
