@@ -1,4 +1,4 @@
-import { type CockpitRow, cockpitRows } from "./cockpit-data";
+import { type CockpitRow, cockpitRows, latestQuarterlyCockpitRows } from "./cockpit-data";
 
 export type RiskLevel = "高风险" | "中风险" | "低风险";
 export type IssueStage = "等待客户回复" | "等待内部资料" | "待财务调账" | "核查中" | "已解决待复核";
@@ -40,10 +40,20 @@ export const issueRiskOf = (row: CockpitRow): RiskLevel => {
 };
 
 export function issuesForQuarter(quarter: string): ReconciliationIssue[] {
-  return cockpitRows
-    .filter((row) => row.quarter === quarter && row.filled && row.difference !== 0 && row.followStatus !== "已解决")
+  // The problem dashboard is a summary of the actual "待解决清单" rather
+  // than a separate issue source.  A customer first enters that list only
+  // after a first solution has been recorded, and leaves it once resolved.
+  const liveRows = latestQuarterlyCockpitRows();
+  const source = liveRows.length ? liveRows : cockpitRows;
+  return source
+    .filter((row) => row.quarter === quarter && row.filled && row.difference !== 0 && row.solution.trim() && row.followStatus !== "已解决")
     .map((row) => ({ ...row, riskLevel: issueRiskOf(row), stage: issueStageOf(row), overdueDays: getOverdueDays(row.expectedDate) }));
 }
+
+export const topPendingIssuesByDifference = (items: ReconciliationIssue[], limit = 5) =>
+  [...items]
+    .sort((a, b) => b.difference - a.difference || b.overdueDays - a.overdueDays)
+    .slice(0, limit);
 
 export function issueSummary(items: ReconciliationIssue[]) {
   const totalAmount = items.reduce((sum, item) => sum + Math.abs(item.difference), 0);

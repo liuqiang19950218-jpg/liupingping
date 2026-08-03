@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
-import { formatMoney, formatRate, issueSummary, issuesForQuarter, type ReconciliationIssue } from "./reconciliation-insights";
+import { formatMoney, formatRate, issueSummary, issuesForQuarter, topPendingIssuesByDifference, type ReconciliationIssue } from "./reconciliation-insights";
 import "./problem-dashboard.css";
 
 type Props = { onOpenFollowup: (filters?: Record<string, string>) => void };
@@ -38,7 +38,7 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
       <article className="pd-card pd-stage"><h2>问题处理阶段分布</h2>{summary.stages.map((item) => <button key={item.name} onClick={() => onOpenFollowup({ quarter, stage: item.name })}><span>{item.name}</span><i><b style={{ width: `${item.ratio * 100}%` }} /></i><strong>{item.count}</strong><em>{formatRate(item.ratio * 100)}</em></button>)}</article>
       <article className="pd-card"><h2>阻塞原因分析 Top5</h2>{summary.blockers.map((item) => <button className="pd-rank" key={item.name} onClick={() => onOpenFollowup({ quarter, cause: item.name })}><span title={item.name}>{item.name}</span><b>{item.count}</b><small>{formatRate(item.ratio * 100)}</small></button>)}</article>
       <article className="pd-card"><h2>责任人处理情况 Top5</h2><table><thead><tr><th>责任人</th><th>未关闭</th><th>超期</th><th>高风险</th></tr></thead><tbody>{summary.owners.map((item) => <tr key={item.name} onClick={() => onOpenFollowup({ quarter, owner: item.name })}><td>{item.name}</td><td>{item.count}</td><td className="danger">{item.overdue}</td><td className="danger">{item.high}</td></tr>)}</tbody></table></article>
-      <article className="pd-card"><h2>风险优先级 Top5</h2>{[...items].sort((a, b) => b.difference - a.difference || b.overdueDays - a.overdueDays).slice(0, 5).map((item, index) => <button className="pd-risk" key={item.id} onClick={() => onOpenFollowup({ quarter, customer: item.customer })}><i>{index + 1}</i><span>{item.customer}<small>{item.region} · {item.owner || "未分配"}</small></span><b>{formatMoney(item.difference)}</b><em>{item.overdueDays} 天</em></button>)}</article>
+      <article className="pd-card"><h2>风险优先级 Top5 <small>待解决客户 · 按对账差额</small></h2>{topPendingIssuesByDifference(items).map((item, index) => <button className="pd-risk" key={item.id} onClick={() => onOpenFollowup({ quarter, customer: item.customer })}><i>{index + 1}</i><span>{item.customer}<small>{item.region} · {item.owner || "未分配"}</small></span><b>{formatMoney(item.difference)}</b><em>{item.overdueDays} 天</em></button>)}</article>
     </section>
     <section className="pd-bottom"><article className="pd-card"><h2>问题账龄分布</h2><div className="pd-donut"><b>{items.length}<small>未关闭问题</small></b></div><div className="pd-age">{[["0-7天", 0, 7], ["8-30天", 8, 30], ["31-60天", 31, 60], ["61-90天", 61, 90], ["90天以上", 91, Infinity]].map(([label, min, max]) => { const count = items.filter((item) => item.overdueDays >= Number(min) && item.overdueDays <= Number(max)).length; return <button key={String(label)} onClick={() => onOpenFollowup({ quarter, aging: String(label) })}>{String(label)}<b>{count}</b></button>; })}</div></article><article className="pd-card pd-advice"><h2>下一步处理建议</h2><p>优先推进 <b>{summary.overdue.length}</b> 个超期问题，尤其是高风险和大额差异客户。</p><p>安排财务专人处理 <b>{summary.finance.length}</b> 个需财务介入事项。</p><p>督促责任人跟进 <b>{summary.untouched.length}</b> 个 7 天未更新问题。</p><button className="primary" onClick={() => drill("all")}>进入未解决客户跟进</button></article></section>
   </section>;
