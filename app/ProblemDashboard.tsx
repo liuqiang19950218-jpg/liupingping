@@ -5,6 +5,7 @@ import { selectedQuarter } from "./quarter-storage";
 import { issuesForQuarter } from "./reconciliation-insights";
 import {
   buildProblemDashboard,
+  filterAllProblemItems,
   filterProblemItems,
   formatMoney,
   issueFollowState,
@@ -14,6 +15,7 @@ import {
 } from "./problem-dashboard-data";
 import { BlockingReasonDonutChart, IssueAgeBarChart, IssueStageFunnelChart } from "./ProblemDashboardCharts";
 import "./problem-dashboard.css";
+import "./problem-dashboard-layout.css";
 
 type Props = { onOpenFollowup: (filters?: Record<string, string>) => void };
 
@@ -48,7 +50,11 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
 
   const allQuarterItems = useMemo(() => issuesForQuarter(filters.quarter), [filters.quarter, revision]);
   const items = useMemo(() => filterProblemItems(filters), [filters, revision]);
-  const dashboard = useMemo(() => buildProblemDashboard(items), [items]);
+  const closedItems = useMemo(
+    () => filterAllProblemItems(filters).filter((item) => item.followStatus === "已解决"),
+    [filters, revision],
+  );
+  const dashboard = useMemo(() => buildProblemDashboard(items, closedItems), [items, closedItems]);
   const regions = useMemo(() => [...new Set(allQuarterItems.map((item) => item.region))], [allQuarterItems]);
   const owners = useMemo(() => [...new Set(allQuarterItems.map((item) => item.owner).filter(Boolean))], [allQuarterItems]);
   const causes = useMemo(() => [...new Set(allQuarterItems.map((item) => item.cause).filter(Boolean))], [allQuarterItems]);
@@ -83,7 +89,7 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
     ["未关闭问题", dashboard.metrics.all, "▤", "blue", "all"],
     ["超期未关闭", dashboard.metrics.overdue, "◷", "orange", "overdue"],
     ["7天未跟进", dashboard.metrics.untouched, "▦", "purple", "untouched"],
-    ["待客户回复", dashboard.metrics.customer, "◌", "cyan", "customer"],
+    ["待销售处理", dashboard.metrics.customer, "◌", "cyan", "customer"],
     ["待内部处理", dashboard.metrics.internal, "◎", "blue", "internal"],
     ["需财务介入", dashboard.metrics.finance, "¥", "orange", "finance"],
     ["需领导介入", dashboard.metrics.leader, "♟", "purple", "leader"],
@@ -105,12 +111,12 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
       <label>跟进状态<select value={filters.region} onChange={(event) => change("region", event.target.value)}><option>全部</option>{regions.map((item) => <option key={item}>{item}</option>)}</select></label>
       <div className="pd-filter-actions"><button onClick={() => setFilters(emptyFilters(selectedQuarter()))}>↻ 重置</button><button className="primary" disabled={exporting} onClick={exportCurrent}>{exporting ? "导出中" : "↓ 导出"}</button></div>
     </section>
-    <p className="pd-alert">⚠ 当前未关闭问题 <b>{dashboard.total}</b> 个，其中超期 <strong>{dashboard.metrics.overdue.length}</strong> 个，7 天未跟进 <em>{dashboard.metrics.untouched.length}</em> 个，待客户回复 <b>{dashboard.metrics.customer.length}</b> 个，请及时推进问题闭环。</p>
+    <p className="pd-alert">⚠ 当前未关闭问题 <b>{dashboard.total}</b> 个，其中超期 <strong>{dashboard.metrics.overdue.length}</strong> 个，7 天未跟进 <em>{dashboard.metrics.untouched.length}</em> 个，待销售处理 <b>{dashboard.metrics.customer.length}</b> 个，请及时推进问题闭环。</p>
     <section className="pd-kpis">
       {metrics.map(([name, list, icon, tone, key]) => <button className={`pd-kpi ${tone}`} key={name} onClick={() => handleMetric(key)}><i>{icon}</i><span>{name}</span><strong>{list.length}</strong><small>较上周 <b className={key === "week" ? "down" : "up"}>{key === "week" ? "↓" : "↑"} {list.length ? "关注" : "0"}</b></small></button>)}
     </section>
     <section className="pd-analysis-grid">
-      <article className="pd-card pd-stage-card"><h2>问题处理阶段分布</h2><div className="pd-chart-content"><IssueStageFunnelChart data={dashboard.stages} onSelect={selectStage}/><div className="pd-stage-list">{dashboard.stages.map((item) => <button key={item.name} onClick={() => selectStage(item.name)}><span>{item.name}</span><b>{item.count}</b><small>{(item.ratio * 100).toFixed(1)}%</small></button>)}<footer>总计：{dashboard.total} 个</footer></div></div></article>
+      <article className="pd-card pd-stage-card"><h2>问题处理阶段分布</h2><div className="pd-chart-content"><IssueStageFunnelChart data={dashboard.stages} onSelect={selectStage}/><div className="pd-stage-list">{dashboard.stages.map((item) => <button key={item.name} onClick={() => selectStage(item.name)}><span>{item.name}</span><b>{item.count}</b><small>{(item.ratio * 100).toFixed(1)}%</small></button>)}<footer>阶段合计：{dashboard.stageTotal} 个</footer></div></div></article>
       <article className="pd-card pd-blocker-card"><h2>阻塞原因分析 Top5</h2><div className="pd-chart-content"><BlockingReasonDonutChart data={dashboard.blockers} total={dashboard.total} onSelect={selectBlocker}/><div className="pd-legend-list">{dashboard.blockers.map((item) => <button key={item.name} onClick={() => selectBlocker(item.name)}><i style={{ background: item.color }}/><span title={item.name}>{item.name}</span><b>{item.count}</b><small>{(item.ratio * 100).toFixed(1)}%</small></button>)}<footer>总计：{dashboard.total} 个</footer></div></div></article>
       <article className="pd-card pd-owner-card"><h2>责任人处理情况 Top5</h2><table><thead><tr><th>责任人</th><th>未关闭</th><th>超期</th><th>高风险</th><th>7天无更新</th><th>平均处理天数</th></tr></thead><tbody>{dashboard.owners.map((item) => <tr key={item.name} onClick={() => drill({ owner: item.name })}><td><i className="pd-avatar">{avatar(item.name)}</i>{item.name}</td><td>{item.count}</td><td className="danger">{item.overdue}</td><td className="danger">{item.high}</td><td className="warning">{item.untouched}</td><td>{item.averageDays.toFixed(1)}</td></tr>)}</tbody></table><button className="pd-more" onClick={() => drill()}>查看全部责任人 ›</button></article>
     </section>

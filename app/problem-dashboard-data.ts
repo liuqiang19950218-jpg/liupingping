@@ -1,6 +1,7 @@
 import {
   formatMoney,
   getOverdueDays,
+  allIssuesForQuarter,
   issueSummary,
   issuesForQuarter,
   topPendingIssuesByDifference,
@@ -24,9 +25,8 @@ export type OwnerItem = { name: string; count: number; overdue: number; high: nu
 export type AgeItem = { name: string; count: number; ratio: number; color: string };
 
 const STAGES = [
-  ["问题发现", "#1677ff"], ["已分配", "#5b8ff9"], ["核查中", "#20a8d8"],
-  ["等待客户回复", "#25bda5"], ["等待内部资料", "#61c76f"], ["待财务调账", "#f6bd16"],
-  ["已解决待复核", "#f58a45"], ["已关闭", "#b8bfd8"],
+  ["核查中", "#20a8d8"], ["等待销售处理", "#25bda5"], ["待财务调账", "#f6bd16"],
+  ["已关闭", "#b8bfd8"],
 ] as const;
 
 const AGES = [
@@ -40,7 +40,15 @@ const followStateOf = (item: ReconciliationIssue) =>
   item.overdueDays > 7 ? "已超期" : item.overdueDays > 0 ? "待跟进" : "跟进中";
 
 export function filterProblemItems(filters: ProblemFilters) {
-  return issuesForQuarter(filters.quarter).filter((item) => {
+  return filterItems(issuesForQuarter(filters.quarter), filters);
+}
+
+export function filterAllProblemItems(filters: ProblemFilters) {
+  return filterItems(allIssuesForQuarter(filters.quarter), filters);
+}
+
+function filterItems(source: ReconciliationIssue[], filters: ProblemFilters) {
+  return source.filter((item) => {
     if (filters.region !== "全部" && item.region !== filters.region) return false;
     if (filters.owner !== "全部" && item.owner !== filters.owner) return false;
     if (filters.risk !== "全部" && item.riskLevel !== filters.risk) return false;
@@ -55,12 +63,15 @@ export function filterProblemItems(filters: ProblemFilters) {
   });
 }
 
-export function buildProblemDashboard(items: ReconciliationIssue[]) {
+export function buildProblemDashboard(items: ReconciliationIssue[], closedItems: ReconciliationIssue[] = []) {
   const summary = issueSummary(items);
   const total = items.length;
+  const stageTotal = total + closedItems.length;
   const stages: StageItem[] = STAGES.map(([name, color]) => {
-    const count = items.filter((item) => stageOf(item) === name).length;
-    return { name, count, ratio: total ? count / total : 0, color };
+    const count = name === "已关闭"
+      ? closedItems.length
+      : items.filter((item) => stageOf(item) === name).length;
+    return { name, count, ratio: stageTotal ? count / stageTotal : 0, color };
   });
   const blockers: CountItem[] = summary.blockers.map((item, index) => ({
     ...item,
@@ -82,15 +93,16 @@ export function buildProblemDashboard(items: ReconciliationIssue[]) {
   const ages: AgeItem[] = AGES.map(([name, min, max, color]) => {
     const count = items.filter((item) => item.overdueDays >= min && item.overdueDays <= max).length;
     return { name, count, ratio: total ? count / total : 0, color };
-  });
+  }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN"));
   const priority = topPendingIssuesByDifference(items);
-  const waitingCustomer = items.filter((item) => item.stage === "等待客户回复");
-  const waitingInternal = items.filter((item) => item.stage === "等待内部资料" || item.stage === "待财务调账");
+  const waitingCustomer = items.filter((item) => item.stage === "等待销售处理");
+  const waitingInternal = items.filter((item) => item.stage === "待财务调账");
   const high = items.filter((item) => item.riskLevel === "高风险");
   const finance = summary.finance;
   const overdue = items.filter((item) => item.overdueDays > 0);
   return {
     total,
+    stageTotal,
     summary,
     stages,
     blockers,
@@ -110,7 +122,7 @@ export function buildProblemDashboard(items: ReconciliationIssue[]) {
     },
     suggestions: [
       { id: "overdue", icon: "◷", tone: "danger", title: "优先处理超期问题", description: `当前超期 ${overdue.length} 个，建议按风险等级优先处理。`, filter: "overdue" },
-      { id: "customer", icon: "◌", tone: "cyan", title: "跟进待客户回复", description: `待客户回复 ${waitingCustomer.length} 个，建议主动联系客户推进。`, filter: "customer" },
+      { id: "customer", icon: "◌", tone: "cyan", title: "推进待销售处理", description: `待销售处理 ${waitingCustomer.length} 个，建议销售主动联系客户推进。`, filter: "customer" },
       { id: "finance", icon: "¥", tone: "blue", title: "安排财务复核", description: `需财务介入 ${finance.length} 个，建议尽快核查与调账。`, filter: "finance" },
       { id: "leader", icon: "◎", tone: "purple", title: "升级高风险事项", description: `高风险问题 ${high.length} 个，建议统筹推进并打通阻塞。`, filter: "leader" },
       { id: "large", icon: "▣", tone: "orange", title: "优先关闭大额问题", description: `关注前 ${priority.length} 个大额待解决问题，降低风险敞口。`, filter: "large" },

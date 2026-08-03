@@ -1,0 +1,15 @@
+.pd-analysis-grid:not(.pd-second-grid) {
+  grid-template-columns: minmax(260px, 0.82fr) minmax(320px, 0.98fr) minmax(480px, 1.4fr);
+}
+
+@media (max-width: 1366px) {
+  .pd-analysis-grid:not(.pd-second-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .pd-analysis-grid:not(.pd-second-grid) {
+    grid-template-columns: 1fr;
+  }
+}

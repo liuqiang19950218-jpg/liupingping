@@ -1,7 +1,7 @@
 import { type CockpitRow, cockpitRows, latestQuarterlyCockpitRows } from "./cockpit-data";
 
 export type RiskLevel = "高风险" | "中风险" | "低风险";
-export type IssueStage = "等待客户回复" | "等待内部资料" | "待财务调账" | "核查中" | "已解决待复核";
+export type IssueStage = "等待销售处理" | "待财务调账" | "核查中" | "已关闭";
 
 export type ReconciliationIssue = CockpitRow & {
   riskLevel: RiskLevel;
@@ -25,10 +25,10 @@ export const getOverdueDays = (date: string) => {
 
 export const issueStageOf = (row: CockpitRow): IssueStage => {
   if (row.followStatus.includes("财务")) return "待财务调账";
-  if (row.followStatus.includes("资料")) return "等待内部资料";
-  if (row.followStatus.includes("已解决")) return "已解决待复核";
+  if (row.followStatus.includes("资料")) return "核查中";
+  if (row.followStatus.includes("已解决")) return "已关闭";
   if (!row.solution) return "核查中";
-  return "等待客户回复";
+  return "等待销售处理";
 };
 
 export const issueRiskOf = (row: CockpitRow): RiskLevel => {
@@ -39,15 +39,19 @@ export const issueRiskOf = (row: CockpitRow): RiskLevel => {
   return "低风险";
 };
 
-export function issuesForQuarter(quarter: string): ReconciliationIssue[] {
+export function allIssuesForQuarter(quarter: string): ReconciliationIssue[] {
   // The problem dashboard is a summary of the actual "待解决清单" rather
   // than a separate issue source.  A customer first enters that list only
   // after a first solution has been recorded, and leaves it once resolved.
   const liveRows = latestQuarterlyCockpitRows();
   const source = liveRows.length ? liveRows : cockpitRows;
   return source
-    .filter((row) => row.quarter === quarter && row.filled && row.difference !== 0 && row.solution.trim() && row.followStatus !== "已解决")
+    .filter((row) => row.quarter === quarter && row.filled && row.difference !== 0 && row.solution.trim())
     .map((row) => ({ ...row, riskLevel: issueRiskOf(row), stage: issueStageOf(row), overdueDays: getOverdueDays(row.expectedDate) }));
+}
+
+export function issuesForQuarter(quarter: string): ReconciliationIssue[] {
+  return allIssuesForQuarter(quarter).filter((row) => row.followStatus !== "已解决");
 }
 
 export const topPendingIssuesByDifference = (items: ReconciliationIssue[], limit = 5) =>
