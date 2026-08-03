@@ -98,26 +98,26 @@ export function Q1SpecialPanels() {
     <section className="q1-special">
       <div className="special-head">
         <div>
-          <p>{quarter} \u4e13\u9879\u7ba1\u7406\u4fe1\u606f</p>
-          <h2>\u8d44\u6599\u6536\u96c6\u3001\u4e22\u7968\u4e0e\u672a\u5bf9\u8d26\u5ba2\u6237</h2>
+          <p>{quarter} 专项管理信息</p>
+          <h2>资料收集、丢票与未对账客户</h2>
         </div>
         <div className="special-tabs">
-          <button className={tab === "collection" ? "active" : ""} onClick={() => setTab("collection")}>\u8d44\u6599\u6536\u96c6</button>
-          <button className={tab === "lost" ? "active" : ""} onClick={() => setTab("lost")}>\u4e22\u7968\u60c5\u51b5</button>
-          <button className={tab === "unaccounted" ? "active" : ""} onClick={() => setTab("unaccounted")}>\u672a\u5bf9\u8d26\u5ba2\u6237</button>
+          <button className={tab === "collection" ? "active" : ""} onClick={() => setTab("collection")}>资料收集</button>
+          <button className={tab === "lost" ? "active" : ""} onClick={() => setTab("lost")}>丢票情况</button>
+          <button className={tab === "unaccounted" ? "active" : ""} onClick={() => setTab("unaccounted")}>未对账客户</button>
         </div>
       </div>
       {tab === "collection" ? (
         <table>
-          <thead><tr><th>\u8d44\u6599\u7c7b\u578b</th><th>\u5df2\u6536\u96c6 / \u5e94\u6536\u96c6</th><th>\u9700\u8ddf\u8fdb\u533a\u57df\u4e0e\u6536\u96c6\u7387</th></tr></thead>
+          <thead><tr><th>资料类型</th><th>已收集 / 应收集</th><th>需跟进区域与收集率</th></tr></thead>
           <tbody>{data.collection.map((item) => <tr key={item.name}><td>{item.name}</td><td>{item.completed} / {item.total} ({item.total ? ((item.completed / item.total) * 100).toFixed(1) : "0.0"}%)</td><td>{item.pending}</td></tr>)}</tbody>
         </table>
       ) : tab === "lost" ? (
-        <div className="loss-list">{data.lost.length ? data.lost.map((item) => <article key={`${item.region}-${item.customer}`}><b>{item.region}\uff1a{item.customer}</b><span>\u4e22\u7968\u91d1\u989d {money(item.amount)} \u5143{item.note ? `\uff1b${item.note}` : ""}</span></article>) : <p className="special-empty">\u5f53\u524d\u5b63\u5ea6\u6682\u65e0\u4e22\u7968\u5dee\u989d\u660e\u7ec6\u3002</p>}</div>
+        <div className="loss-list">{data.lost.length ? data.lost.map((item) => <article key={`${item.region}-${item.customer}`}><b>{item.region}：{item.customer}</b><span>丢票金额 {money(item.amount)} 元{item.note ? `；${item.note}` : ""}</span></article>) : <p className="special-empty">当前季度暂无丢票差额明细。</p>}</div>
       ) : (
         <table>
-          <thead><tr><th>\u533a\u57df</th><th>\u5ba2\u6237</th><th>\u5dee\u989d\u539f\u56e0\u5907\u6ce8</th></tr></thead>
-          <tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td>{item.note || "\u2014"}</td></tr>) : <tr><td colSpan={3}>\u5f53\u524d\u5b63\u5ea6\u6682\u65e0\u672a\u5bf9\u8d26\u5ba2\u6237\u3002</td></tr>}</tbody>
+          <thead><tr><th>区域</th><th>客户</th><th>差额原因备注</th></tr></thead>
+          <tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td>{item.note || "—"}</td></tr>) : <tr><td colSpan={3}>当前季度暂无未对账客户。</td></tr>}</tbody>
         </table>
       )}
     </section>
