@@ -15,6 +15,7 @@ type Detail = {
   resolved?: boolean;
   reopened?: boolean;
   followUps?: FollowUp[];
+  financeAttention?: "无需关注" | "一般关注" | "需财务复核";
 };
 type Sheet = {
   headers: string[];
@@ -23,7 +24,7 @@ type Sheet = {
   details?: Record<string, Detail>;
 };
 type Risk = "高风险" | "中风险" | "一般关注";
-type Finance = "需财务复核" | "财务关注" | "一般关注" | "无需关注";
+type Finance = "需财务复核" | "一般关注" | "无需关注";
 type Item = {
   id: number;
   quarter: string;
@@ -36,6 +37,7 @@ type Item = {
   firstSolution: string;
   followUps: FollowUp[];
   resolved: boolean;
+  financeAttention?: Finance;
 };
 
 const ALL = "全部区域";
@@ -73,10 +75,10 @@ const text = (item: Item) =>
     " ",
   );
 const financeOf = (item: Item): Finance => {
+  if (item.financeAttention) return item.financeAttention;
   const note = text(item);
   if (item.amount >= HIGH_AMOUNT || /死账|调账|退票|发票|核销/.test(note))
     return "需财务复核";
-  if (/财务|退款|入账/.test(note)) return "财务关注";
   if (item.amount > 0) return "一般关注";
   return "无需关注";
 };
@@ -91,14 +93,6 @@ const riskOf = (item: Item): Risk => {
   if (days > 30 || item.amount > 0) return "中风险";
   return "一般关注";
 };
-const financeStatus = (item: Item) =>
-  item.resolved
-    ? "已关闭"
-    : financeOf(item) === "需财务复核"
-      ? "待财务反馈"
-      : item.followUps.length
-        ? "处理中"
-        : "待处理";
 const nextAction = (item: Item) => {
   const days = dayDistance(latest(item)) ?? 0;
   if (financeOf(item) === "需财务复核") return "提交财务专项复核";
@@ -143,6 +137,7 @@ function toItems(source?: Sheet): Item[] {
         firstTime,
         firstSolution,
         followUps,
+        financeAttention: detail.financeAttention,
         resolved:
           detail.resolved === true ||
           (Boolean(firstSolution && !firstTime) && detail.reopened !== true),
@@ -439,6 +434,10 @@ export function UnresolvedFollowupDashboard() {
     saveDetail(item.id, { resolved: false, reopened: true });
     setMessage("已撤销解决状态，客户已回到待解决清单。");
   };
+  const updateFinanceAttention = (item: Item, financeAttention: Finance) => {
+    saveDetail(item.id, { financeAttention });
+    setMessage(`已将${item.customer}设置为${financeAttention}。`);
+  };
   const exportRows = () => {
     const header = [
       "季度",
@@ -449,7 +448,6 @@ export function UnresolvedFollowupDashboard() {
       "对账差额",
       "超期天数",
       "财务关注",
-      "财务处理状态",
       "首次解决时间",
       "首次解决方案",
       "最近跟进时间",
@@ -466,7 +464,6 @@ export function UnresolvedFollowupDashboard() {
         money(item.amount),
         String(dayDistance(latest(item)) ?? "—"),
         financeOf(item),
-        financeStatus(item),
         item.firstTime,
         item.firstSolution,
         latest(item),
@@ -604,8 +601,8 @@ export function UnresolvedFollowupDashboard() {
             >
               <option>全部</option>
               <option>需财务复核</option>
-              <option>财务关注</option>
               <option>一般关注</option>
+              <option>无需关注</option>
             </select>
             <button type="button" className="uf-secondary" onClick={reset}>
               清空筛选
@@ -653,7 +650,6 @@ export function UnresolvedFollowupDashboard() {
                   "最近跟进时间",
                   "跟进解决方案",
                   "财务关注",
-                  "财务处理状态",
                   "操作",
                 ].map((header) => (
                   <th key={header} scope="col">
@@ -712,12 +708,21 @@ export function UnresolvedFollowupDashboard() {
                         </span>
                       </td>
                       <td>
-                        <Badge type={financeOf(item)}>{financeOf(item)}</Badge>
-                      </td>
-                      <td>
-                        <Badge type={financeStatus(item)}>
-                          {financeStatus(item)}
-                        </Badge>
+                        <select
+                          aria-label={`${item.customer} 财务关注`}
+                          className={`uf-finance-select ${financeOf(item) === "需财务复核" ? "is-review" : ""}`}
+                          value={financeOf(item)}
+                          onChange={(event) =>
+                            updateFinanceAttention(
+                              item,
+                              event.target.value as Finance,
+                            )
+                          }
+                        >
+                          <option value="无需关注">无需关注</option>
+                          <option value="一般关注">一般关注</option>
+                          <option value="需财务复核">需财务复核</option>
+                        </select>
                       </td>
                       <td className="uf-actions">
                         <button
@@ -761,7 +766,7 @@ export function UnresolvedFollowupDashboard() {
                 })
               ) : (
                 <tr>
-                  <td className="uf-empty" colSpan={12}>
+                  <td className="uf-empty" colSpan={11}>
                     没有符合当前条件的数据。
                     <button type="button" onClick={reset}>
                       清空筛选
@@ -894,7 +899,7 @@ export function UnresolvedFollowupDashboard() {
                         </b>
                       </span>
                       <span>
-                        财务处理：<b>{financeStatus(item)}</b>
+                        财务关注：<b>{financeOf(item)}</b>
                       </span>
                       <span>最近跟进：{latest(item) || "—"}</span>
                       <small>下一步建议：{nextAction(item)}</small>
