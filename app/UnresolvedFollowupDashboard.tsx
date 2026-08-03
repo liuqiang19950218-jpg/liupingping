@@ -153,8 +153,16 @@ function saveDetail(id: number, changes: Partial<Detail>) {
   window.dispatchEvent(new Event("reconciliation-updated"));
 }
 
-function Badge({ type, children }: { type: string; children: string }) {
-  return <span className={`uf-badge ${type}`}>{children}</span>;
+function Badge({
+  type,
+  children,
+  variant,
+}: {
+  type: string;
+  children: string;
+  variant?: "finance";
+}) {
+  return <span className={`uf-badge ${variant ?? ""} ${type}`}>{children}</span>;
 }
 
 function AgingCylinderChart({
@@ -702,7 +710,7 @@ export function UnresolvedFollowupDashboard() {
                       <td>
                         <select
                           aria-label={`${item.customer} 财务关注`}
-                          className={`uf-finance-select ${financeOf(item) === "需财务复核" ? "is-review" : ""}`}
+                          className={`uf-finance-select ${financeOf(item) === "需财务复核" ? "is-review" : financeOf(item) === "一般关注" ? "is-general" : ""}`}
                           value={financeOf(item)}
                           onChange={(event) =>
                             updateFinanceAttention(
@@ -891,7 +899,16 @@ export function UnresolvedFollowupDashboard() {
                         </b>
                       </span>
                       <span>
-                        财务关注：<b>{financeOf(item)}</b>
+                        财务关注：
+                        <b
+                          className={
+                            financeOf(item) === "一般关注"
+                              ? "uf-finance-general"
+                              : ""
+                          }
+                        >
+                          {financeOf(item)}
+                        </b>
                       </span>
                       <span>最近跟进：{latest(item) || "—"}</span>
                     </button>
@@ -1120,7 +1137,9 @@ export function UnresolvedFollowupDashboard() {
               <div>
                 <dt>财务关注</dt>
                 <dd>
-                  <Badge type={financeOf(detail)}>{financeOf(detail)}</Badge>
+                  <Badge type={financeOf(detail)} variant="finance">
+                    {financeOf(detail)}
+                  </Badge>
                 </dd>
               </div>
             </dl>
