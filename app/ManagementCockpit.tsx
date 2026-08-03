@@ -4,8 +4,8 @@ import { CockpitRow, cockpitRows, trendData } from "./cockpit-data";
 import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
 import "./management-cockpit.css";
 type Props = {
-  activeTab: "cockpit" | "review" | "issue";
-  onTabChange: (tab: "cockpit" | "review" | "issue") => void;
+  activeTab: "cockpit" | "issue";
+  onTabChange: (tab: "cockpit" | "issue") => void;
 };
 type Filters = {
   quarter: string;
@@ -237,12 +237,6 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           管理层驾驶舱
         </button>
         <button
-          className={activeTab === "review" ? "active" : ""}
-          onClick={() => onTabChange("review")}
-        >
-          财务复核看板
-        </button>
-        <button
           className={activeTab === "issue" ? "active" : ""}
           onClick={() => onTabChange("issue")}
         >
@@ -251,7 +245,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       </div>
       {activeTab !== "cockpit" && (
         <div className="cockpit-subnotice">
-          当前为{activeTab === "review" ? "财务复核" : "问题解决"}
+          当前为问题解决
           视图，已复用同一筛选范围；完整业务操作可从左侧对账明细和客户跟进进入。
         </div>
       )}
