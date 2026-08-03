@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { selectedQuarter, sheetForQuarter } from "./quarter-storage";
 import "./q1-special-panels.css";
 
@@ -72,6 +72,18 @@ function specialData(sheet?: SavedSheet) {
   return { collection, lost, unaccounted };
 }
 
+function VerticalScrollList({ children, label }: { children: ReactNode; label: string }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const scroll = (top: number) => listRef.current?.scrollBy({ top, behavior: "smooth" });
+  return <div className="special-scroll-shell">
+    <div className="special-scroll-list" ref={listRef}>{children}</div>
+    <div className="special-scroll-actions" aria-label={`${label}上下滚动`}>
+      <button type="button" onClick={() => scroll(-180)} aria-label="向上滚动">⌃</button>
+      <button type="button" onClick={() => scroll(180)} aria-label="向下滚动">⌄</button>
+    </div>
+  </div>;
+}
+
 export function Q1SpecialPanels() {
   const [quarter, setQuarter] = useState("");
   const [sheet, setSheet] = useState<SavedSheet>();
@@ -113,12 +125,12 @@ export function Q1SpecialPanels() {
           <tbody>{data.collection.map((item) => <tr key={item.name}><td>{item.name}</td><td>{item.completed} / {item.total} ({item.total ? ((item.completed / item.total) * 100).toFixed(1) : "0.0"}%)</td><td>{item.pending}</td></tr>)}</tbody>
         </table>
       ) : tab === "lost" ? (
-        <div className="loss-list">{data.lost.length ? data.lost.map((item) => <article key={`${item.region}-${item.customer}`}><b>{item.region}：{item.customer}</b><span>丢票金额 {money(item.amount)} 元{item.note ? `；${item.note}` : ""}</span></article>) : <p className="special-empty">当前季度暂无丢票差额明细。</p>}</div>
+        <VerticalScrollList label="丢票情况"><div className="loss-list">{data.lost.length ? data.lost.map((item) => <article key={`${item.region}-${item.customer}`}><b>{item.region}：{item.customer}</b><span>丢票金额 {money(item.amount)} 元{item.note ? `；${item.note}` : ""}</span></article>) : <p className="special-empty">当前季度暂无丢票差额明细。</p>}</div></VerticalScrollList>
       ) : (
-        <table>
+        <VerticalScrollList label="未对账客户"><table>
           <thead><tr><th>区域</th><th>客户</th><th>差额原因备注</th></tr></thead>
           <tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td>{item.note || "—"}</td></tr>) : <tr><td colSpan={3}>当前季度暂无未对账客户。</td></tr>}</tbody>
-        </table>
+        </table></VerticalScrollList>
       )}
     </section>
   );
