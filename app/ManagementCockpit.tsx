@@ -268,6 +268,9 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     count: row.historicalInvoices?.length ?? 0,
     list: [row],
   }));
+  const unresolvedCustomersByAmount = [...rows]
+    .filter(isPendingFollowUp)
+    .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
   const priority = [...rows]
       .filter(isPendingFollowUp)
       .sort((a, b) => score(b) - score(a) || b.difference - a.difference),
@@ -615,8 +618,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       <section className="cockpit-lower">
         <article className="panel follow-panel">
           <h3>
-            D. 高风险客户 / 供应商 Top10{" "}
-            <button onClick={() => open("全部未解决客户", priority)}>
+            D. 高风险客户 Top10{" "}
+            <button onClick={() => open("全部未解决客户", unresolvedCustomersByAmount)}>
               查看全部客户 ›
             </button>
           </h3>
@@ -634,7 +637,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {priority.slice(0, 10).map((r) => (
+                {unresolvedCustomersByAmount.slice(0, 10).map((r) => (
                   <tr key={r.id} onClick={() => open(r.customer, [r])}>
                     <td>{r.customer}</td>
                     <td>{r.region}</td>
