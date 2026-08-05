@@ -39,6 +39,7 @@ const hasInvoiceException = (r: CockpitRow) =>
       r.otherInvoiceFail ||
       r.duplicateInvoice,
   );
+const LOST_DETAIL_TITLE = "\u4e22\u7968";
 const needsFollowUp = (r: CockpitRow) => r.followStatus !== "已解决";
 // Keep the cockpit aligned with the execution page: a reconciliation only
 // becomes an unresolved item after a first solution has been recorded, and it
@@ -215,6 +216,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     };
   }, [rows, unaccountedRows, categoryRows]);
   const currentDetailRows = categoryRows.length ? categoryRows : rows;
+  const lostDetails = currentDetailRows.filter((row) => (row.lost ?? 0) !== 0);
   const regionRows = regions
     .map((region) => {
       const x = rows.filter((r) => r.region === region),
@@ -358,7 +360,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     { name: "未解决差额", value: money(m.unresolved), list: rows.filter(isPendingFollowUp), tone: "red", icon: "△", note: "来自待解决清单" },
     { name: "调账金额", value: money(m.adjustmentAmount), list: currentDetailRows.filter((row) => row.adjustment !== 0), tone: "orange", icon: "⇄", note: "来自本年度对账明细" },
     { name: "死账金额", value: money(m.badDebtAmount), list: currentDetailRows.filter((row) => row.badDebt !== 0), tone: "purple", icon: "▣", note: "来自本年度对账明细" },
-    { name: "高风险客户数", value: `${priority.filter((row) => level(row) === "高风险").length} 家`, list: priority.filter((row) => level(row) === "高风险"), tone: "red", icon: "⛨", note: "优先管理层关注" },
+    { name: LOST_DETAIL_TITLE, value: money(lostDetails.reduce((sum, row) => sum + Math.abs(row.lost ?? 0), 0)), list: lostDetails, tone: "orange", icon: "▣", note: "来自对账看板票据情况" },
   ];
   return (
     <div className="cockpit">
@@ -766,7 +768,34 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
               </button>
             </header>
             <div className="cockpit-detail-table-wrap">
-              {modal.title === "调账金额" || modal.title === "死账金额" ? (
+              {modal.title === LOST_DETAIL_TITLE ? (
+                <table className="cockpit-detail-table cockpit-amount-reason-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">序号</th>
+                      <th scope="col">季度</th>
+                      <th scope="col">账套</th>
+                      <th scope="col">区域</th>
+                      <th scope="col">客户名称</th>
+                      <th scope="col">丢票金额</th>
+                      <th scope="col">差额原因备注</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modal.rows.map((r, index) => (
+                      <tr key={r.id}>
+                        <td>{index + 1}</td>
+                        <td>{r.quarter}</td>
+                        <td>{r.accountSet || "—"}</td>
+                        <td>{r.region}</td>
+                        <td className="detail-customer" title={r.customer}>{r.customer}</td>
+                        <td className="detail-money difference-money">{detailMoney(r.lost ?? 0)}</td>
+                        <td><span className="detail-clamp" title={r.cause}>{r.cause || "—"}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : modal.title === "调账金额" || modal.title === "死账金额" ? (
                 <table className="cockpit-detail-table cockpit-amount-reason-table">
                   <thead>
                     <tr>

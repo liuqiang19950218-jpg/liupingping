@@ -18,7 +18,6 @@ const S = {
   specialInfo: "\u4e13\u9879\u7ba1\u7406\u4fe1\u606f",
   pageTitle: "\u8d44\u6599\u6536\u96c6\u3001\u4e22\u7968\u4e0e\u672a\u5bf9\u8d26\u5ba2\u6237",
   collection: "\u8d44\u6599\u6536\u96c6",
-  ticket: "\u7968\u636e\u60c5\u51b5",
   unaccounted: "\u672a\u5bf9\u8d26\u5ba2\u6237",
   overview: "\u8d44\u6599\u6536\u96c6\u603b\u89c8",
   effectiveReply: "\u6709\u6548\u56de\u51fd\u7387\uff08\u6309\u533a\u57df\uff09",
@@ -180,7 +179,7 @@ function FollowAdviceCard({ collection, replyRates }: { collection: CollectionRo
 export function Q1SpecialPanels() {
   const [quarter, setQuarter] = useState("");
   const [sheet, setSheet] = useState<SavedSheet>();
-  const [tab, setTab] = useState<"collection" | "lost" | "unaccounted">("collection");
+  const [tab, setTab] = useState<"collection" | "unaccounted">("collection");
   useEffect(() => {
     const sync = () => { const nextQuarter = selectedQuarter(); setQuarter(nextQuarter); setSheet(sheetForQuarter(nextQuarter) as SavedSheet | undefined); };
     sync();
@@ -192,11 +191,9 @@ export function Q1SpecialPanels() {
   return <section className="q1-special">
     <div className="special-head"><div><p>{quarter} {S.specialInfo}</p><h2>{S.pageTitle}</h2></div><div className="special-tabs" role="tablist" aria-label={S.pageTitle}>
       <button role="tab" aria-selected={tab === "collection"} className={tab === "collection" ? "active" : ""} onClick={() => setTab("collection")}>{S.collection}</button>
-      <button role="tab" aria-selected={tab === "lost"} className={tab === "lost" ? "active" : ""} onClick={() => setTab("lost")}>{S.ticket}</button>
       <button role="tab" aria-selected={tab === "unaccounted"} className={tab === "unaccounted" ? "active" : ""} onClick={() => setTab("unaccounted")}>{S.unaccounted}</button>
     </div></div>
     {tab === "collection" ? <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} /><ReplyRateCard rows={data.replyRates} /><FollowAdviceCard collection={data.collection} replyRates={data.replyRates} /></div>
-      : tab === "lost" ? <div className="special-legacy-panel"><VerticalScrollList label={S.ticket}><div className="loss-list">{data.lost.length ? data.lost.map((item) => <article key={`${item.region}-${item.customer}`}><b>{`${item.region}\uff1a${item.customer}`}</b><span>{`\u4e22\u7968\u91d1\u989d ${item.amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })} \u5143${item.note ? `\uff1b${item.note}` : ""}`}</span></article>) : <p className="special-empty">{S.lossEmpty}</p>}</div></VerticalScrollList></div>
       : <div className="special-legacy-panel"><VerticalScrollList label={S.unaccounted}><table><thead><tr><th>{S.region}</th><th>{S.customer}</th><th>{S.note}</th></tr></thead><tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td>{item.note || "—"}</td></tr>) : <tr><td colSpan={3}>{S.unaccountedEmpty}</td></tr>}</tbody></table></VerticalScrollList></div>}
   </section>;
 }
