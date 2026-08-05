@@ -476,6 +476,13 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
         headers.findIndex((header) =>
           String(header).replace(/\s/g, "").includes(name),
         );
+    const findHeader = (...names: string[]) =>
+      headers.findIndex((header) => {
+        const normalizedHeader = String(header).replace(/\s/g, "");
+        return names.some(
+          (name) => normalizedHeader === name.replace(/\s/g, ""),
+        );
+      });
     const quarter = quarterOf(
       String(saved.fileName ?? ""),
       saved.headers,
@@ -494,13 +501,13 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
       badDebtReasonAt = at("死账原因"),
       adjustmentReasonAt = at("调账原因"),
       regionAt = at("区域"),
-      accountAt = contains("账套"),
       ownerAt = contains("对账负责人"),
-      customerNameAt = at("客户名称"),
       noteAt = at("差额原因备注"),
       clearedAt = contains("是否对清"),
       solutionAt = at("解决方案"),
       timeAt = at("解决时间");
+    const stableAccountAt = findHeader("\u8d26\u5957");
+    const stableCustomerNameAt = findHeader("\u5ba2\u6237\u540d\u79f0");
     const incomplete = (list: LiveInvoice[] | undefined) => {
       const started =
         list?.filter(
@@ -558,9 +565,12 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           id: `local-${index}`,
           quarter,
           region: String(entry[regionAt] ?? "未填写"),
-          accountSet: String(entry[accountAt] ?? "未填写"),
+          accountSet:
+            String(entry[stableAccountAt] ?? "").trim() || "未填写账套",
           owner: String(entry[ownerAt] ?? "未填写"),
-          customer: String(entry[customerNameAt] ?? ""),
+          customer:
+            String(entry[stableCustomerNameAt] ?? "").trim() ||
+            "未填写客户名称",
           companyReceivable: numberOf(entry[companyAt]),
           customerBook: numberOf(customerBook),
           difference,

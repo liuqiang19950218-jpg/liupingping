@@ -271,12 +271,28 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   const historicalInvoiceRiskRows = categoryRows
     .filter((row) => historicalInvoiceAmount(row) > 0)
     .sort((a, b) => historicalInvoiceAmount(b) - historicalInvoiceAmount(a));
-  const risks = historicalInvoiceRiskRows.slice(0, 5).map((row) => ({
-    name: row.customer || "未填写客户名称",
-    amount: historicalInvoiceAmount(row),
-    count: row.historicalInvoices?.length ?? 1,
-    list: [row],
-  }));
+  const risks = Array.from(
+    historicalInvoiceRiskRows
+      .reduce((groups, row) => {
+        const accountSet = row.accountSet || "未填写账套";
+        const customer = row.customer || "未填写客户名称";
+        const key = `${accountSet}__${customer}`;
+        const current = groups.get(key) ?? {
+          key,
+          accountSet,
+          customer,
+          amount: 0,
+          list: [] as CockpitRow[],
+        };
+        current.amount += historicalInvoiceAmount(row);
+        current.list.push(row);
+        groups.set(key, current);
+        return groups;
+      }, new Map<string, { key: string; accountSet: string; customer: string; amount: number; list: CockpitRow[] }>())
+      .values(),
+  )
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 5);
   const unresolvedCustomersByAmount = [...rows]
     .filter(isPendingFollowUp)
     .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
@@ -526,13 +542,17 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         <article className="panel risks">
           <h3>A. 核心风险与异常提醒 Top5</h3>
           {risks.length ? risks.map((x, i) => (
-            <button key={x.name} onClick={() => open(`${HISTORICAL_INVOICE_RISK_TITLE}：${x.name}`, x.list)}>
+            <button key={x.key} onClick={() => open(`${HISTORICAL_INVOICE_RISK_TITLE}：${x.customer}`, x.list)}>
               <span className={i < 2 ? "danger" : i < 5 ? "warning" : "normal"}>
                 {i + 1}
               </span>
-              <b title={x.name}>{x.name}</b>
-              <em title={`历史发票风险金额：${detailMoney(x.amount)}元`}>{money(x.amount)}</em>
-              <small>{x.count} 笔历史发票</small>
+              <span className="risk-identity">
+                <small title={x.accountSet}>账套：{x.accountSet}</small>
+                <b title={x.customer}>{x.customer}</b>
+              </span>
+              <em title={`历史发票总金额：${detailMoney(x.amount)}元`}>
+                {detailMoney(x.amount)}
+              </em>
             </button>
           )) : <p className="risk-empty">暂无可识别的历史季度差额发票</p>}
           {historicalInvoiceRiskRows.length ? <a onClick={() => open(HISTORICAL_INVOICE_RISK_TITLE, historicalInvoiceRiskRows)}>查看全部风险 ›</a> : null}
