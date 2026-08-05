@@ -29,7 +29,18 @@ const isReconciledAmount = (value: string) => {
   const normalizedValue = value.replace(/\s/g, "");
   return !["", "—", "-", "未填写", "未对账", "null", "undefined"].includes(normalizedValue);
 };
+const isMarkedUnreconciled = (row: unknown[], headers: string[]) => {
+  const statusIndex = headers.findIndex((header) =>
+    String(header).replace(/\s/g, "").includes("是否对清"),
+  );
+  const status = statusIndex < 0 ? "" : String(row[statusIndex] ?? "").replace(/\s/g, "");
+  if (status === "未对账") return true;
+  return MATERIALS.some(({ aliases }) =>
+    normalized(materialCell(row, headers, aliases)) === "未对账",
+  );
+};
 const filled = (row: unknown[], headers: string[]) =>
+  !isMarkedUnreconciled(row, headers) &&
   isReconciledAmount(cell(row, headers, "\u5ba2\u6237\u8d26\u9762\u91d1\u989d"));
 const materialCell = (row: unknown[], headers: string[], aliases: readonly string[]) =>
   aliases.map((header) => cell(row, headers, header)).find(Boolean) ?? "";
