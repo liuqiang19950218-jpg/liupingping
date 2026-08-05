@@ -5,7 +5,7 @@ import { selectedQuarter, sheetForQuarter } from "./quarter-storage";
 import "./q1-special-panels.css";
 
 type SavedSheet = { headers?: string[]; rows?: unknown[][] };
-type CollectionRow = { name: string; aliases: readonly string[]; completed: number; total: number; pending: string; effective?: number };
+type CollectionRow = { name: string; aliases: readonly string[]; completed: number; total: number; pending: string; effectiveReplyByRegion?: string };
 type LostRow = { region: string; customer: string; amount: number; note: string };
 type UnaccountedRow = { region: string; customer: string; note: string };
 
@@ -57,8 +57,17 @@ function specialData(sheet?: SavedSheet) {
     const completed = reconciled.filter((row) =>
       collected(name, materialCell(row, headers, aliases)),
     ).length;
-    const effective = name === "\u5bf9\u8d26\u51fd"
-      ? reconciled.filter((row) => normalized(materialCell(row, headers, aliases)) === "\u5df2\u76d6\u7ae0").length
+    const effectiveReplyByRegion = name === "\u5bf9\u8d26\u51fd"
+      ? regions.map((region) => {
+        const regional = reconciled.filter(
+          (row) => (cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199") === region,
+        );
+        const stamped = regional.filter(
+          (row) => normalized(materialCell(row, headers, aliases)) === "\u5df2\u76d6\u7ae0",
+        ).length;
+        const rate = regional.length ? (stamped / regional.length) * 100 : 0;
+        return `${region}${stamped}/${regional.length}（${rate.toFixed(1)}%）`;
+      }).join("、")
       : undefined;
     const pending = regions
       .map((region) => {
@@ -73,7 +82,7 @@ function specialData(sheet?: SavedSheet) {
       })
       .filter(Boolean)
       .join("\u3001");
-    return { name, aliases, completed, total: reconciled.length, pending: pending || "\u5176\u4ed6\u533a\u57df100%", effective };
+    return { name, aliases, completed, total: reconciled.length, pending: pending || "\u5176\u4ed6\u533a\u57df100%", effectiveReplyByRegion };
   });
   const lost: LostRow[] = reconciled
     .map((row) => ({
@@ -142,8 +151,8 @@ export function Q1SpecialPanels() {
       </div>
       {tab === "collection" ? (
         <table>
-          <thead><tr><th>资料类型</th><th>已收集 / 应收集</th><th>有效回函率</th><th>需跟进区域与收集率</th></tr></thead>
-          <tbody>{data.collection.map((item) => <tr key={item.name}><td>{item.name}</td><td>{item.completed} / {item.total} ({item.total ? ((item.completed / item.total) * 100).toFixed(1) : "0.0"}%)</td><td>{item.effective === undefined ? "—" : `${item.effective} / ${item.total} (${item.total ? ((item.effective / item.total) * 100).toFixed(1) : "0.0"}%)`}</td><td>{item.pending}</td></tr>)}</tbody>
+          <thead><tr><th>资料类型</th><th>已收集 / 应收集</th><th>有效回函率（按区域）</th><th>需跟进区域与收集率</th></tr></thead>
+          <tbody>{data.collection.map((item) => <tr key={item.name}><td>{item.name}</td><td>{item.completed} / {item.total} ({item.total ? ((item.completed / item.total) * 100).toFixed(1) : "0.0"}%)</td><td>{item.effectiveReplyByRegion ?? "—"}</td><td>{item.pending}</td></tr>)}</tbody>
         </table>
       ) : tab === "lost" ? (
         <VerticalScrollList label="丢票情况"><div className="loss-list">{data.lost.length ? data.lost.map((item) => <article key={`${item.region}-${item.customer}`}><b>{item.region}：{item.customer}</b><span>丢票金额 {money(item.amount)} 元{item.note ? `；${item.note}` : ""}</span></article>) : <p className="special-empty">当前季度暂无丢票差额明细。</p>}</div></VerticalScrollList>
