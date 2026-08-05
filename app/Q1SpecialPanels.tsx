@@ -28,7 +28,6 @@ const S = {
   followRegions: "\u9700\u8ddf\u8fdb\u533a\u57df\u4e0e\u6536\u96c6\u7387",
   lowReply: "\u4f4e\u56de\u51fd\u7387\u533a\u57df\uff08<60%\uff09",
   followTypes: "\u9700\u91cd\u70b9\u8ddf\u8fdb\u7684\u8d44\u6599\u7c7b\u578b",
-  missing: "\u5f85\u8865\u5145\u8bc1\u636e/\u6750\u6599",
   viewAll: "\u67e5\u770b\u5168\u90e8",
   noData: "\u6682\u65e0\u8d44\u6599\u6536\u96c6\u6570\u636e",
   allComplete: "\u6240\u6709\u533a\u57df100%",
@@ -156,23 +155,19 @@ function ReplyRateCard({ rows }: { rows: ReplyRateRow[] }) {
     <div className="reply-rate-list">{rows.length ? rows.map((item, index) => <button className="reply-rate-row" type="button" key={item.name} title={`${item.name}${formatPercent(item.rate)}`}>
       <ReplyLevelDot rank={index + 1} rate={item.rate} /><strong>{item.name}</strong><span className="reply-count">{item.replied} / {item.total}</span><b>{formatPercent(item.rate)}</b>
     </button>) : <p className="collection-empty">{S.noData}</p>}</div>
-    <footer className="reply-legend"><span><i className="excellent" />\u4f18\u79c0\uff08\u226580%\uff09</span><span><i className="good" />\u826f\u597d\uff0860%\uff5e&lt;80%\uff09</span><span><i className="warning" />\u5f85\u63d0\u5347\uff08&lt;60%\uff09</span></footer>
+    <footer className="reply-legend"><span><i className="excellent" />{"\u4f18\u79c0\uff08\u226580%\uff09"}</span><span><i className="good" />{"\u826f\u597d\uff0860%\uff5e&lt;80%\uff09"}</span><span><i className="warning" />{"\u5f85\u63d0\u5347\uff08&lt;60%\uff09"}</span></footer>
   </article>;
 }
 
 function FollowAdviceCard({ collection, replyRates }: { collection: CollectionRow[]; replyRates: ReplyRateRow[] }) {
   const lowRegions = replyRates.filter((item) => item.rate < 60);
   const followTypes = collection.filter((item) => item.rate < 95).slice().sort((a, b) => a.rate - b.rate).slice(0, 3);
-  const evidence = collection.filter((item) => ["stock", "transit", "writeoff"].includes(item.kind));
   return <article className="collection-card advice-card"><header className="collection-card-head"><h3>{S.advice}</h3></header>
     <section className="advice-section"><div className="advice-title"><span className="advice-symbol warning">!</span><h4>{S.lowReply}</h4><button type="button">{S.viewAll}</button></div>
       <div className="low-region-grid">{lowRegions.length ? lowRegions.map((item) => <span key={item.name}><i />{item.name} {formatPercent(item.rate)}</span>) : <p>{S.allComplete}</p>}</div>
     </section>
-    <section className="advice-section"><div className="advice-title"><span className="advice-symbol document">▤</span><h4>{S.followTypes}</h4><button type="button">{S.viewAll}</button></div>
-      <ul className="advice-list">{followTypes.length ? followTypes.map((item) => <li key={item.name}>{item.name}\uff08{S.rate}{formatPercent(item.rate)}\uff09</li>) : <li>{S.allComplete}</li>}</ul>
-    </section>
-    <section className="advice-section evidence-section"><div className="advice-title"><span className="advice-symbol cube">◆</span><h4>{S.missing}</h4><button type="button">{S.viewAll}</button></div>
-      <div className="evidence-grid">{evidence.map((item) => <div key={item.name}><MaterialIcon kind={item.kind} /><p><strong>{item.name}</strong><span>{item.kind === "stock" ? "\u9700\u53d1\u7968\u3001\u660e\u7ec6\u6e05\u5355\u7b49\u6750\u6599" : item.kind === "transit" ? "\u9700\u53d1\u7968\u3001\u5230\u8d27\u8bc1\u660e\u7b49\u6750\u6599" : "\u9700\u5bf9\u8d26\u3001\u6838\u9500\u6e05\u5355\u7b49\u51ed\u8bc1"}</span></p></div>)}</div>
+    <section className="advice-section"><div className="advice-title"><span className="advice-symbol document">{"\u25a4"}</span><h4>{S.followTypes}</h4><button type="button">{S.viewAll}</button></div>
+      <ul className="advice-list">{followTypes.length ? followTypes.map((item) => <li key={item.name}>{`${item.name}\uff08${S.rate}${formatPercent(item.rate)}\uff09`}</li>) : <li>{S.allComplete}</li>}</ul>
     </section>
   </article>;
 }
@@ -196,7 +191,7 @@ export function Q1SpecialPanels() {
       <button role="tab" aria-selected={tab === "unaccounted"} className={tab === "unaccounted" ? "active" : ""} onClick={() => setTab("unaccounted")}>{S.unaccounted}</button>
     </div></div>
     {tab === "collection" ? <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} /><ReplyRateCard rows={data.replyRates} /><FollowAdviceCard collection={data.collection} replyRates={data.replyRates} /></div>
-      : tab === "lost" ? <div className="special-legacy-panel"><VerticalScrollList label={S.ticket}><div className="loss-list">{data.lost.length ? data.lost.map((item) => <article key={`${item.region}-${item.customer}`}><b>{item.region}\uff1a{item.customer}</b><span>\u4e22\u7968\u91d1\u989d {item.amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })} \u5143{item.note ? `\uff1b${item.note}` : ""}</span></article>) : <p className="special-empty">{S.lossEmpty}</p>}</div></VerticalScrollList></div>
+      : tab === "lost" ? <div className="special-legacy-panel"><VerticalScrollList label={S.ticket}><div className="loss-list">{data.lost.length ? data.lost.map((item) => <article key={`${item.region}-${item.customer}`}><b>{`${item.region}\uff1a${item.customer}`}</b><span>{`\u4e22\u7968\u91d1\u989d ${item.amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })} \u5143${item.note ? `\uff1b${item.note}` : ""}`}</span></article>) : <p className="special-empty">{S.lossEmpty}</p>}</div></VerticalScrollList></div>
       : <div className="special-legacy-panel"><VerticalScrollList label={S.unaccounted}><table><thead><tr><th>{S.region}</th><th>{S.customer}</th><th>{S.note}</th></tr></thead><tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td>{item.note || "—"}</td></tr>) : <tr><td colSpan={3}>{S.unaccountedEmpty}</td></tr>}</tbody></table></VerticalScrollList></div>}
   </section>;
 }
