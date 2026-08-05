@@ -156,7 +156,7 @@ function ReplyRateCard({ rows }: { rows: ReplyRateRow[] }) {
     <div className="reply-rate-list">{rows.length ? rows.map((item, index) => <button className="reply-rate-row" type="button" key={item.name} title={`${item.name}${formatPercent(item.rate)}`}>
       <ReplyLevelDot rank={index + 1} rate={item.rate} /><strong>{item.name}</strong><span className="reply-count">{item.replied} / {item.total}</span><b>{formatPercent(item.rate)}</b>
     </button>) : <p className="collection-empty">{S.noData}</p>}</div>
-    <footer className="reply-legend"><span><i className="excellent" />{"\u4f18\u79c0\uff08\u226580%\uff09"}</span><span><i className="good" />{"\u826f\u597d\uff0860%\uff5e&lt;80%\uff09"}</span><span><i className="warning" />{"\u5f85\u63d0\u5347\uff08&lt;60%\uff09"}</span></footer>
+    <footer className="reply-legend"><span><i className="excellent" />{"\u4f18\u79c0\uff08\u226580%\uff09"}</span><span><i className="good" />{"\u826f\u597d\uff0860%\uff5e80%\uff09"}</span><span><i className="warning" />{"\u5f85\u63d0\u5347\uff08\u4f4e\u4e8e60%\uff09"}</span></footer>
   </article>;
 }
 
