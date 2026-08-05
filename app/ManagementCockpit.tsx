@@ -227,6 +227,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         region,
         x,
         clear,
+        unclear: x.filter((row) => !row.cleared).length,
         rate: x.length ? (clear / x.length) * 100 : 0,
         amountRate:
           (x.reduce((sum, row) => sum + (row.cleared ? row.companyReceivable : 0), 0) /
@@ -235,8 +236,6 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         unresolved: x
           .filter(isPendingFollowUp)
           .reduce((s, r) => s + r.difference, 0),
-        invoice: x.filter(hasInvoiceException).length,
-        overdue: x.filter(overdue).length,
         risk: x.reduce((s, r) => s + getRisks(r).length, 0),
       };
     })
@@ -543,7 +542,6 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   <th>客户完成率</th>
                   <th>未解决差额</th>
                   <th>异常</th>
-                  <th>逾期</th>
                 </tr>
               </thead>
               <tbody>
@@ -568,8 +566,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                       </span>
                     </td>
                     <td>{money(x.unresolved)}</td>
-                    <td>{x.invoice}</td>
-                    <td>{x.overdue}</td>
+                    <td>{x.unclear}</td>
                   </tr>
                 ))}
                 <tr className="total">
@@ -578,8 +575,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   <td>{m.amountRate.toFixed(1)}%</td>
                   <td>{m.rate.toFixed(1)}%</td>
                   <td>{money(m.unresolved)}</td>
-                  <td>{m.invoice}</td>
-                  <td>{m.overdue}</td>
+                  <td>{m.unclear}</td>
                 </tr>
               </tbody>
             </table>
