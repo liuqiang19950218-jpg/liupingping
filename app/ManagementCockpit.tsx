@@ -40,6 +40,8 @@ const hasInvoiceException = (r: CockpitRow) =>
       r.duplicateInvoice,
   );
 const LOST_DETAIL_TITLE = "\u4e22\u7968";
+const AMOUNT_RATE_DETAIL_TITLE = "\u91d1\u989d\u5bf9\u8d26\u5b8c\u6210\u7387";
+const CUSTOMER_RATE_DETAIL_TITLE = "\u5ba2\u6237\u5b8c\u6210\u7387";
 const needsFollowUp = (r: CockpitRow) => r.followStatus !== "已解决";
 // Keep the cockpit aligned with the execution page: a reconciliation only
 // becomes an unresolved item after a first solution has been recorded, and it
@@ -354,8 +356,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   };
   const metrics = [
     { name: "应对账总额", value: money(m.reconciliationTotal), list: rows, tone: "blue", icon: "¥", note: "本季度应收口径" },
-    { name: "金额对账完成率", value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", icon: "✓", note: "较上季度 +0.6%" },
-    { name: "客户完成率", value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", icon: "◎", note: "已对清客户占比" },
+    { name: AMOUNT_RATE_DETAIL_TITLE, value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", icon: "✓", note: "较上季度 +0.6%" },
+    { name: CUSTOMER_RATE_DETAIL_TITLE, value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", icon: "◎", note: "已对清客户占比" },
     { name: "待确认金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", icon: "⌛", note: "待客户确认" },
     { name: "未解决差额", value: money(m.unresolved), list: rows.filter(isPendingFollowUp), tone: "red", icon: "△", note: "来自待解决清单" },
     { name: "调账金额", value: money(m.adjustmentAmount), list: currentDetailRows.filter((row) => row.adjustment !== 0), tone: "orange", icon: "⇄", note: "来自本年度对账明细" },
@@ -768,7 +770,29 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
               </button>
             </header>
             <div className="cockpit-detail-table-wrap">
-              {modal.title === LOST_DETAIL_TITLE ? (
+              {modal.title === AMOUNT_RATE_DETAIL_TITLE || modal.title === CUSTOMER_RATE_DETAIL_TITLE ? (
+                <table className="cockpit-detail-table cockpit-amount-reason-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">区域</th>
+                      <th scope="col">客户数</th>
+                      <th scope="col">{modal.title}</th>
+                      <th scope="col">未解决差额</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {regionRows.map((row) => {
+                      const rate = modal.title === AMOUNT_RATE_DETAIL_TITLE ? row.amountRate : row.rate;
+                      return <tr key={row.region}>
+                        <td>{row.region}</td>
+                        <td className="detail-money">{row.x.length}</td>
+                        <td className="detail-money primary-money">{rate.toFixed(1)}%</td>
+                        <td className={`detail-money ${row.unresolved ? "difference-money" : "muted-money"}`}>{detailMoney(row.unresolved)}</td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              ) : modal.title === LOST_DETAIL_TITLE ? (
                 <table className="cockpit-detail-table cockpit-amount-reason-table">
                   <thead>
                     <tr>
