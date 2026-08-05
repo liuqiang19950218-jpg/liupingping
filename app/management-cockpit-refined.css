@@ -65,12 +65,14 @@
 .panel th { padding: 9px 8px; background: #f4f7fc; color: #53657e; font-size: 11px; font-weight: 800; }
 .panel td { padding: 9px 8px; font-size: 11px; }
 
-.risks button { grid-template-columns: 21px minmax(0, 1fr) auto; min-height: 52px; padding: 8px 13px; }
+.risk-column-head { display: grid; grid-template-columns: 36px minmax(78px, .62fr) minmax(110px, 1.38fr) max-content; gap: 8px; align-items: center; min-height: 30px; padding: 0 13px; border-bottom: 1px solid #edf2f7; background: #f5f8fc; color: #6b7a90; font-size: 10px; font-weight: 800; }
+.risk-column-head span:last-child { text-align: right; }
+.risks button { grid-template-columns: 36px minmax(78px, .62fr) minmax(110px, 1.38fr) max-content; min-height: 42px; padding: 7px 13px; }
 .risks button > span { border-radius: 5px; }.risks a { padding: 12px; font-weight: 700; }
-.risks .risk-identity { display: grid; min-width: 0; gap: 2px; }
-.risks .risk-identity small { display: block; overflow: hidden; padding: 0; background: transparent; color: #6b7a90; font-size: 10px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
-.risks .risk-identity b { display: block; overflow: hidden; color: #163c68; font-size: 12px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-.risks button em { color: #f04438; font-size: 12px; font-style: normal; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.risks .risk-rank { display: grid; place-items: center; width: 19px; height: 19px; border-radius: 5px; color: #fff; font-size: 11px; font-weight: 800; }
+.risks .risk-account { display: block; width: auto; height: auto; overflow: hidden; padding: 0; border-radius: 0; background: transparent; color: #6b7a90; font-size: 11px; font-weight: 700; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.risks button b { display: block; overflow: hidden; color: #163c68; font-size: 12px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.risks button em { color: #f04438; font-size: 12px; font-style: normal; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .risks .risk-empty { margin: 0; padding: 22px 13px; color: #71809a; font-size: 12px; text-align: center; }
 .region-panel .table-wrap { max-height: 265px; }.region-panel .rate { min-width: 94px; }.region-panel .rate i { max-width: 45px; }
 .panel .total td { background: #eff5ff; color: #183f69; }

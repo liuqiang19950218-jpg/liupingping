@@ -541,15 +541,19 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       <section className="cockpit-three">
         <article className="panel risks">
           <h3>A. 核心风险与异常提醒 Top5</h3>
+          <div className="risk-column-head" aria-hidden="true">
+            <span>序号</span>
+            <span>账套</span>
+            <span>客户名称</span>
+            <span>异常总金额</span>
+          </div>
           {risks.length ? risks.map((x, i) => (
             <button key={x.key} onClick={() => open(`${HISTORICAL_INVOICE_RISK_TITLE}：${x.customer}`, x.list)}>
-              <span className={i < 2 ? "danger" : i < 5 ? "warning" : "normal"}>
+              <span className={`risk-rank ${i < 2 ? "danger" : i < 5 ? "warning" : "normal"}`}>
                 {i + 1}
               </span>
-              <span className="risk-identity">
-                <small title={x.accountSet}>账套：{x.accountSet}</small>
-                <b title={x.customer}>{x.customer}</b>
-              </span>
+              <span className="risk-account" title={x.accountSet}>{x.accountSet}</span>
+              <b title={x.customer}>{x.customer}</b>
               <em title={`历史发票总金额：${detailMoney(x.amount)}元`}>
                 {detailMoney(x.amount)}
               </em>
