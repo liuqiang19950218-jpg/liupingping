@@ -91,6 +91,8 @@ const T = {
   uploadLedger:
     "\u4e0a\u4f20\uff0f\u66ff\u6362\u672c\u5e74\u5f80\u6765\u660e\u7ec6",
   uploadMaterials: "\u5bfc\u5165\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868",
+  uploadCompanyReceivable:
+    "\u4e0a\u4f20\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868",
   clearData: "\u6e05\u9664\u672c\u673a\u6570\u636e",
   importTitle: "\u5b63\u5ea6\u5bf9\u8d26",
   importHint:
@@ -329,6 +331,11 @@ const materialImportAliases = (header: string) =>
   header === SPD_CONFIRMATION_HEADER
     ? [SPD_CONFIRMATION_HEADER, LEGACY_SPD_CONFIRMATION_HEADER]
     : [header];
+const companyReceivableImportAliases = [
+  T.company,
+  "\u516c\u53f8\u5e94\u6536\u91d1\u989d",
+  "\u516c\u53f8\u5e94\u6536\uff08\u5143\uff09",
+];
 const sum = (entries: Array<{ amount: string }>) =>
   entries.reduce((total, entry) => total + num(entry.amount), 0);
 const currentQuarterRange = (source: LocalSheet) => {
@@ -1112,6 +1119,96 @@ export function QuarterlyReconciliation({
     }
     event.target.value = "";
   }
+  async function importCompanyReceivables(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!sheet) {
+      setMessage(
+        "\u8bf7\u5148\u4e0a\u4f20\u5bf9\u8d26\u5b63\u5ea6\u8868\uff0c\u518d\u4e0a\u4f20\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\u3002",
+      );
+      event.target.value = "";
+      return;
+    }
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const all = XLSX.utils.sheet_to_json<unknown[]>(
+        workbook.Sheets[workbook.SheetNames[0]],
+        { header: 1, defval: "" },
+      );
+      const sourceHeaders = (all[0] ?? []).map(String);
+      const sourceRows = all
+        .slice(1)
+        .filter((row) =>
+          row.some((value) => String(value ?? "").trim() !== ""),
+        );
+      const sourceAccount = headerIndex(sourceHeaders, ["\u8d26\u5957"]);
+      const sourceRegion = headerIndex(sourceHeaders, [T.region]);
+      const sourceCustomer = headerIndex(sourceHeaders, [T.customer]);
+      const sourceCompany = headerIndex(
+        sourceHeaders,
+        companyReceivableImportAliases,
+      );
+      if (
+        sourceAccount < 0 ||
+        sourceRegion < 0 ||
+        sourceCustomer < 0 ||
+        sourceCompany < 0
+      )
+        throw new Error(
+          "\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\u5fc5\u987b\u5305\u542b\u8d26\u5957\u3001\u533a\u57df\u3001\u5ba2\u6237\u540d\u79f0\u548c\u516c\u53f8\u5e94\u6536\u5217\u3002",
+        );
+      const accountAt = headerIndex(sheet.headers, ["\u8d26\u5957"]);
+      const regionAt = headerIndex(sheet.headers, [T.region]);
+      const customerAt = headerIndex(sheet.headers, [T.customer]);
+      const companyAt = headerIndex(sheet.headers, companyReceivableImportAliases);
+      if (accountAt < 0 || regionAt < 0 || customerAt < 0 || companyAt < 0)
+        throw new Error(
+          "\u672c\u5b63\u5ea6\u5bf9\u8d26\u8be6\u60c5\u5fc5\u987b\u5305\u542b\u8d26\u5957\u3001\u533a\u57df\u3001\u5ba2\u6237\u540d\u79f0\u548c\u516c\u53f8\u5e94\u6536\u5217\u3002",
+        );
+      const key = (account: unknown, area: unknown, customer: unknown) =>
+        [account, area, customer]
+          .map((value) => String(value ?? "").replace(/\s/g, "").trim())
+          .join("|");
+      const sourceByKey = new Map<string, unknown[]>();
+      sourceRows.forEach((row) => {
+        const matchKey = key(
+          row[sourceAccount],
+          row[sourceRegion],
+          row[sourceCustomer],
+        );
+        if (matchKey !== "||") sourceByKey.set(matchKey, row);
+      });
+      let matched = 0;
+      let updated = 0;
+      const rows = sheet.rows.map((row) => {
+        const source = sourceByKey.get(
+          key(row[accountAt], row[regionAt], row[customerAt]),
+        );
+        if (!source) return row;
+        matched += 1;
+        const next = [...row];
+        const sourceValue = source[sourceCompany];
+        if (String(sourceValue ?? "").trim() !== "") {
+          next[companyAt] = sourceValue;
+          updated += 1;
+        }
+        return next;
+      });
+      saveSheet({ ...sheet, rows });
+      setMessage(
+        `\u5df2\u4e0a\u4f20\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\uff1a\u5339\u914d ${matched} \u6761\uff0c\u4ec5\u66f4\u65b0\u5176\u4e2d ${updated} \u6761\u7684\u516c\u53f8\u5e94\u6536\u3002`,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\u4e0a\u4f20\u5931\u8d25\u3002",
+      );
+    }
+    event.target.value = "";
+  }
   async function importCurrentLedger(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     if (!files.length) return;
@@ -1224,7 +1321,6 @@ export function QuarterlyReconciliation({
     const total = transit + returned + lost + instrument + otherInvoice + other;
     const rows = sheet.rows.map((row) => [...row]);
     const row = rows[active];
-    setCell(row, T.company, form.companyAmount === "" ? "" : company);
     setCell(row, T.customerBook, form.customerAmount === "" ? "" : customer);
     setCell(row, T.difference, form.customerAmount === "" ? "" : difference);
     setCell(row, T.transit, transit);
@@ -1313,6 +1409,14 @@ export function QuarterlyReconciliation({
                   type="file"
                   accept=".xlsx,.xls"
                   onChange={importMaterials}
+                />
+              </label>
+              <label className="file-button company-receivable-upload">
+                {T.uploadCompanyReceivable}
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={importCompanyReceivables}
                 />
               </label>
               {sheet && (
@@ -1835,14 +1939,6 @@ export function QuarterlyReconciliation({
                 </span>
               </div>
               <div className="customer-save-row">
-                <TextField
-                  label={T.company}
-                  value={form.companyAmount}
-                  type="number"
-                  onChange={(value) =>
-                    setForm({ ...form, companyAmount: value })
-                  }
-                />
                 <TextField
                   label={T.customerBook}
                   value={form.customerAmount}
