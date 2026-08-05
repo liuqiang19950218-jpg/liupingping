@@ -37,3 +37,8 @@
     grid-template-columns: minmax(485px, 1.25fr) minmax(450px, 1.16fr) minmax(390px, 1fr);
   }
 }
+
+/* The historical dashboard retains its trends, but not the three summary tiles. */
+.history-dashboard .analysis-cards {
+  display: none;
+}
