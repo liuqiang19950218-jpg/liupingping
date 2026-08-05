@@ -36,7 +36,9 @@ const materialCell = (row: unknown[], headers: string[], aliases: readonly strin
 // The provided-materials sheet uses a strict yes/no convention: only "\u5df2\u63d0\u4f9b" or "\u662f" is collected.
 const provided = (value: string) => ["\u5df2\u63d0\u4f9b", "\u662f"].includes(value.replace(/\s/g, ""));
 const normalized = (value: string) => value.replace(/\s/g, "");
-const replied = (value: string) => ["\u5df2\u76d6\u7ae0", "\u672a\u76d6\u7ae0"].includes(normalized(value));
+// Keep imported legacy values compatible: they are replies, but only a stamped letter is effective.
+const replied = (value: string) =>
+  ["\u5df2\u76d6\u7ae0", "\u672a\u76d6\u7ae0", "\u5df2\u56de\u51fd", "\u5df2\u63d0\u4f9b", "\u662f"].includes(normalized(value));
 const confirmationReplied = (value: string) =>
   ["\u5df2\u56de\u51fd", "\u662f", "\u5df2\u63d0\u4f9b"].includes(normalized(value));
 const collected = (name: string, value: string) =>
@@ -82,7 +84,7 @@ function specialData(sheet?: SavedSheet) {
           collected(name, materialCell(row, headers, aliases)),
         ).length;
         const rate = regional.length ? (received / regional.length) * 100 : 0;
-        return rate < 100 ? `${region}${rate.toFixed(0)}%` : "";
+        return rate < 100 ? `${region}${received}/${regional.length}（${rate.toFixed(1)}%）` : "";
       })
       .filter(Boolean)
       .join("\u3001");
