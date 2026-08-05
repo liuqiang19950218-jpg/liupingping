@@ -40,6 +40,11 @@ const hasInvoiceException = (r: CockpitRow) =>
       r.duplicateInvoice,
   );
 const needsFollowUp = (r: CockpitRow) => r.followStatus !== "已解决";
+// Keep the cockpit aligned with the execution page: a reconciliation only
+// becomes an unresolved item after a first solution has been recorded, and it
+// leaves the pending list once it is resolved.
+const isPendingFollowUp = (r: CockpitRow) =>
+  Boolean(r.solution.trim()) && r.followStatus !== "已解决";
 const invoiceExceptionReason = (r: CockpitRow) =>
   [
     r.transitInvoiceFail && "在途明细缺少发票号、日期或金额",
@@ -199,7 +204,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       unclear,
       rate: rows.length ? (clear / rows.length) * 100 : 0,
       unresolved: rows
-        .filter(needsFollowUp)
+        .filter(isPendingFollowUp)
         .reduce((s, x) => s + x.difference, 0),
       invoice: rows.filter(hasInvoiceException).length,
       overdue: rows.filter(overdue).length,
@@ -224,7 +229,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             Math.max(x.reduce((sum, row) => sum + row.companyReceivable, 0), 1)) *
           100,
         unresolved: x
-          .filter(needsFollowUp)
+          .filter(isPendingFollowUp)
           .reduce((s, r) => s + r.difference, 0),
         invoice: x.filter(hasInvoiceException).length,
         overdue: x.filter(overdue).length,
@@ -262,7 +267,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     }))
     .filter((x) => x.list.length);
   const priority = [...rows]
-      .filter(needsFollowUp)
+      .filter(isPendingFollowUp)
       .sort((a, b) => score(b) - score(a) || b.difference - a.difference),
     trend = quarterOptions()
       .slice()
@@ -285,7 +290,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           quarter,
           rate: reconciled.length ? (cleared / reconciled.length) * 100 : 0,
           unresolved: reconciled
-            .filter(needsFollowUp)
+            .filter(isPendingFollowUp)
             .reduce((sum, row) => sum + row.difference, 0),
           overdue: reconciled
             .filter(overdue)
@@ -350,7 +355,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     { name: "金额对账完成率", value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", icon: "✓", note: "较上季度 +0.6%" },
     { name: "客户完成率", value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", icon: "◎", note: "已对清客户占比" },
     { name: "待确认金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", icon: "⌛", note: "待客户确认" },
-    { name: "未解决差额", value: money(m.unresolved), list: rows.filter(needsFollowUp), tone: "red", icon: "△", note: "待闭环问题金额" },
+    { name: "未解决差额", value: money(m.unresolved), list: rows.filter(isPendingFollowUp), tone: "red", icon: "△", note: "来自待解决清单" },
     { name: "调账金额", value: money(m.adjustmentAmount), list: currentDetailRows.filter((row) => row.adjustment !== 0), tone: "orange", icon: "⇄", note: "来自本年度对账明细" },
     { name: "死账金额", value: money(m.badDebtAmount), list: currentDetailRows.filter((row) => row.badDebt !== 0), tone: "purple", icon: "▣", note: "来自本年度对账明细" },
     { name: "高风险客户数", value: `${priority.filter((row) => level(row) === "高风险").length} 家`, list: priority.filter((row) => level(row) === "高风险"), tone: "red", icon: "⛨", note: "优先管理层关注" },
@@ -584,7 +589,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             <DifferenceStructureChart
               data={cats}
               total={categorizedDifference}
-              onClick={() => open("未解决差额客户", rows.filter(needsFollowUp))}
+              onClick={() => open("未解决差额客户", rows.filter(isPendingFollowUp))}
             />
             <div>
               {cats.map((x) => (
