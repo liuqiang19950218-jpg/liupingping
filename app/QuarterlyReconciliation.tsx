@@ -29,6 +29,7 @@ type InvoiceEntry = {
 type LedgerLookup = Record<string, { amount: number; dates: string[] }>;
 type OtherEntry = { amount: string; note: string; image?: string };
 type DetailForm = {
+  companyAmount: string;
   customerAmount: string;
   responsible: string;
   transit: InvoiceEntry[];
@@ -148,6 +149,7 @@ const blankInvoice = (): InvoiceEntry => ({
 });
 const blankOther = (): OtherEntry => ({ amount: "", note: "", image: "" });
 const empty = (): DetailForm => ({
+  companyAmount: "",
   customerAmount: "",
   responsible: "",
   transit: [blankInvoice()],
@@ -1165,12 +1167,14 @@ export function QuarterlyReconciliation({
         ? {
             ...empty(),
             ...old,
+            companyAmount: old.companyAmount ?? String(row[companyIndex] ?? ""),
             responsible: old.responsible ?? String(row[responsibleIndex] ?? ""),
             lost: old.lost ?? [blankInvoice()],
             instrument: old.instrument ?? [blankInvoice()],
           }
         : {
             ...empty(),
+            companyAmount: value(T.company),
             customerAmount: value(T.customerBook),
             responsible: String(row[responsibleIndex] ?? ""),
             transit: [{ ...blankInvoice(), amount: value(T.transit) }],
@@ -1208,7 +1212,7 @@ export function QuarterlyReconciliation({
       );
       return;
     }
-    const company = num(sheet.rows[active][companyIndex]);
+    const company = num(form.companyAmount);
     const customer = num(form.customerAmount);
     const difference = company - customer;
     const transit = sum(form.transit);
@@ -1220,6 +1224,7 @@ export function QuarterlyReconciliation({
     const total = transit + returned + lost + instrument + otherInvoice + other;
     const rows = sheet.rows.map((row) => [...row]);
     const row = rows[active];
+    setCell(row, T.company, form.companyAmount === "" ? "" : company);
     setCell(row, T.customerBook, form.customerAmount === "" ? "" : customer);
     setCell(row, T.difference, form.customerAmount === "" ? "" : difference);
     setCell(row, T.transit, transit);
@@ -1256,8 +1261,7 @@ export function QuarterlyReconciliation({
     setActive(null);
   }
 
-  const company =
-    active !== null && sheet ? num(sheet.rows[active][companyIndex]) : 0;
+  const company = num(form.companyAmount);
   const difference = company - num(form.customerAmount);
   const total =
     sum(form.transit) +
@@ -1832,6 +1836,14 @@ export function QuarterlyReconciliation({
               </div>
               <div className="customer-save-row">
                 <TextField
+                  label={T.company}
+                  value={form.companyAmount}
+                  type="number"
+                  onChange={(value) =>
+                    setForm({ ...form, companyAmount: value })
+                  }
+                />
+                <TextField
                   label={T.customerBook}
                   value={form.customerAmount}
                   type="number"
@@ -2095,6 +2107,12 @@ export function QuarterlyReconciliation({
                 {isClear ? T.clear : T.uncleared}
               </span>
             </div>
+            <TextField
+              label={T.company}
+              value={form.companyAmount}
+              type="number"
+              onChange={(value) => setForm({ ...form, companyAmount: value })}
+            />
             <TextField
               label={T.customerBook}
               value={form.customerAmount}

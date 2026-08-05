@@ -70,7 +70,7 @@
 .photo-import p { margin: 5px 0 0; color: #36546d; }
 .photo-result { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; padding-top: 7px; border-top: 1px solid #dceaf7; color: #1e466c; word-break: break-all; }
 .photo-result button { flex: 0 0 auto; width: auto; margin: 0; padding: 5px 8px; border: 0; border-radius: 5px; background: #1677ff; color: #fff; cursor: pointer; }
-.customer-save-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(150px, .8fr); align-items: end; gap: 12px; margin: 12px 0; }
+.customer-save-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(150px, .8fr); align-items: end; gap: 12px; margin: 12px 0; }
 .customer-save-row .field { margin: 0; }
 .top-save-button { width: 100%; min-height: 42px; margin: 0; align-self: end; background: #e6f1f8; color: #125c89; }
 .local-tool .file-button, .local-tool .fill-button, .sales-modal .save-button { background: #e6f1f8 !important; color: #125c89 !important; }
