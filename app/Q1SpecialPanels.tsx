@@ -95,7 +95,7 @@ function specialData(sheet?: SavedSheet) {
           collected(name, materialCell(row, headers, aliases)),
         ).length;
         const rate = regional.length ? (received / regional.length) * 100 : 0;
-        return rate < 100 ? `${region}${received}/${regional.length}（${rate.toFixed(1)}%）` : "";
+        return rate < 100 ? `${region}${rate.toFixed(1)}%` : "";
       })
       .filter(Boolean)
       .join("\u3001");
