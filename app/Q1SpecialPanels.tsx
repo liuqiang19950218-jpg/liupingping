@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { selectedQuarter, sheetForQuarter } from "./quarter-storage";
 import "./q1-special-panels.css";
+import "./q1-special-panels-layout-overrides.css";
 
 type SavedSheet = { headers?: string[]; rows?: unknown[][] };
 type MaterialKind = "confirmation" | "letter" | "spd" | "stock" | "delivery" | "transit" | "writeoff";
