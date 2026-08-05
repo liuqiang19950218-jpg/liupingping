@@ -292,8 +292,7 @@ export function UnresolvedFollowupDashboard() {
   const [tableFilters, setTableFilters] = useState<
     Partial<Record<TableFilterKey, string>>
   >({});
-  const [openColumnFilter, setOpenColumnFilter] =
-    useState<TableFilterKey | null>(null);
+  const [filterColumns, setFilterColumns] = useState<TableFilterKey[]>([]);
   const [tab, setTab] = useState<"pending" | "resolved">("pending");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -469,8 +468,14 @@ export function UnresolvedFollowupDashboard() {
     setRisk("全部");
     setFinance("全部");
     setTableFilters({});
-    setOpenColumnFilter(null);
+    setFilterColumns([]);
   };
+  const toggleColumnFilter = (column: TableFilterKey) =>
+    setFilterColumns((columns) =>
+      columns.includes(column)
+        ? columns.filter((item) => item !== column)
+        : [...columns, column],
+    );
   const submitFollowUp = () => {
     if (!editing || !followSolution.trim()) {
       setMessage("请填写本次跟进解决方案。");
@@ -693,6 +698,47 @@ export function UnresolvedFollowupDashboard() {
             已解决档案（{resolved.length}）
           </button>
         </div>
+        {filterColumns.length > 0 && (
+          <div className="uf-multi-column-filter" aria-label="表格列筛选">
+            {filterColumns.map((column) => {
+              const definition = TABLE_FILTER_COLUMNS.find(
+                (item) => item.key === column,
+              );
+              if (!definition) return null;
+              return (
+                <div className="uf-filter-item" key={column}>
+                  <b>筛选“{definition.label}”</b>
+                  <input
+                    autoFocus
+                    aria-label={`输入${definition.label}筛选内容`}
+                    value={tableFilters[column] ?? ""}
+                    placeholder="输入筛选内容"
+                    onChange={(event) =>
+                      setTableFilters((filters) => ({
+                        ...filters,
+                        [column]: event.target.value,
+                      }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTableFilters((filters) => ({
+                        ...filters,
+                        [column]: "",
+                      }))
+                    }
+                  >
+                    清除
+                  </button>
+                  <button type="button" onClick={() => toggleColumnFilter(column)}>
+                    关闭
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
         {message && (
           <p className="uf-message" role="status">
             {message}
@@ -708,51 +754,13 @@ export function UnresolvedFollowupDashboard() {
                       {column.label}
                       <button
                         type="button"
-                        className={`uf-header-filter ${tableFilters[column.key] ? "active" : ""}`}
+                        className={`uf-header-filter ${filterColumns.includes(column.key) ? "active" : ""}`}
                         aria-label={`筛选${column.label}`}
-                        aria-expanded={openColumnFilter === column.key}
-                        onClick={() =>
-                          setOpenColumnFilter((current) =>
-                            current === column.key ? null : column.key,
-                          )
-                        }
+                        aria-pressed={filterColumns.includes(column.key)}
+                        onClick={() => toggleColumnFilter(column.key)}
                       >
                         ⌕
                       </button>
-                      {openColumnFilter === column.key && (
-                        <span
-                          className="uf-filter-popover"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <input
-                            autoFocus
-                            aria-label={`输入${column.label}筛选内容`}
-                            value={tableFilters[column.key] ?? ""}
-                            placeholder={`筛选${column.label}`}
-                            onChange={(event) =>
-                              setTableFilters((filters) => ({
-                                ...filters,
-                                [column.key]: event.target.value,
-                              }))
-                            }
-                            onKeyDown={(event) => {
-                              if (event.key === "Escape")
-                                setOpenColumnFilter(null);
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setTableFilters((filters) => ({
-                                ...filters,
-                                [column.key]: "",
-                              }))
-                            }
-                          >
-                            清除
-                          </button>
-                        </span>
-                      )}
                     </span>
                   </th>
                 ))}
