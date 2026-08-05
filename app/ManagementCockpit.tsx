@@ -43,6 +43,19 @@ const LOST_DETAIL_TITLE = "\u4e22\u7968";
 const AMOUNT_RATE_DETAIL_TITLE = "\u91d1\u989d\u5bf9\u8d26\u5b8c\u6210\u7387";
 const CUSTOMER_RATE_DETAIL_TITLE = "\u5ba2\u6237\u5b8c\u6210\u7387";
 const HISTORICAL_INVOICE_RISK_TITLE = "\u5386\u53f2\u5b63\u5ea6\u5dee\u989d\u53d1\u7968\u98ce\u9669";
+const hasHistoricalInvoiceReference = (value: string) =>
+  /(?:19|20)(?:0\d|1\d|2[0-5])|(?:^|\D)(?:0\d|1\d|2[0-5])\s*[./-]\s*\d{1,2}/.test(value);
+const historicalInvoiceAmount = (row: CockpitRow) => {
+  const detailedAmount = row.historicalInvoices?.reduce(
+    (sum, item) => sum + item.amount,
+    0,
+  ) ?? 0;
+  if (detailedAmount) return detailedAmount;
+  if (!hasHistoricalInvoiceReference(row.cause)) return 0;
+  return Math.abs(
+    row.transit + row.returned + (row.lost ?? 0) + (row.instrument ?? 0) + row.otherInvoice,
+  );
+};
 const needsFollowUp = (r: CockpitRow) => r.followStatus !== "已解决";
 // Keep the cockpit aligned with the execution page: a reconciliation only
 // becomes an unresolved item after a first solution has been recorded, and it
@@ -256,16 +269,12 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   ].filter((item) => item.value);
   const categorizedDifference = cats.reduce((sum, item) => sum + item.value, 0);
   const historicalInvoiceRiskRows = categoryRows
-    .filter((row) => (row.historicalInvoices?.length ?? 0) > 0)
-    .sort(
-      (a, b) =>
-        (b.historicalInvoices?.reduce((sum, item) => sum + item.amount, 0) ?? 0) -
-        (a.historicalInvoices?.reduce((sum, item) => sum + item.amount, 0) ?? 0),
-    );
+    .filter((row) => historicalInvoiceAmount(row) > 0)
+    .sort((a, b) => historicalInvoiceAmount(b) - historicalInvoiceAmount(a));
   const risks = historicalInvoiceRiskRows.slice(0, 5).map((row) => ({
-    name: row.customer,
-    amount: row.historicalInvoices?.reduce((sum, item) => sum + item.amount, 0) ?? 0,
-    count: row.historicalInvoices?.length ?? 0,
+    name: row.customer || "未填写客户名称",
+    amount: historicalInvoiceAmount(row),
+    count: row.historicalInvoices?.length ?? 1,
     list: [row],
   }));
   const unresolvedCustomersByAmount = [...rows]
@@ -516,17 +525,17 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       <section className="cockpit-three">
         <article className="panel risks">
           <h3>A. 核心风险与异常提醒 Top5</h3>
-          {risks.map((x, i) => (
+          {risks.length ? risks.map((x, i) => (
             <button key={x.name} onClick={() => open(`${HISTORICAL_INVOICE_RISK_TITLE}：${x.name}`, x.list)}>
               <span className={i < 2 ? "danger" : i < 5 ? "warning" : "normal"}>
                 {i + 1}
               </span>
-              <b>{x.name}</b>
-              <em>{money(x.amount)}</em>
+              <b title={x.name}>{x.name}</b>
+              <em title={`历史发票风险金额：${detailMoney(x.amount)}元`}>{money(x.amount)}</em>
               <small>{x.count} 笔历史发票</small>
             </button>
-          ))}
-          <a onClick={() => open(HISTORICAL_INVOICE_RISK_TITLE, historicalInvoiceRiskRows)}>查看全部风险 ›</a>
+          )) : <p className="risk-empty">暂无可识别的历史季度差额发票</p>}
+          {historicalInvoiceRiskRows.length ? <a onClick={() => open(HISTORICAL_INVOICE_RISK_TITLE, historicalInvoiceRiskRows)}>查看全部风险 ›</a> : null}
         </article>
         <article className="panel region-panel">
           <h3>B. 区域对账表现 <small>按未解决金额排序</small></h3>

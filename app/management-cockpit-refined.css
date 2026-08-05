@@ -67,6 +67,7 @@
 
 .risks button { grid-template-columns: 21px minmax(0, 1fr) auto auto; min-height: 38px; padding: 8px 13px; }
 .risks button > span { border-radius: 5px; }.risks a { padding: 12px; font-weight: 700; }
+.risks .risk-empty { margin: 0; padding: 22px 13px; color: #71809a; font-size: 12px; text-align: center; }
 .region-panel .table-wrap { max-height: 265px; }.region-panel .rate { min-width: 94px; }.region-panel .rate i { max-width: 45px; }
 .panel .total td { background: #eff5ff; color: #183f69; }
 
