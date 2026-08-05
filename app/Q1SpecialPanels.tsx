@@ -25,8 +25,12 @@ const cell = (row: unknown[], headers: string[], header: string) => {
   );
   return index < 0 ? "" : String(row[index] ?? "").trim();
 };
+const isReconciledAmount = (value: string) => {
+  const normalizedValue = value.replace(/\s/g, "");
+  return !["", "—", "-", "未填写", "未对账", "null", "undefined"].includes(normalizedValue);
+};
 const filled = (row: unknown[], headers: string[]) =>
-  cell(row, headers, "\u5ba2\u6237\u8d26\u9762\u91d1\u989d") !== "";
+  isReconciledAmount(cell(row, headers, "\u5ba2\u6237\u8d26\u9762\u91d1\u989d"));
 const materialCell = (row: unknown[], headers: string[], aliases: readonly string[]) =>
   aliases.map((header) => cell(row, headers, header)).find(Boolean) ?? "";
 // The provided-materials sheet uses a strict yes/no convention: only "\u5df2\u63d0\u4f9b" or "\u662f" is collected.

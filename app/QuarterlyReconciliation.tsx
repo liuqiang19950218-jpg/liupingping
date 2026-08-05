@@ -169,7 +169,10 @@ const num = (value: unknown) => {
   const n = Number(String(value ?? "").replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
 };
-const hasValue = (value: unknown) => String(value ?? "").trim() !== "";
+const hasValue = (value: unknown) => {
+  const normalizedValue = String(value ?? "").replace(/\s/g, "");
+  return !["", "—", "-", "未填写", "未对账", "null", "undefined"].includes(normalizedValue);
+};
 const money = (value: number) =>
   value.toLocaleString("zh-CN", {
     minimumFractionDigits: 2,
@@ -392,7 +395,7 @@ const backfillClearedStatus = (source: LocalSheet) => {
   const rows = source.rows.map((sourceRow, id) => {
     const detail = source.details?.[String(id)];
     const customerValue = detail?.customerAmount ?? sourceRow[customerAt];
-    const filled = String(customerValue ?? "").trim() !== "";
+    const filled = hasValue(customerValue);
     const row = [...sourceRow];
     const difference = num(row[companyAt]) - num(customerValue);
     const total = detail
