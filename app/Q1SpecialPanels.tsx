@@ -5,13 +5,13 @@ import { selectedQuarter, sheetForQuarter } from "./quarter-storage";
 import "./q1-special-panels.css";
 
 type SavedSheet = { headers?: string[]; rows?: unknown[][] };
-type CollectionRow = { name: string; aliases: readonly string[]; completed: number; total: number; pending: string };
+type CollectionRow = { name: string; aliases: readonly string[]; completed: number; total: number; pending: string; effective?: number };
 type LostRow = { region: string; customer: string; amount: number; note: string };
 type UnaccountedRow = { region: string; customer: string; note: string };
 
 const MATERIALS = [
-  { name: "\u5bf9\u8d26\u51fd", aliases: ["\u5bf9\u8d26\u51fd"] },
-  { name: "\u786e\u8ba4\u51fd", aliases: ["\u5bf9\u8d26\u786e\u8ba4\u51fd", "\u786e\u8ba4\u51fd"] },
+  { name: "\u5bf9\u8d26\u51fd", aliases: ["\u5bf9\u8d26\u51fd"], kind: "letter" },
+  { name: "\u786e\u8ba4\u51fd", aliases: ["\u5bf9\u8d26\u786e\u8ba4\u51fd", "\u786e\u8ba4\u51fd"], kind: "confirmation" },
   { name: "SPD\u786e\u8ba4\u8868", aliases: ["SPD\u786e\u8ba4\u8868", "SPD\u786e\u8ba4\u51fd"] },
   { name: "SPD\u5e93\u5b58\u786e\u8ba4\u51fd", aliases: ["SPD\u5e93\u5b58\u786e\u8ba4\u51fd"] },
   { name: "\u5728\u9014\u8bc1\u660e", aliases: ["\u5728\u9014\u8bc1\u660e"] },
@@ -31,6 +31,16 @@ const materialCell = (row: unknown[], headers: string[], aliases: readonly strin
   aliases.map((header) => cell(row, headers, header)).find(Boolean) ?? "";
 // The provided-materials sheet uses a strict yes/no convention: only "\u5df2\u63d0\u4f9b" or "\u662f" is collected.
 const provided = (value: string) => ["\u5df2\u63d0\u4f9b", "\u662f"].includes(value.replace(/\s/g, ""));
+const normalized = (value: string) => value.replace(/\s/g, "");
+const replied = (value: string) => ["\u5df2\u76d6\u7ae0", "\u672a\u76d6\u7ae0"].includes(normalized(value));
+const confirmationReplied = (value: string) =>
+  ["\u5df2\u56de\u51fd", "\u662f", "\u5df2\u63d0\u4f9b"].includes(normalized(value));
+const collected = (name: string, value: string) =>
+  name === "\u5bf9\u8d26\u51fd"
+    ? replied(value)
+    : name === "\u786e\u8ba4\u51fd"
+      ? confirmationReplied(value)
+      : provided(value);
 const money = (value: number) =>
   value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
 const numberOf = (value: string) => {
@@ -45,22 +55,25 @@ function specialData(sheet?: SavedSheet) {
   const regions = [...new Set(reconciled.map((row) => cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199"))];
   const collection: CollectionRow[] = MATERIALS.map(({ name, aliases }) => {
     const completed = reconciled.filter((row) =>
-      provided(materialCell(row, headers, aliases)),
+      collected(name, materialCell(row, headers, aliases)),
     ).length;
+    const effective = name === "\u5bf9\u8d26\u51fd"
+      ? reconciled.filter((row) => normalized(materialCell(row, headers, aliases)) === "\u5df2\u76d6\u7ae0").length
+      : undefined;
     const pending = regions
       .map((region) => {
         const regional = reconciled.filter(
           (row) => (cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199") === region,
         );
-        const collected = regional.filter((row) =>
-          provided(materialCell(row, headers, aliases)),
+        const received = regional.filter((row) =>
+          collected(name, materialCell(row, headers, aliases)),
         ).length;
-        const rate = regional.length ? (collected / regional.length) * 100 : 0;
+        const rate = regional.length ? (received / regional.length) * 100 : 0;
         return rate < 100 ? `${region}${rate.toFixed(0)}%` : "";
       })
       .filter(Boolean)
       .join("\u3001");
-    return { name, aliases, completed, total: reconciled.length, pending: pending || "\u5176\u4ed6\u533a\u57df100%" };
+    return { name, aliases, completed, total: reconciled.length, pending: pending || "\u5176\u4ed6\u533a\u57df100%", effective };
   });
   const lost: LostRow[] = reconciled
     .map((row) => ({
@@ -129,8 +142,8 @@ export function Q1SpecialPanels() {
       </div>
       {tab === "collection" ? (
         <table>
-          <thead><tr><th>资料类型</th><th>已收集 / 应收集</th><th>需跟进区域与收集率</th></tr></thead>
-          <tbody>{data.collection.map((item) => <tr key={item.name}><td>{item.name}</td><td>{item.completed} / {item.total} ({item.total ? ((item.completed / item.total) * 100).toFixed(1) : "0.0"}%)</td><td>{item.pending}</td></tr>)}</tbody>
+          <thead><tr><th>资料类型</th><th>已收集 / 应收集</th><th>有效回函率</th><th>需跟进区域与收集率</th></tr></thead>
+          <tbody>{data.collection.map((item) => <tr key={item.name}><td>{item.name}</td><td>{item.completed} / {item.total} ({item.total ? ((item.completed / item.total) * 100).toFixed(1) : "0.0"}%)</td><td>{item.effective === undefined ? "—" : `${item.effective} / ${item.total} (${item.total ? ((item.effective / item.total) * 100).toFixed(1) : "0.0"}%)`}</td><td>{item.pending}</td></tr>)}</tbody>
         </table>
       ) : tab === "lost" ? (
         <VerticalScrollList label="丢票情况"><div className="loss-list">{data.lost.length ? data.lost.map((item) => <article key={`${item.region}-${item.customer}`}><b>{item.region}：{item.customer}</b><span>丢票金额 {money(item.amount)} 元{item.note ? `；${item.note}` : ""}</span></article>) : <p className="special-empty">当前季度暂无丢票差额明细。</p>}</div></VerticalScrollList>
