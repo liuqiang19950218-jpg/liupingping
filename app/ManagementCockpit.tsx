@@ -42,6 +42,7 @@ const hasInvoiceException = (r: CockpitRow) =>
 const LOST_DETAIL_TITLE = "\u4e22\u7968";
 const AMOUNT_RATE_DETAIL_TITLE = "\u91d1\u989d\u5bf9\u8d26\u5b8c\u6210\u7387";
 const CUSTOMER_RATE_DETAIL_TITLE = "\u5ba2\u6237\u5b8c\u6210\u7387";
+const HISTORICAL_INVOICE_RISK_TITLE = "\u5386\u53f2\u5b63\u5ea6\u5dee\u989d\u53d1\u7968\u98ce\u9669";
 const needsFollowUp = (r: CockpitRow) => r.followStatus !== "已解决";
 // Keep the cockpit aligned with the execution page: a reconciliation only
 // becomes an unresolved item after a first solution has been recorded, and it
@@ -254,21 +255,19 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     },
   ].filter((item) => item.value);
   const categorizedDifference = cats.reduce((sum, item) => sum + item.value, 0);
-  const risks = [
-    "四类差额合计不一致",
-    "在途发票校验失败",
-    "退回发票校验失败",
-    "连续两季度未对清",
-    "其他无票占比过高",
-    "逾期未解决",
-    "未填写解决方案",
-    "存在重复发票",
-  ]
-    .map((name) => ({
-      name,
-      list: rows.filter((r) => getRisks(r).includes(name)),
-    }))
-    .filter((x) => x.list.length);
+  const historicalInvoiceRiskRows = categoryRows
+    .filter((row) => (row.historicalInvoices?.length ?? 0) > 0)
+    .sort(
+      (a, b) =>
+        (b.historicalInvoices?.reduce((sum, item) => sum + item.amount, 0) ?? 0) -
+        (a.historicalInvoices?.reduce((sum, item) => sum + item.amount, 0) ?? 0),
+    );
+  const risks = historicalInvoiceRiskRows.slice(0, 5).map((row) => ({
+    name: row.customer,
+    amount: row.historicalInvoices?.reduce((sum, item) => sum + item.amount, 0) ?? 0,
+    count: row.historicalInvoices?.length ?? 0,
+    list: [row],
+  }));
   const priority = [...rows]
       .filter(isPendingFollowUp)
       .sort((a, b) => score(b) - score(a) || b.difference - a.difference),
@@ -515,20 +514,16 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         <article className="panel risks">
           <h3>A. 核心风险与异常提醒 Top5</h3>
           {risks.map((x, i) => (
-            <button key={x.name} onClick={() => open(x.name, x.list)}>
+            <button key={x.name} onClick={() => open(`${HISTORICAL_INVOICE_RISK_TITLE}：${x.name}`, x.list)}>
               <span className={i < 2 ? "danger" : i < 5 ? "warning" : "normal"}>
                 {i + 1}
               </span>
               <b>{x.name}</b>
-              <em>{x.list.length} 家</em>
-              <small>
-                {x.list.some((r) => level(r) === "高风险")
-                  ? "高风险"
-                  : "需关注"}
-              </small>
+              <em>{money(x.amount)}</em>
+              <small>{x.count} 笔历史发票</small>
             </button>
           ))}
-          <a onClick={() => open("全部风险客户", priority)}>查看全部风险 ›</a>
+          <a onClick={() => open(HISTORICAL_INVOICE_RISK_TITLE, historicalInvoiceRiskRows)}>查看全部风险 ›</a>
         </article>
         <article className="panel region-panel">
           <h3>B. 区域对账表现 <small>按未解决金额排序</small></h3>
@@ -786,6 +781,45 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                         <td className={`detail-money ${row.unresolved ? "difference-money" : "muted-money"}`}>{detailMoney(row.unresolved)}</td>
                       </tr>;
                     })}
+                  </tbody>
+                </table>
+              ) : modal.title.startsWith(HISTORICAL_INVOICE_RISK_TITLE) ? (
+                <table className="cockpit-detail-table cockpit-amount-reason-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">序号</th>
+                      <th scope="col">季度</th>
+                      <th scope="col">账套</th>
+                      <th scope="col">区域</th>
+                      <th scope="col">客户名称</th>
+                      <th scope="col">差额类型</th>
+                      <th scope="col">开票日期</th>
+                      <th scope="col">发票号</th>
+                      <th scope="col">历史发票金额</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modal.rows
+                      .flatMap((row) =>
+                        (row.historicalInvoices ?? []).map((invoice) => ({
+                          row,
+                          invoice,
+                        })),
+                      )
+                      .sort((a, b) => b.invoice.amount - a.invoice.amount)
+                      .map(({ row, invoice }, index) => (
+                        <tr key={`${row.id}-${invoice.category}-${invoice.invoice}-${index}`}>
+                          <td>{index + 1}</td>
+                          <td>{row.quarter}</td>
+                          <td>{row.accountSet || "—"}</td>
+                          <td>{row.region}</td>
+                          <td className="detail-customer" title={row.customer}>{row.customer}</td>
+                          <td>{invoice.category}</td>
+                          <td>{invoice.date}</td>
+                          <td>{invoice.invoice}</td>
+                          <td className="detail-money difference-money">{detailMoney(invoice.amount)}</td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               ) : modal.title === LOST_DETAIL_TITLE ? (

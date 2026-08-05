@@ -35,6 +35,12 @@ export type CockpitRow = {
   otherInvoiceFail?: boolean;
   consecutiveUnclear?: boolean;
   duplicateInvoice?: boolean;
+  historicalInvoices?: Array<{
+    category: string;
+    invoice: string;
+    date: string;
+    amount: number;
+  }>;
 };
 const regions = ["南京", "南通", "无锡", "扬州", "泰州", "苏州"],
   owners = ["李小明", "王芳", "陈强", "刘洋", "赵蕾", "张敏"];
@@ -507,6 +513,10 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
     };
     const totalOf = (list: LiveInvoice[] | undefined) =>
       list?.reduce((total, item) => total + numberOf(item.amount), 0) ?? 0;
+    const invoiceYear = (value: string | undefined) => {
+      const match = String(value ?? "").match(/(?:19|20)\d{2}/);
+      return match ? Number(match[0]) : 0;
+    };
     return saved.rows
       .map((entry, index) => {
         const detail = saved.details?.[String(index)],
@@ -519,6 +529,30 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           time = detail?.resolutionTime || String(entry[timeAt] ?? ""),
           hasOtherDetail = Boolean(
             detail?.otherInvoice?.length || detail?.other?.length,
+          ),
+          historicalInvoices = (
+            [
+              { category: "\u5728\u9014", list: detail?.transit },
+              { category: "\u9000\u7968", list: detail?.returned },
+              { category: "\u4e22\u7968", list: detail?.lost },
+              { category: "\u4eea\u5668\u8bbe\u5907", list: detail?.instrument },
+              { category: "\u5176\u4ed6\uff08\u6709\u53d1\u7968\uff09", list: detail?.otherInvoice },
+            ] as Array<{ category: string; list: LiveInvoice[] | undefined }>
+          ).flatMap((source) =>
+            (source.list ?? [])
+              .filter(
+                (item) =>
+                  Boolean(item.invoice) &&
+                  Boolean(item.date) &&
+                  hasValue(item.amount) &&
+                  invoiceYear(item.date) <= 2025,
+              )
+              .map((item) => ({
+                category: source.category,
+                invoice: String(item.invoice),
+                date: String(item.date),
+                amount: numberOf(item.amount),
+              })),
           );
         return {
           id: `local-${index}`,
@@ -565,6 +599,7 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           otherInvoiceFail: incomplete(detail?.otherInvoice),
           consecutiveUnclear: false,
           duplicateInvoice: false,
+          historicalInvoices,
         };
       })
       .filter((item) => item.customer.trim() !== "");
