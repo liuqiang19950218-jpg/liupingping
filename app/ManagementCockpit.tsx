@@ -221,7 +221,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       unclear = rows.length - clear;
     return {
       total: rows.length,
-      reconciliationTotal: rows.reduce((sum, row) => sum + row.companyReceivable, 0),
+      // 应对账总额统一以客户账面金额为准，不再使用公司应收金额。
+      reconciliationTotal: rows.reduce((sum, row) => sum + row.customerBook, 0),
       amountRate: rows.reduce((sum, row) => sum + (row.cleared ? row.companyReceivable : 0), 0) / Math.max(rows.reduce((sum, row) => sum + row.companyReceivable, 0), 1) * 100,
       pendingConfirmation: rows.filter((row) => !row.cleared).reduce((sum, row) => sum + Math.abs(row.difference), 0),
       unaccounted: unaccountedRows.length,
@@ -399,7 +400,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     URL.revokeObjectURL(a.href);
   };
   const metrics = [
-    { name: "应对账总额", value: money(m.reconciliationTotal), list: rows, tone: "blue", icon: "¥", note: "本季度应收口径" },
+    { name: "应对账总额", value: money(m.reconciliationTotal), list: rows, tone: "blue", icon: "¥", note: "客户账面金额总额" },
     { name: AMOUNT_RATE_DETAIL_TITLE, value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", icon: "✓", note: "较上季度 +0.6%" },
     { name: CUSTOMER_RATE_DETAIL_TITLE, value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", icon: "◎", note: "已对清客户占比" },
     { name: "未对清金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", icon: "⌛", note: "未对清客户差额" },
