@@ -25,7 +25,10 @@ export type OwnerItem = { name: string; count: number; overdue: number; high: nu
 export type AgeItem = { name: string; count: number; ratio: number; color: string };
 
 const STAGES = [
-  ["核查中", "#20a8d8"], ["等待销售处理", "#25bda5"], ["待财务调账", "#f6bd16"],
+  ["待销售走申请", "#1677ff"],
+  ["待销售去医院处理", "#25bda5"],
+  ["待财务调账", "#f6bd16"],
+  ["待核查", "#20a8d8"],
   ["已关闭", "#b8bfd8"],
 ] as const;
 
@@ -95,7 +98,10 @@ export function buildProblemDashboard(items: ReconciliationIssue[], closedItems:
     return { name, count, ratio: total ? count / total : 0, color };
   }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN"));
   const priority = topPendingIssuesByDifference(items);
-  const waitingCustomer = items.filter((item) => item.stage === "等待销售处理");
+  const waitingCustomer = items.filter(
+    (item) =>
+      item.stage === "待销售走申请" || item.stage === "待销售去医院处理",
+  );
   const waitingInternal = items.filter((item) => item.stage === "待财务调账");
   const high = items.filter((item) => item.riskLevel === "高风险");
   const finance = summary.finance;

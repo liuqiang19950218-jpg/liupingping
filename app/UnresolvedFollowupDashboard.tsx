@@ -9,6 +9,14 @@ import {
 import "./unresolved-followup.css";
 
 type FollowUp = { time: string; solution: string };
+const PROCESS_STAGES = [
+  "待销售走申请",
+  "待销售去医院处理",
+  "待财务调账",
+  "待核查",
+  "已关闭",
+] as const;
+type ProcessStage = (typeof PROCESS_STAGES)[number];
 type Detail = {
   resolutionSolution?: string;
   resolutionTime?: string;
@@ -16,6 +24,7 @@ type Detail = {
   reopened?: boolean;
   followUps?: FollowUp[];
   financeAttention?: "无需关注" | "一般关注" | "需财务复核";
+  processStage?: Exclude<ProcessStage, "已关闭">;
 };
 type Sheet = {
   headers: string[];
@@ -36,6 +45,7 @@ const TABLE_FILTER_COLUMNS = [
   { key: "latest", label: "最近跟进时间" },
   { key: "followUp", label: "跟进解决方案" },
   { key: "finance", label: "财务关注" },
+  { key: "stage", label: "问题处理阶段" },
 ] as const;
 type TableFilterKey = (typeof TABLE_FILTER_COLUMNS)[number]["key"];
 type Item = {
@@ -51,6 +61,7 @@ type Item = {
   followUps: FollowUp[];
   resolved: boolean;
   financeAttention?: Finance;
+  processStage?: Exclude<ProcessStage, "已关闭">;
 };
 
 const ALL = "全部区域";
@@ -88,6 +99,15 @@ const text = (item: Item) =>
     " ",
   );
 const financeOf = (item: Item): Finance => item.financeAttention ?? "无需关注";
+const stageOf = (item: Item): ProcessStage => {
+  if (item.resolved) return "已关闭";
+  if (item.processStage) return item.processStage;
+  const content = `${item.firstSolution} ${text(item)}`;
+  if (content.includes("调账") || content.includes("财务")) return "待财务调账";
+  if (content.includes("医院")) return "待销售去医院处理";
+  if (content.includes("申请")) return "待销售走申请";
+  return "待核查";
+};
 const riskOf = (item: Item): Risk => {
   const days = dayDistance(latest(item)) ?? 0;
   if (
@@ -121,6 +141,8 @@ const tableFilterValue = (item: Item, key: TableFilterKey) => {
       return item.followUps.map((entry) => entry.solution).join("；");
     case "finance":
       return financeOf(item);
+    case "stage":
+      return stageOf(item);
   }
 };
 function toItems(source?: Sheet): Item[] {
@@ -160,6 +182,7 @@ function toItems(source?: Sheet): Item[] {
         firstSolution,
         followUps,
         financeAttention: detail.financeAttention,
+        processStage: detail.processStage,
         resolved:
           detail.resolved === true ||
           (Boolean(firstSolution && !firstTime) && detail.reopened !== true),
@@ -289,6 +312,7 @@ export function UnresolvedFollowupDashboard() {
   const [search, setSearch] = useState("");
   const [risk, setRisk] = useState("全部");
   const [finance, setFinance] = useState("全部");
+  const [processStage, setProcessStage] = useState("全部");
   const [tableFilters, setTableFilters] = useState<
     Partial<Record<TableFilterKey, string>>
   >({});
@@ -311,12 +335,21 @@ export function UnresolvedFollowupDashboard() {
     if (initialFilter.region) setRegion(initialFilter.region);
     if (initialFilter.owner || initialFilter.customer) setQuery(initialFilter.owner || initialFilter.customer || "");
     if (initialFilter.filter === "finance") setFinance("需财务复核");
+    if (PROCESS_STAGES.includes(initialFilter.stage as ProcessStage)) {
+      setProcessStage(initialFilter.stage);
+      setTab(initialFilter.stage === "已关闭" ? "resolved" : "pending");
+    }
     const applyDashboardFilter = (event: Event) => {
       const filter = (event as CustomEvent<Record<string, string>>).detail;
       if (!filter) return;
       if (filter.region) setRegion(filter.region);
       if (filter.owner || filter.customer) setQuery(filter.owner || filter.customer || "");
       if (filter.filter === "finance") setFinance("需财务复核");
+      if (PROCESS_STAGES.includes(filter.stage as ProcessStage)) {
+        setProcessStage(filter.stage);
+        setTab(filter.stage === "已关闭" ? "resolved" : "pending");
+        return;
+      }
       if (filter.filter === "overdue") setQuery("");
       setTab("pending");
     };
@@ -340,7 +373,7 @@ export function UnresolvedFollowupDashboard() {
   }, [query]);
   useEffect(() => {
     setPage(1);
-  }, [region, search, risk, finance, tableFilters, tab, pageSize]);
+  }, [region, search, risk, finance, processStage, tableFilters, tab, pageSize]);
   const pending = useMemo(
     () => items.filter((item) => !item.resolved),
     [items],
@@ -362,6 +395,7 @@ export function UnresolvedFollowupDashboard() {
               .includes(search)) &&
           (risk === "全部" || riskOf(item) === risk) &&
           (finance === "全部" || financeOf(item) === finance) &&
+          (processStage === "全部" || stageOf(item) === processStage) &&
           Object.entries(tableFilters).every(([key, filter]) =>
             !filter ||
             tableFilterValue(item, key as TableFilterKey)
@@ -369,7 +403,7 @@ export function UnresolvedFollowupDashboard() {
               .includes(filter.trim().toLocaleLowerCase()),
           ),
       ),
-    [base, region, search, risk, finance, tableFilters],
+    [base, region, search, risk, finance, processStage, tableFilters],
   );
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const rows = visible.slice((page - 1) * pageSize, page * pageSize);
@@ -467,6 +501,7 @@ export function UnresolvedFollowupDashboard() {
     setQuery("");
     setRisk("全部");
     setFinance("全部");
+    setProcessStage("全部");
     setTableFilters({});
     setFilterColumns([]);
   };
@@ -505,6 +540,13 @@ export function UnresolvedFollowupDashboard() {
   const updateFinanceAttention = (item: Item, financeAttention: Finance) => {
     saveDetail(item.id, { financeAttention });
     setMessage(`已将${item.customer}设置为${financeAttention}。`);
+  };
+  const updateProcessStage = (
+    item: Item,
+    nextStage: Exclude<ProcessStage, "已关闭">,
+  ) => {
+    saveDetail(item.id, { processStage: nextStage });
+    setMessage(`已将${item.customer}设置为${nextStage}。`);
   };
   const exportRows = () => {
     const header = [
@@ -672,6 +714,21 @@ export function UnresolvedFollowupDashboard() {
               <option>一般关注</option>
               <option>无需关注</option>
             </select>
+            <select
+              value={processStage}
+              aria-label="筛选问题处理阶段"
+              onChange={(event) => {
+                const nextStage = event.target.value;
+                setProcessStage(nextStage);
+                if (nextStage === "已关闭") setTab("resolved");
+                else if (nextStage !== "全部") setTab("pending");
+              }}
+            >
+              <option>全部</option>
+              {PROCESS_STAGES.map((stage) => (
+                <option key={stage}>{stage}</option>
+              ))}
+            </select>
             <button type="button" className="uf-secondary" onClick={reset}>
               清空筛选
             </button>
@@ -833,6 +890,32 @@ export function UnresolvedFollowupDashboard() {
                           <option value="需财务复核">需财务复核</option>
                         </select>
                       </td>
+                      <td>
+                        {item.resolved ? (
+                          <span className="uf-stage-closed">已关闭</span>
+                        ) : (
+                          <select
+                            aria-label={`${item.customer} 问题处理阶段`}
+                            className={`uf-stage-select ${stageOf(item) === "待财务调账" ? "is-finance" : ""}`}
+                            value={stageOf(item)}
+                            onChange={(event) =>
+                              updateProcessStage(
+                                item,
+                                event.target.value as Exclude<
+                                  ProcessStage,
+                                  "已关闭"
+                                >,
+                              )
+                            }
+                          >
+                            {PROCESS_STAGES.filter(
+                              (stage) => stage !== "已关闭",
+                            ).map((stage) => (
+                              <option key={stage}>{stage}</option>
+                            ))}
+                          </select>
+                        )}
+                      </td>
                       <td className="uf-actions">
                         <button
                           type="button"
@@ -875,7 +958,7 @@ export function UnresolvedFollowupDashboard() {
                 })
               ) : (
                 <tr>
-                  <td className="uf-empty" colSpan={11}>
+                  <td className="uf-empty" colSpan={12}>
                     没有符合当前条件的数据。
                     <button type="button" onClick={reset}>
                       清空筛选

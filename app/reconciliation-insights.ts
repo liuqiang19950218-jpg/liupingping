@@ -1,7 +1,12 @@
 import { type CockpitRow, cockpitRows, latestQuarterlyCockpitRows } from "./cockpit-data";
 
 export type RiskLevel = "高风险" | "中风险" | "低风险";
-export type IssueStage = "等待销售处理" | "待财务调账" | "核查中" | "已关闭";
+export type IssueStage =
+  | "待销售走申请"
+  | "待销售去医院处理"
+  | "待财务调账"
+  | "待核查"
+  | "已关闭";
 
 export type ReconciliationIssue = CockpitRow & {
   riskLevel: RiskLevel;
@@ -24,11 +29,19 @@ export const getOverdueDays = (date: string) => {
 };
 
 export const issueStageOf = (row: CockpitRow): IssueStage => {
-  if (row.followStatus.includes("财务")) return "待财务调账";
-  if (row.followStatus.includes("资料")) return "核查中";
   if (row.followStatus.includes("已解决")) return "已关闭";
-  if (!row.solution) return "核查中";
-  return "等待销售处理";
+  if (
+    row.processStage === "待销售走申请" ||
+    row.processStage === "待销售去医院处理" ||
+    row.processStage === "待财务调账" ||
+    row.processStage === "待核查"
+  )
+    return row.processStage;
+  const content = `${row.followStatus} ${row.solution} ${row.cause}`;
+  if (content.includes("财务") || content.includes("调账")) return "待财务调账";
+  if (content.includes("医院")) return "待销售去医院处理";
+  if (content.includes("申请")) return "待销售走申请";
+  return "待核查";
 };
 
 export const issueRiskOf = (row: CockpitRow): RiskLevel => {

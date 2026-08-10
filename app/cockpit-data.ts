@@ -35,6 +35,7 @@ export type CockpitRow = {
   otherInvoiceFail?: boolean;
   consecutiveUnclear?: boolean;
   duplicateInvoice?: boolean;
+  processStage?: string;
   historicalInvoices?: Array<{
     category: string;
     invoice: string;
@@ -456,6 +457,7 @@ type LiveDetail = {
   instrument?: LiveInvoice[];
   otherInvoice?: LiveInvoice[];
   other?: LiveInvoice[];
+  processStage?: string;
 };
 type LiveSheet = {
   headers?: string[];
@@ -609,6 +611,7 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           otherInvoiceFail: incomplete(detail?.otherInvoice),
           consecutiveUnclear: false,
           duplicateInvoice: false,
+          processStage: detail?.processStage,
           historicalInvoices,
         };
       })
