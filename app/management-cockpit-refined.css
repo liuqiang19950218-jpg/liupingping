@@ -74,6 +74,31 @@
 .risks button b { display: block; overflow: hidden; color: #163c68; font-size: 12px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .risks button em { color: #f04438; font-size: 12px; font-style: normal; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .risks .risk-empty { margin: 0; padding: 22px 13px; color: #71809a; font-size: 12px; text-align: center; }
+.difference-aging-panel { min-height: 299px; }
+.difference-aging-panel h3 { gap: 7px; }
+.aging-info { display: inline-grid; width: 15px; height: 15px; place-items: center; border: 1px solid #9aabc1; border-radius: 50%; color: #6d819c; font-size: 10px; font-style: normal; cursor: help; }
+.aging-list { display: grid; gap: 3px; padding: 4px 14px 8px; }
+.aging-row { display: grid; grid-template-columns: 87px minmax(44px, 1fr) 63px 40px; gap: 7px; align-items: center; width: 100%; min-height: 45px; border: 0; border-bottom: 1px solid #edf2f7; background: transparent; padding: 4px 0; color: #183f69; cursor: pointer; text-align: left; }
+.aging-row:last-child { border-bottom: 0; }
+.aging-row:hover:not(:disabled) { background: #f6f9fe; }
+.aging-row:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
+.aging-row:disabled { cursor: default; }
+.aging-name { display: flex; flex-direction: column; gap: 2px; }
+.aging-name strong { font-size: 12px; font-variant-numeric: tabular-nums; }
+.aging-name i { font-size: 10px; font-style: normal; }
+.aging-track { display: block; height: 8px; overflow: hidden; border-radius: 999px; background: #edf2f7; }
+.aging-track span { display: block; height: 100%; border-radius: inherit; background: #2f80ed; transition: width .2s ease; }
+.aging-row.attention .aging-track span { background: #f5b82e; }.aging-row.highAttention .aging-track span { background: #ff7a1a; }.aging-row.highRisk .aging-track span { background: #f04444; }
+.aging-row.normal .aging-name i { color: #16a66a; }.aging-row.attention .aging-name i { color: #d99600; }.aging-row.highAttention .aging-name i { color: #ff7a1a; }.aging-row.highRisk .aging-name i { color: #f04444; }
+.aging-amount { color: #153962; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }.aging-row.highRisk .aging-amount { color: #f04444; }
+.aging-percent { color: #7b8da5; font-size: 11px; font-variant-numeric: tabular-nums; text-align: right; }
+.aging-footnote { margin: 4px 14px 12px; border-top: 1px solid #eef2f7; padding-top: 9px; color: #71809a; font-size: 10px; line-height: 1.45; }
+.aging-detail-dialog { width: min(1100px, 76vw); }
+.cockpit-detail-head h2 em { margin-left: 6px; color: #f08a16; font-size: 12px; font-style: normal; font-weight: 700; }
+.aging-risk-notice { margin: 0 16px 10px; border: 1px solid #dce9ff; border-radius: 6px; background: #f3f8ff; padding: 8px 10px; color: #315b88; font-size: 12px; }.aging-risk-notice.attention { border-color: #ffe2a7; background: #fff9ec; color: #ae7200; }.aging-risk-notice.highAttention { border-color: #ffd6b6; background: #fff5ec; color: #d86700; }.aging-risk-notice.highRisk { border-color: #ffd0d0; background: #fff2f2; color: #d9363e; }
+.aging-drawer-filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 0 16px 10px; }.aging-drawer-filters select,.aging-drawer-filters input { min-width: 0; height: 32px; border: 1px solid #dbe5f1; border-radius: 5px; background: #fff; padding: 0 8px; color: #284566; font-size: 12px; }.aging-drawer-filters input:focus,.aging-drawer-filters select:focus { outline: 2px solid #b9d8ff; border-color: #1677ff; }
+.aging-drawer-summary { margin: 0 16px 8px; color: #6f8198; font-size: 12px; font-variant-numeric: tabular-nums; }
+.cockpit-aging-detail-table { min-width: 1000px; }.aging-open-reconciliation { border: 1px solid #bcd8ff; border-radius: 4px; background: #fff; padding: 4px 7px; color: #1677ff; font-size: 11px; cursor: pointer; white-space: nowrap; }.aging-open-reconciliation:hover { background: #edf5ff; }
 .region-panel .table-wrap { max-height: 265px; }.region-panel .rate { min-width: 94px; }.region-panel .rate i { max-width: 45px; }
 .panel .total td { background: #eff5ff; color: #183f69; }
 

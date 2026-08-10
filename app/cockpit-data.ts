@@ -36,6 +36,13 @@ export type CockpitRow = {
   consecutiveUnclear?: boolean;
   duplicateInvoice?: boolean;
   processStage?: string;
+  /** Invoice-level difference details, sourced from the quarterly reconciliation record. */
+  differenceInvoices?: Array<{
+    category: string;
+    invoice: string;
+    date: string;
+    amount: number;
+  }>;
   historicalInvoices?: Array<{
     category: string;
     invoice: string;
@@ -539,7 +546,7 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           hasOtherDetail = Boolean(
             detail?.otherInvoice?.length || detail?.other?.length,
           ),
-          historicalInvoices = (
+          differenceInvoices = (
             [
               { category: "\u5728\u9014", list: detail?.transit },
               { category: "\u9000\u7968", list: detail?.returned },
@@ -553,8 +560,7 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
                 (item) =>
                   Boolean(item.invoice) &&
                   Boolean(item.date) &&
-                  hasValue(item.amount) &&
-                  invoiceYear(item.date) <= 2025,
+                  hasValue(item.amount),
               )
               .map((item) => ({
                 category: source.category,
@@ -562,6 +568,11 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
                 date: String(item.date),
                 amount: numberOf(item.amount),
               })),
+          );
+          // The historical-risk view deliberately uses only prior-year invoices,
+          // while the aging view needs every invoice in the selected quarter.
+          const historicalInvoices = differenceInvoices.filter(
+            (item) => invoiceYear(item.date) <= 2025,
           );
         return {
           id: `local-${index}`,
@@ -612,6 +623,7 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           consecutiveUnclear: false,
           duplicateInvoice: false,
           processStage: detail?.processStage,
+          differenceInvoices,
           historicalInvoices,
         };
       })

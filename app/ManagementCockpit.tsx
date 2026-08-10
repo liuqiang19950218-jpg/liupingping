@@ -4,6 +4,13 @@ import { CockpitRow, cockpitRows, latestQuarterlyCockpitRows, updateDashboardSna
 import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
 import { CockpitTrendChart } from "./CockpitTrendChart";
 import { DifferenceStructureChart } from "./DifferenceStructureChart";
+import {
+  AgingBucket,
+  AgingDetailDrawer,
+  buildDifferenceAgingBuckets,
+  DifferenceAgingAnalysisCard,
+  DifferenceAgingDetail,
+} from "./DifferenceAgingAnalysis";
 import "./management-cockpit.css";
 import "./management-cockpit-refined.css";
 type Props = {
@@ -123,6 +130,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     [modal, setModal] = useState<{ title: string; rows: CockpitRow[] } | null>(
       null,
     ),
+    [agingBucket, setAgingBucket] = useState<AgingBucket | null>(null),
     [range, setRange] = useState(4);
   const [availableQuarters, setAvailableQuarters] = useState<string[]>([]);
   const [dataVersion, setDataVersion] = useState(0);
@@ -232,6 +240,10 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     };
   }, [rows, unaccountedRows, categoryRows]);
   const currentDetailRows = categoryRows.length ? categoryRows : rows;
+  const agingBuckets = useMemo(
+    () => buildDifferenceAgingBuckets(currentDetailRows, f.quarter),
+    [currentDetailRows, f.quarter],
+  );
   const lostDetails = currentDetailRows.filter((row) => (row.lost ?? 0) !== 0);
   const regionRows = regions
     .map((region) => {
@@ -357,6 +369,12 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     },
     open = (title: string, list: CockpitRow[]) =>
       setModal({ title, rows: list });
+  const openAgingReconciliation = (detail: DifferenceAgingDetail) => {
+    localStorage.setItem("reconciliation-detail-target", JSON.stringify(detail));
+    selectQuarter(detail.quarter);
+    window.dispatchEvent(new CustomEvent("reconciliation-open-current-detail", { detail }));
+    setAgingBucket(null);
+  };
   const download = () => {
     const data = [
         "客户,区域,账套,负责人,差额,状态,风险等级",
@@ -539,7 +557,9 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         ))}
       </section>
       <section className="cockpit-three">
-        <article className="panel risks">
+        <>
+        <DifferenceAgingAnalysisCard buckets={agingBuckets} formatAmount={money} onOpen={setAgingBucket} />
+        <article className="panel risks" style={{ display: "none" }} aria-hidden="true">
           <h3>A. 核心风险与异常提醒 Top5</h3>
           <div className="risk-column-head" aria-hidden="true">
             <span>序号</span>
@@ -561,6 +581,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           )) : <p className="risk-empty">暂无可识别的历史季度差额发票</p>}
           {historicalInvoiceRiskRows.length ? <a onClick={() => open(HISTORICAL_INVOICE_RISK_TITLE, historicalInvoiceRiskRows)}>查看全部风险 ›</a> : null}
         </article>
+        </>
         <article className="panel region-panel">
           <h3>B. 区域对账表现 <small>按未解决金额排序</small></h3>
           <div className="table-wrap">
@@ -769,6 +790,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           </span>
         </section>
       )}
+      {agingBucket && <AgingDetailDrawer bucket={agingBucket} onClose={() => setAgingBucket(null)} onOpenReconciliation={openAgingReconciliation} formatAmount={money} />}
       {modal && (
         <div
           className="cockpit-modal"

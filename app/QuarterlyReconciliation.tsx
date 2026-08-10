@@ -666,6 +666,25 @@ export function QuarterlyReconciliation({
     };
   }, []);
   useEffect(() => {
+    const applyDetailTarget = () => {
+      try {
+        const raw = localStorage.getItem("reconciliation-detail-target");
+        if (!raw) return;
+        const target = JSON.parse(raw) as { customer?: string };
+        if (target.customer) {
+          setSearchInput(target.customer);
+          setSearchQuery(target.customer);
+          setPage(1);
+        }
+      } catch {
+        /* Ignore an invalid deep-link target without affecting the ledger. */
+      }
+    };
+    applyDetailTarget();
+    window.addEventListener("reconciliation-open-current-detail", applyDetailTarget);
+    return () => window.removeEventListener("reconciliation-open-current-detail", applyDetailTarget);
+  }, []);
+  useEffect(() => {
     if (!sheet || !viewReady) return;
     const quarter = writeArchivedSheet(sheet);
     setActiveQuarter(quarter);

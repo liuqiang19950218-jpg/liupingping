@@ -45,6 +45,11 @@ export default function Home() {
     window.dispatchEvent(new CustomEvent("reconciliation-followup-filter", { detail: filters }));
     setView("tracker");
   };
+  useEffect(() => {
+    const openCurrentDetail = () => setView("current");
+    window.addEventListener("reconciliation-open-current-detail", openCurrentDetail);
+    return () => window.removeEventListener("reconciliation-open-current-detail", openCurrentDetail);
+  }, []);
 
   return <main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
     <aside className="side-nav">
