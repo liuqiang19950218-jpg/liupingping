@@ -13,7 +13,7 @@ import {
   issueTitle,
   type ProblemFilters,
 } from "./problem-dashboard-data";
-import { IssueStageFunnelChart } from "./ProblemDashboardCharts";
+import { ProblemStageDistribution } from "./ProblemStageDistribution";
 import "./problem-dashboard.css";
 import "./problem-dashboard-layout.css";
 
@@ -114,7 +114,7 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
       {metrics.map(([name, list, icon, tone, key]) => <button className={`pd-kpi ${tone}`} key={name} onClick={() => handleMetric(key)}><i>{icon}</i><span>{name}</span><strong>{list.length}</strong><small>较上周 <b className={key === "week" ? "down" : "up"}>{key === "week" ? "↓" : "↑"} {list.length ? "关注" : "0"}</b></small></button>)}
     </section>
     <section className="pd-analysis-grid">
-      <article className="pd-card pd-stage-card"><h2>问题处理阶段分布</h2><div className="pd-chart-content"><IssueStageFunnelChart data={dashboard.stages} onSelect={selectStage}/><div className="pd-stage-list">{dashboard.stages.map((item) => <button key={item.name} onClick={() => selectStage(item.name)}><span>{item.name}</span><b>{item.count}</b><small>{(item.ratio * 100).toFixed(1)}%</small></button>)}<footer>阶段合计：{dashboard.stageTotal} 个</footer></div></div></article>
+      <ProblemStageDistribution data={dashboard.stages} onSelect={selectStage} />
       <article className="pd-card pd-owner-card"><h2>责任人处理情况 Top5</h2><table><thead><tr><th>责任人</th><th>未关闭</th><th>超期</th><th>高风险</th><th>7天无更新</th><th>平均处理天数</th></tr></thead><tbody>{dashboard.owners.map((item) => <tr key={item.name} onClick={() => drill({ owner: item.name })}><td><i className="pd-avatar">{avatar(item.name)}</i>{item.name}</td><td>{item.count}</td><td className="danger">{item.overdue}</td><td className="danger">{item.high}</td><td className="warning">{item.untouched}</td><td>{item.averageDays.toFixed(1)}</td></tr>)}</tbody></table><button className="pd-more" onClick={() => drill()}>查看全部责任人 ›</button></article>
       <article className="pd-card pd-priority-card"><h2>风险优先级 Top5</h2><div className="pd-priority-head"><span>客户名称</span><span>涉及金额</span><span>超期天数</span><span>风险等级</span></div>{dashboard.priority.map((item, index) => <button className="pd-priority-row" key={item.id} onClick={() => drill({ customer: item.customer })}><i className={`rank-${index + 1}`}>{index + 1}</i><span title={item.customer}>{item.customer}</span><b>{formatMoney(item.difference)}</b><em className={overdueClass(item.overdueDays)}>{item.overdueDays} 天</em><small className={`pd-risk-tag ${riskClass(item.riskLevel)}`}>{item.riskLevel}</small></button>)}</article>
     </section>
