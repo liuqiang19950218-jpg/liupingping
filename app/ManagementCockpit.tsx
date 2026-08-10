@@ -305,8 +305,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   )
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
-  const unresolvedCustomersByAmount = [...rows]
-    .filter(isPendingFollowUp)
+  const highRiskUnresolvedCustomers = [...rows]
+    .filter((row) => isPendingFollowUp(row) && level(row) === "高风险")
     .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
   const priority = [...rows]
       .filter(isPendingFollowUp)
@@ -672,8 +672,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       <section className="cockpit-lower">
         <article className="panel follow-panel">
           <h3>
-            D. 高风险客户 Top10{" "}
-            <button onClick={() => open("全部未解决客户", unresolvedCustomersByAmount)}>
+            D. 高风险未解决客户 Top10{" "}
+            <button onClick={() => open("全部高风险未解决客户", highRiskUnresolvedCustomers)}>
               查看全部客户 ›
             </button>
           </h3>
@@ -691,7 +691,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {unresolvedCustomersByAmount.slice(0, 10).map((r) => (
+                {highRiskUnresolvedCustomers.slice(0, 10).map((r) => (
                   <tr key={r.id} onClick={() => open(r.customer, [r])}>
                     <td>{r.customer}</td>
                     <td>{r.region}</td>
@@ -714,7 +714,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             </table>
           </div>
         </article>
-        <article className="panel trend-panel">
+        {false && <article className="panel trend-panel">
           <h3>
             E. 历史趋势{" "}
             <span>
@@ -741,7 +741,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             </b>
             ，未解决差额呈 <b>{compare >= 0 ? "收窄" : "扩大"}</b> 趋势。
           </p>
-        </article>
+        </article>}
         <article className="panel analysis">
           <h3>F. 自动财务分析结论</h3>
           <ol>
