@@ -15,6 +15,119 @@
   gap: 6px;
 }
 
+/* Keep the three collection panels level with the two-column reply-rate content. */
+.collection-card {
+  height: 414px;
+  min-height: 414px;
+}
+
+.collection-card-head {
+  min-height: 56px;
+  padding: 0 18px;
+}
+
+.collection-card-head h3 {
+  font-size: 18px;
+}
+
+.collection-table-wrap {
+  padding: 0 10px;
+}
+
+.collection-overview-table th {
+  height: 42px;
+  font-size: 13px;
+}
+
+.collection-overview-table td {
+  height: 44px;
+  padding: 5px 8px;
+}
+
+.collection-material-name {
+  gap: 7px;
+  font-size: 13px;
+}
+
+.collection-material-icon {
+  flex-basis: 27px;
+  width: 27px;
+  height: 27px;
+  border-radius: 7px;
+  font-size: 16px;
+}
+
+.collection-numeric {
+  font-size: 15px;
+}
+
+.collection-rate {
+  font-size: 16px;
+}
+
+.collection-follow {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.reply-rate-list {
+  padding: 0 16px;
+}
+
+.reply-rate-row {
+  height: 36px;
+}
+
+.reply-rate-row strong,
+.reply-count {
+  font-size: 14px;
+}
+
+.reply-rate-row b {
+  font-size: 15px;
+}
+
+.reply-legend {
+  gap: 12px;
+  padding: 9px 10px 12px;
+  font-size: 11px;
+}
+
+.advice-card {
+  overflow-y: auto;
+}
+
+.advice-section {
+  padding: 12px 18px;
+}
+
+.advice-title h4 {
+  font-size: 14px;
+}
+
+.low-region-grid {
+  gap: 6px 12px;
+  margin-top: 10px;
+}
+
+.low-region-grid span,
+.advice-list li {
+  font-size: 12px;
+}
+
+.advice-list {
+  gap: 2px;
+  margin-top: 9px;
+}
+
+.advice-list li {
+  line-height: 1.45;
+}
+
 /* The overview card is reduced by about five Chinese character widths. */
 .overview-card .collection-overview-table th:nth-child(4) {
   width: 34%;
