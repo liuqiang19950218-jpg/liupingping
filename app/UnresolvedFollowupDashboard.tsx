@@ -592,6 +592,56 @@ export function UnresolvedFollowupDashboard() {
     link.click();
     URL.revokeObjectURL(link.href);
   };
+  const exportCurrentList = () => {
+    const isArchive = tab === "resolved";
+    const exportName = isArchive
+      ? "\u5df2\u89e3\u51b3\u6863\u6848"
+      : "\u5f85\u89e3\u51b3\u6e05\u5355";
+    const exportItems = isArchive ? resolved : pending;
+    const header = [
+      "\u5b63\u5ea6",
+      "\u8d26\u5957",
+      "\u533a\u57df",
+      "\u5ba2\u6237\u540d\u79f0",
+      "\u8d1f\u8d23\u4eba",
+      "\u5bf9\u8d26\u5dee\u989d",
+      "\u8d22\u52a1\u5173\u6ce8",
+      "\u9996\u6b21\u89e3\u51b3\u65f6\u95f4",
+      "\u9996\u6b21\u89e3\u51b3\u65b9\u6848",
+      "\u6700\u8fd1\u8ddf\u8fdb\u65f6\u95f4",
+      "\u8ddf\u8fdb\u89e3\u51b3\u65b9\u6848",
+      "\u5f52\u6863\u72b6\u6001",
+    ];
+    const content = [
+      header,
+      ...exportItems.map((item) => [
+        item.quarter,
+        item.accountSet,
+        item.region,
+        item.customer,
+        item.owner,
+        money(item.amount),
+        financeOf(item),
+        item.firstTime,
+        item.firstSolution,
+        latest(item),
+        item.followUps.map((entry) => entry.solution).join("\u3001"),
+        isArchive ? "\u5df2\u89e3\u51b3" : "\u5f85\u89e3\u51b3",
+      ]),
+    ]
+      .map((row) =>
+        row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","),
+      )
+      .join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(
+      new Blob([`\ufeff${content}`], { type: "text/csv;charset=utf-8" }),
+    );
+    link.download = `${selectedQuarter() || "\u5bf9\u8d26\u5b63\u5ea6"}-${exportName}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    setMessage(`\u5df2\u5bfc\u51fa${exportName}\uff08${exportItems.length}\u6761\uff09\u3002`);
+  };
   const maxCustomers = Math.max(
     1,
     ...regionStats.map((item) => item.list.length),
@@ -732,7 +782,7 @@ export function UnresolvedFollowupDashboard() {
             <button type="button" className="uf-secondary" onClick={reset}>
               清空筛选
             </button>
-            <button type="button" className="uf-primary" onClick={exportRows}>
+            <button type="button" className="uf-primary" onClick={exportCurrentList}>
               导出
             </button>
           </div>
