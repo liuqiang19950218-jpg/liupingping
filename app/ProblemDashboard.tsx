@@ -5,7 +5,6 @@ import { selectedQuarter } from "./quarter-storage";
 import { issuesForQuarter } from "./reconciliation-insights";
 import {
   buildProblemDashboard,
-  filterAllProblemItems,
   filterProblemItems,
   formatMoney,
   issueFollowState,
@@ -14,6 +13,7 @@ import {
   type ProblemFilters,
 } from "./problem-dashboard-data";
 import { ProblemStageDistribution } from "./ProblemStageDistribution";
+import { resolvedFollowupArchiveItemsForQuarter } from "./resolved-followup-archive";
 import "./problem-dashboard.css";
 import "./problem-dashboard-layout.css";
 
@@ -50,11 +50,15 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
 
   const allQuarterItems = useMemo(() => issuesForQuarter(filters.quarter), [filters.quarter, revision]);
   const items = useMemo(() => filterProblemItems(filters), [filters, revision]);
-  const closedItems = useMemo(
-    () => filterAllProblemItems(filters).filter((item) => item.followStatus === "已解决"),
-    [filters, revision],
-  );
-  const dashboard = useMemo(() => buildProblemDashboard(items, closedItems), [items, closedItems]);
+  const closedCount = useMemo(() => {
+    if (filters.stage !== "全部" && filters.stage !== "已关闭") return 0;
+    return resolvedFollowupArchiveItemsForQuarter(filters.quarter).filter(
+      (item) =>
+        (filters.region === "全部" || item.region === filters.region) &&
+        (filters.owner === "全部" || item.owner === filters.owner),
+    ).length;
+  }, [filters.quarter, filters.region, filters.owner, filters.stage, revision]);
+  const dashboard = useMemo(() => buildProblemDashboard(items, closedCount), [items, closedCount]);
   const regions = useMemo(() => [...new Set(allQuarterItems.map((item) => item.region))], [allQuarterItems]);
   const owners = useMemo(() => [...new Set(allQuarterItems.map((item) => item.owner).filter(Boolean))], [allQuarterItems]);
   const causes = useMemo(() => [...new Set(allQuarterItems.map((item) => item.cause).filter(Boolean))], [allQuarterItems]);

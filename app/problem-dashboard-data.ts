@@ -69,13 +69,13 @@ function filterItems(source: ReconciliationIssue[], filters: ProblemFilters) {
   });
 }
 
-export function buildProblemDashboard(items: ReconciliationIssue[], closedItems: ReconciliationIssue[] = []) {
+export function buildProblemDashboard(items: ReconciliationIssue[], closedCount = 0) {
   const summary = issueSummary(items);
   const total = items.length;
-  const stageTotal = total + closedItems.length;
+  const stageTotal = total + closedCount;
   const stages: StageItem[] = STAGES.map(([name, color]) => {
     const count = name === "已关闭"
-      ? closedItems.length
+      ? closedCount
       : items.filter((item) => stageOf(item) === name).length;
     return { name, count, ratio: stageTotal ? count / stageTotal : 0, color };
   }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN"));
