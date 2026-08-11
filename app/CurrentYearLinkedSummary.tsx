@@ -24,6 +24,7 @@ export function CurrentYearLinkedSummary() {
       (total, row) => total + Math.abs(row.difference),
       0,
     ),
+    unresolvedInTenThousands = unresolved / 10000,
     rate = accountedRows.length ? (clear / accountedRows.length) * 100 : 0;
   return (
     <section className="current-year-linked-summary">
@@ -47,9 +48,9 @@ export function CurrentYearLinkedSummary() {
       </div>
       <div>
         <b>
-          {unresolved.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}
+          {unresolvedInTenThousands.toLocaleString("zh-CN", { maximumFractionDigits: 1 })}
         </b>
-        <small>待解决差额</small>
+        <small>待解决差额（万元）</small>
       </div>
     </section>
   );
