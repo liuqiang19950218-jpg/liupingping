@@ -95,8 +95,8 @@ function UnreconciledRiskChart({ data, currentQuarter }: { data: TrendDataItem[]
         { type: "value", name: "对清率（%）", min: 90, max: 100, interval: 5, nameTextStyle: { color: "#71809a", fontSize: 12 }, axisLabel: { color: "#71809a", fontSize: 12, formatter: "{value}%" }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
       ],
       series: [
-        { name: "未对清客户数", type: "bar", yAxisIndex: 0, data: data.map((item) => item.unreconciledCustomers), barWidth: 32, itemStyle: { color: "#ff7a1a", borderRadius: [5, 5, 0, 0] }, label: { show: true, position: "top", color: "#18243b", fontSize: 13, fontWeight: 600 } },
-        { name: "对清率", type: "line", yAxisIndex: 1, data: data.map((item) => item.reconciliationRate), symbol: "circle", symbolSize: 8, lineStyle: { width: 3, color: "#1267f4" }, itemStyle: { color: "#1267f4", borderColor: "#fff", borderWidth: 2 }, label: { show: true, position: "top", formatter: "{c}%", color: "#1267f4", fontSize: 13, fontWeight: 700 }, z: 3 },
+        { name: "未对清客户数", type: "bar", yAxisIndex: 0, data: data.map((item) => item.unreconciledCustomers), barWidth: 32, itemStyle: { color: "#1267f4", borderRadius: [5, 5, 0, 0] }, label: { show: true, position: "top", color: "#18243b", fontSize: 13, fontWeight: 600 } },
+        { name: "对清率", type: "line", yAxisIndex: 1, data: data.map((item) => item.reconciliationRate), symbol: "circle", symbolSize: 8, lineStyle: { width: 3, color: "#ff7a1a" }, itemStyle: { color: "#ff7a1a", borderColor: "#fff", borderWidth: 2 }, label: { show: true, position: "top", formatter: "{c}%", color: "#ff7a1a", fontSize: 13, fontWeight: 700 }, z: 3 },
       ],
     });
     const observer = new ResizeObserver(() => chart.resize());
