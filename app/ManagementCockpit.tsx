@@ -49,7 +49,7 @@ const hasInvoiceException = (r: CockpitRow) =>
   );
 const LOST_DETAIL_TITLE = "\u4e22\u7968";
 const AMOUNT_RATE_DETAIL_TITLE = "\u91d1\u989d\u5bf9\u8d26\u5b8c\u6210\u7387";
-const CUSTOMER_RATE_DETAIL_TITLE = "\u5ba2\u6237\u5b8c\u6210\u7387";
+const CUSTOMER_RATE_DETAIL_TITLE = "\u5ba2\u6237\u5bf9\u6e05\u7387";
 const PENDING_LIST_DETAIL_TITLE = "\u5f85\u89e3\u51b3\u6e05\u5355";
 const HISTORICAL_INVOICE_RISK_TITLE = "\u5386\u53f2\u5b63\u5ea6\u5dee\u989d\u53d1\u7968\u98ce\u9669";
 const hasHistoricalInvoiceReference = (value: string) =>
@@ -437,8 +437,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   };
   const metrics = [
     { name: "应对账总额", value: money(m.reconciliationTotal), list: rows, tone: "blue", icon: "¥", note: "客户账面金额总额" },
-    { name: AMOUNT_RATE_DETAIL_TITLE, value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", icon: "✓", note: "较上季度 +0.6%" },
     { name: CUSTOMER_RATE_DETAIL_TITLE, value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", icon: "◎", note: "已对清客户占比" },
+    { name: AMOUNT_RATE_DETAIL_TITLE, value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", icon: "✓", note: "较上季度 +0.6%" },
     { name: "未对清金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", icon: "⌛", note: "未对清客户差额" },
     { name: "未解决差额", value: money(m.unresolved), list: pendingFollowUpRows, detailTitle: PENDING_LIST_DETAIL_TITLE, tone: "red", icon: "△", note: "来自待解决清单" },
     { name: "调账金额", value: money(m.adjustmentAmount), list: currentDetailRows.filter((row) => row.adjustment !== 0), tone: "orange", icon: "⇄", note: "来自本年度对账明细" },
