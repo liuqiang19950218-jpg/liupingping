@@ -172,6 +172,12 @@ const num = (value: unknown) => {
   const n = Number(String(value ?? "").replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
 };
+const exactAmount = (value: unknown) => {
+  const normalized = String(value ?? "").replace(/[\s,￥¥]/g, "");
+  if (!normalized) return null;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : null;
+};
 const hasValue = (value: unknown) => {
   const normalizedValue = String(value ?? "").replace(/\s/g, "");
   return !["", "—", "-", "未填写", "未对账", "null", "undefined"].includes(normalizedValue);
@@ -245,6 +251,28 @@ const isMoneyHeader = (header: unknown) =>
     T.badDebt,
     T.adjustment,
   ].includes(String(header));
+const matchesColumnFilter = (
+  header: unknown,
+  cellValue: unknown,
+  filterValue: string,
+) => {
+  const keyword = filterValue.trim();
+  if (!keyword) return true;
+
+  if (isMoneyHeader(header)) {
+    const expectedAmount = exactAmount(keyword);
+    const actualAmount = exactAmount(cellValue);
+    return (
+      expectedAmount !== null &&
+      actualAmount !== null &&
+      actualAmount === expectedAmount
+    );
+  }
+
+  return String(cellValue ?? "")
+    .toLocaleLowerCase()
+    .includes(keyword.toLocaleLowerCase());
+};
 const cellClass = (header: unknown, index: number) =>
   [
     tableColumnClass(header),
@@ -808,8 +836,14 @@ export function QuarterlyReconciliation({
                     region) &&
                 (!needle || searchable.includes(needle)) &&
                 Object.entries(columnFilters).every(
-                  ([column, value]) =>
-                    !value || String(row[Number(column)] ?? "").includes(value),
+                  ([column, value]) => {
+                    const columnIndex = Number(column);
+                    return matchesColumnFilter(
+                      sheet.headers[columnIndex],
+                      row[columnIndex],
+                      value,
+                    );
+                  },
                 ) &&
                 (stripeFilter === "all" ||
                   needsDifferenceStripe(num(row[index(T.difference)])))
