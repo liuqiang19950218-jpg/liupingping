@@ -17,8 +17,8 @@
 
 /* Keep the three collection panels level with the two-column reply-rate content. */
 .collection-card {
-  height: 414px;
-  min-height: 414px;
+  height: 471px;
+  min-height: 471px;
 }
 
 .collection-card-head {
