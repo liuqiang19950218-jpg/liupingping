@@ -50,6 +50,7 @@ const hasInvoiceException = (r: CockpitRow) =>
 const LOST_DETAIL_TITLE = "\u4e22\u7968";
 const AMOUNT_RATE_DETAIL_TITLE = "\u91d1\u989d\u5bf9\u8d26\u5b8c\u6210\u7387";
 const CUSTOMER_RATE_DETAIL_TITLE = "\u5ba2\u6237\u5b8c\u6210\u7387";
+const PENDING_LIST_DETAIL_TITLE = "\u5f85\u89e3\u51b3\u6e05\u5355";
 const HISTORICAL_INVOICE_RISK_TITLE = "\u5386\u53f2\u5b63\u5ea6\u5dee\u989d\u53d1\u7968\u98ce\u9669";
 const hasHistoricalInvoiceReference = (value: string) =>
   /(?:19|20)(?:0\d|1\d|2[0-5])|(?:^|\D)(?:0\d|1\d|2[0-5])\s*[./-]\s*\d{1,2}/.test(value);
@@ -222,6 +223,19 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     const source = latestRows.length ? latestRows : cockpitRows;
     return source.filter((row) => row.quarter === f.quarter && row.filled);
   }, [f.quarter, dataVersion]);
+  const pendingFollowUpRows = useMemo(
+    () =>
+      issuesForQuarter(f.quarter).filter(
+        (row) =>
+          (f.region === "全部" || row.region === f.region) &&
+          (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
+          (f.owner === "全部" || row.owner === f.owner) &&
+          (!f.customer || row.customer.includes(f.customer)) &&
+          (f.cleared === "全部" || (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
+          (f.follow === "全部" || row.followStatus === f.follow),
+      ),
+    [f],
+  );
   const m = useMemo(() => {
     const currentDetailRows = categoryRows.length ? categoryRows : rows;
     let clear = rows.filter((x) => x.cleared).length,
@@ -239,9 +253,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       clear,
       unclear,
       rate: rows.length ? (clear / rows.length) * 100 : 0,
-      unresolved: rows
-        .filter(isPendingFollowUp)
-        .reduce((s, x) => s + x.difference, 0),
+      unresolved: pendingFollowUpRows.reduce((sum, row) => sum + Math.abs(row.difference), 0),
       invoice: rows.filter(hasInvoiceException).length,
       overdue: rows.filter(overdue).length,
       overdueAmount: rows.filter(overdue).reduce((sum, row) => sum + Math.abs(row.difference), 0),
@@ -249,7 +261,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       badDebtAmount: currentDetailRows.reduce((sum, row) => sum + Math.abs(row.badDebt), 0),
       resolved: rows.filter((x) => x.followStatus === "已解决").length,
     };
-  }, [rows, unaccountedRows, categoryRows, reconciliationTotalRows]);
+  }, [rows, unaccountedRows, categoryRows, reconciliationTotalRows, pendingFollowUpRows]);
   const currentDetailRows = categoryRows.length ? categoryRows : rows;
   const agingBuckets = useMemo(
     () => buildDifferenceAgingBuckets(currentDetailRows, f.quarter),
@@ -424,7 +436,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     { name: AMOUNT_RATE_DETAIL_TITLE, value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", icon: "✓", note: "较上季度 +0.6%" },
     { name: CUSTOMER_RATE_DETAIL_TITLE, value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", icon: "◎", note: "已对清客户占比" },
     { name: "未对清金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", icon: "⌛", note: "未对清客户差额" },
-    { name: "未解决差额", value: money(m.unresolved), list: rows.filter(isPendingFollowUp), tone: "red", icon: "△", note: "来自待解决清单" },
+    { name: "未解决差额", value: money(m.unresolved), list: pendingFollowUpRows, detailTitle: PENDING_LIST_DETAIL_TITLE, tone: "red", icon: "△", note: "来自待解决清单" },
     { name: "调账金额", value: money(m.adjustmentAmount), list: currentDetailRows.filter((row) => row.adjustment !== 0), tone: "orange", icon: "⇄", note: "来自本年度对账明细" },
     { name: "死账金额", value: money(m.badDebtAmount), list: currentDetailRows.filter((row) => row.badDebt !== 0), tone: "purple", icon: "▣", note: "来自本年度对账明细" },
     { name: LOST_DETAIL_TITLE, value: money(lostDetails.reduce((sum, row) => sum + Math.abs(row.lost ?? 0), 0)), list: lostDetails, tone: "orange", icon: "▣", note: "来自对账看板票据情况" },
@@ -564,11 +576,11 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         区域。
       </div>
       <section className="metric-grid">
-        {metrics.map(({ name, value, list, tone, icon, note }) => (
+        {metrics.map(({ name, value, list, detailTitle, tone, icon, note }) => (
           <button
             key={String(name)}
             className={`metric-card ${tone}`}
-            onClick={() => open(name, list)}
+            onClick={() => open(detailTitle ?? name, list)}
           >
             <span className="metric-icon" aria-hidden="true">{icon}</span>
             <span>{name}</span>
@@ -840,7 +852,40 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
               </button>
             </header>
             <div className="cockpit-detail-table-wrap">
-              {modal.title === AMOUNT_RATE_DETAIL_TITLE || modal.title === CUSTOMER_RATE_DETAIL_TITLE ? (
+              {modal.title === PENDING_LIST_DETAIL_TITLE ? (
+                <table className="cockpit-detail-table cockpit-pending-detail-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">季度</th>
+                      <th scope="col">账套</th>
+                      <th scope="col">区域</th>
+                      <th scope="col">客户</th>
+                      <th scope="col">负责人</th>
+                      <th scope="col">对账差额</th>
+                      <th scope="col">初步解决时间</th>
+                      <th scope="col">首次解决方案</th>
+                      <th scope="col">问题处理阶段</th>
+                      <th scope="col">跟进状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modal.rows.map((row) => (
+                      <tr key={row.id} className="has-difference">
+                        <td>{row.quarter}</td>
+                        <td>{row.accountSet || "—"}</td>
+                        <td>{row.region}</td>
+                        <td className="detail-customer" title={row.customer}>{row.customer}</td>
+                        <td>{row.owner || "—"}</td>
+                        <td className="detail-money difference-money">{detailMoney(row.difference)}</td>
+                        <td>{row.expectedDate || "—"}</td>
+                        <td><span className="detail-clamp" title={row.solution}>{row.solution || "—"}</span></td>
+                        <td>{row.processStage || "—"}</td>
+                        <td><span className="detail-status">{row.followStatus || "—"}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : modal.title === AMOUNT_RATE_DETAIL_TITLE || modal.title === CUSTOMER_RATE_DETAIL_TITLE ? (
                 <table className="cockpit-detail-table cockpit-amount-reason-table">
                   <thead>
                     <tr>
