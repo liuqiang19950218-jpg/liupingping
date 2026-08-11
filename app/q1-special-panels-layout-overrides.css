@@ -105,27 +105,27 @@
 }
 
 .reply-rank.excellent {
-  color: #6ca889;
+  color: #9bcbb5;
 }
 
 .reply-rank.good {
-  color: #c6a04a;
+  color: #dfc47e;
 }
 
 .reply-rank.warning {
-  color: #d98282;
+  color: #e9aaaa;
 }
 
 .reply-legend i.excellent {
-  background: #84bda0;
+  background: #b7dcca;
 }
 
 .reply-legend i.good {
-  background: #d5b867;
+  background: #e7d296;
 }
 
 .reply-legend i.warning {
-  background: #e69b9b;
+  background: #efbcbc;
 }
 
 .reply-legend {
