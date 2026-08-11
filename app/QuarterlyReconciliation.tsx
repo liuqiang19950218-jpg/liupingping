@@ -625,7 +625,12 @@ export function QuarterlyReconciliation({
           setSearchQuery(target.customer);
           setPage(1);
         }
+        // A cockpit drill-down is a one-time navigation aid, not a persistent
+        // table filter.  Leaving it in storage would reapply the old customer
+        // whenever the detail page is opened again after clearing filters.
+        localStorage.removeItem("reconciliation-detail-target");
       } catch {
+        localStorage.removeItem("reconciliation-detail-target");
         /* Ignore an invalid deep-link target without affecting the ledger. */
       }
     };
@@ -1563,8 +1568,11 @@ export function QuarterlyReconciliation({
                     setRegion(T.all);
                     setStripeFilter("all");
                     setSearchInput("");
+                    setSearchQuery("");
                     setColumnFilters({});
                     setFilterColumns([]);
+                    setPage(1);
+                    localStorage.removeItem("reconciliation-detail-target");
                   }}
                 >
                   清空筛选
@@ -1818,8 +1826,13 @@ export function QuarterlyReconciliation({
                           type="button"
                           onClick={() => {
                             setRegion(T.all);
+                            setStripeFilter("all");
                             setSearchInput("");
+                            setSearchQuery("");
                             setColumnFilters({});
+                            setFilterColumns([]);
+                            setPage(1);
+                            localStorage.removeItem("reconciliation-detail-target");
                           }}
                         >
                           清空筛选
