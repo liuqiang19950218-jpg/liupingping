@@ -157,12 +157,23 @@
 }
 
 .advice-list {
-  gap: 2px;
-  margin-top: 9px;
+  gap: 7px;
+  margin-top: 12px;
 }
 
 .advice-list li {
-  line-height: 1.45;
+  line-height: 1.72;
+}
+
+.advice-list li strong {
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+.advice-list li span {
+  display: inline-block;
+  margin-top: 2px;
+  color: #5f718d;
 }
 
 /* The overview card is reduced by about five Chinese character widths. */
