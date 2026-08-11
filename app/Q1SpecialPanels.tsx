@@ -16,7 +16,7 @@ type UnaccountedRow = { region: string; customer: string; note: string };
 
 const S = {
   specialInfo: "\u4e13\u9879\u7ba1\u7406\u4fe1\u606f",
-  pageTitle: "\u8d44\u6599\u6536\u96c6\u3001\u4e22\u7968\u4e0e\u672a\u5bf9\u8d26\u5ba2\u6237",
+  pageTitle: "\u8d44\u6599\u6536\u96c6\u4e0e\u672a\u5bf9\u8d26\u5ba2\u6237",
   collection: "\u8d44\u6599\u6536\u96c6",
   unaccounted: "\u672a\u5bf9\u8d26\u5ba2\u6237",
   overview: "\u8d44\u6599\u6536\u96c6\u603b\u89c8",
