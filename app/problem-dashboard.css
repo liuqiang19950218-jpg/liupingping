@@ -2,6 +2,9 @@
 .pd-preview table{width:calc(100% + 5cm);min-width:100%;table-layout:fixed}.pd-preview th,.pd-preview td{width:12.5%;padding-inline:13px}.pd-preview td{overflow:hidden;text-overflow:ellipsis}.pd-preview td:nth-child(2){max-width:none}
 .pd-priority-head,.pd-priority-row{grid-template-columns:30px minmax(0,1fr) 92px 70px 68px}.pd-priority-head::before{content:"序号";text-align:center}.pd-priority-head>span:nth-child(2),.pd-priority-head>span:nth-child(3),.pd-priority-head>span:nth-child(4){text-align:right}.pd-priority-head>span:nth-child(3),.pd-priority-row>em{text-align:center}.pd-priority-row>span{min-width:0;margin-left:0;padding-left:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pd-priority-row>small{justify-self:end}
 
+/* Let the five owner rows use the full card height instead of leaving a blank footer area. */
+.pd-owner-card{display:flex;min-height:288px;flex-direction:column}.pd-owner-card table{font-size:12px}.pd-owner-card th{font-size:12px}.pd-owner-card th,.pd-owner-card td{height:36px;padding:6px 8px}.pd-owner-card td{font-size:12px;font-weight:600}.pd-owner-card .pd-avatar{width:21px;height:21px;margin-right:6px;font-size:10px}.pd-owner-card .pd-more{margin-top:auto;padding:11px;font-size:12px}
+
 /* “需财务介入”指标移除后，首屏 KPI 维持七列均分。 */
 .pd-kpis{grid-template-columns:repeat(7,minmax(0,1fr))}
 
