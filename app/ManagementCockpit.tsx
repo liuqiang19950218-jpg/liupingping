@@ -216,6 +216,12 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       ),
     [f, dataVersion],
   );
+  // 应对账总额固定取本季度对账明细：只排除未对账客户，不继承驾驶舱其余筛选条件。
+  const reconciliationTotalRows = useMemo(() => {
+    const latestRows = latestQuarterlyCockpitRows();
+    const source = latestRows.length ? latestRows : cockpitRows;
+    return source.filter((row) => row.quarter === f.quarter && row.filled);
+  }, [f.quarter, dataVersion]);
   const m = useMemo(() => {
     const currentDetailRows = categoryRows.length ? categoryRows : rows;
     let clear = rows.filter((x) => x.cleared).length,
@@ -223,7 +229,10 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     return {
       total: rows.length,
       // 应对账总额统一以客户账面金额为准，不再使用公司应收金额。
-      reconciliationTotal: rows.reduce((sum, row) => sum + row.customerBook, 0),
+      reconciliationTotal: reconciliationTotalRows.reduce(
+        (sum, row) => sum + row.companyReceivable,
+        0,
+      ),
       amountRate: rows.reduce((sum, row) => sum + (row.cleared ? row.companyReceivable : 0), 0) / Math.max(rows.reduce((sum, row) => sum + row.companyReceivable, 0), 1) * 100,
       pendingConfirmation: rows.filter((row) => !row.cleared).reduce((sum, row) => sum + Math.abs(row.difference), 0),
       unaccounted: unaccountedRows.length,
@@ -240,7 +249,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       badDebtAmount: currentDetailRows.reduce((sum, row) => sum + Math.abs(row.badDebt), 0),
       resolved: rows.filter((x) => x.followStatus === "已解决").length,
     };
-  }, [rows, unaccountedRows, categoryRows]);
+  }, [rows, unaccountedRows, categoryRows, reconciliationTotalRows]);
   const currentDetailRows = categoryRows.length ? categoryRows : rows;
   const agingBuckets = useMemo(
     () => buildDifferenceAgingBuckets(currentDetailRows, f.quarter),
