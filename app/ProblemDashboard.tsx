@@ -119,7 +119,24 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
     <section className="pd-analysis-grid">
       <ProblemStageDistribution data={dashboard.stages} onSelect={selectStage} />
       <article className="pd-card pd-owner-card"><h2>责任人处理情况 Top5</h2><table><thead><tr><th>责任人</th><th>未关闭</th><th>超期</th><th>高风险</th><th>7天无更新</th><th>平均处理天数</th></tr></thead><tbody>{dashboard.owners.map((item) => <tr key={item.name} onClick={() => drill({ owner: item.name })}><td><i className="pd-avatar">{avatar(item.name)}</i>{item.name}</td><td>{item.count}</td><td className="danger">{item.overdue}</td><td className="danger">{item.high}</td><td className="warning">{item.untouched}</td><td>{item.averageDays.toFixed(1)}</td></tr>)}</tbody></table><button className="pd-more" onClick={() => drill()}>查看全部责任人 ›</button></article>
-      <article className="pd-card pd-priority-card"><h2>风险优先级 Top5</h2><div className="pd-priority-head"><span>客户名称</span><span>涉及金额</span><span>超期天数</span><span>风险等级</span></div>{dashboard.priority.map((item, index) => <button className="pd-priority-row" key={item.id} onClick={() => drill({ customer: item.customer })}><i className={`rank-${index + 1}`}>{index + 1}</i><span title={item.customer}>{item.customer}</span><b>{formatMoney(item.difference)}</b><em className={overdueClass(item.overdueDays)}>{item.overdueDays} 天</em><small className={`pd-risk-tag ${riskClass(item.riskLevel)}`}>{item.riskLevel}</small></button>)}</article>
+      <article className="pd-card pd-priority-card">
+        <h2>风险优先级 Top5</h2>
+        <div className="pd-priority-table-wrap">
+          <table className="pd-priority-table">
+            <colgroup><col /><col /><col /><col /><col /></colgroup>
+            <thead><tr><th>序号</th><th>客户名称</th><th>涉及金额</th><th>超期天数</th><th>风险等级</th></tr></thead>
+            <tbody>{dashboard.priority.map((item, index) => (
+              <tr key={item.id} onClick={() => drill({ customer: item.customer })}>
+                <td><i className={`pd-priority-rank rank-${index + 1}`}>{index + 1}</i></td>
+                <td title={item.customer}>{item.customer}</td>
+                <td className="pd-priority-amount">{formatMoney(item.difference)}</td>
+                <td className={overdueClass(item.overdueDays)}>{item.overdueDays}天</td>
+                <td><span className={`pd-risk-tag ${riskClass(item.riskLevel)}`}>{item.riskLevel}</span></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </article>
     </section>
     <article className="pd-card pd-preview"><h2>重点问题预览 <button onClick={() => drill()}>查看更多 ›</button></h2><div className="pd-preview-wrap"><table><thead><tr><th>客户名称</th><th>问题标题</th><th>责任人</th><th>当前阶段</th><th>超期天数</th><th>风险等级</th><th>最近跟进时间</th><th>跟进状态</th></tr></thead><tbody>{dashboard.preview.map((item) => <tr key={item.id} onClick={() => drill({ customer: item.customer })}><td>{item.customer}</td><td title={issueTitle(item)}>{issueTitle(item)}</td><td><i className="pd-avatar">{avatar(item.owner)}</i>{item.owner || "未分配"}</td><td>{item.stage}</td><td className={overdueClass(item.overdueDays)}>{item.overdueDays} 天</td><td><span className={`pd-risk-tag ${riskClass(item.riskLevel)}`}>{item.riskLevel}</span></td><td>{issueLatestAt(item)}</td><td><span className="pd-follow-tag">{issueFollowState(item)}</span></td></tr>)}{!dashboard.preview.length && <tr><td colSpan={8} className="pd-empty">当前筛选范围暂无待解决问题</td></tr>}</tbody></table></div></article>
   </section>;
