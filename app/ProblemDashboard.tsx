@@ -91,7 +91,6 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
     ["7天未跟进", dashboard.metrics.untouched, "▦", "purple", "untouched"],
     ["待销售处理", dashboard.metrics.customer, "◌", "cyan", "customer"],
     ["待内部处理", dashboard.metrics.internal, "◎", "blue", "internal"],
-    ["需财务介入", dashboard.metrics.finance, "¥", "orange", "finance"],
     ["需领导介入", dashboard.metrics.leader, "♟", "purple", "leader"],
     ["本周待办", dashboard.metrics.week, "✓", "blue", "week"],
   ] as const;
