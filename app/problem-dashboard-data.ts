@@ -37,7 +37,10 @@ const AGES = [
   ["61-90天", 61, 90, "#8b69ed"], ["90天以上", 91, Infinity, "#ef6a6a"],
 ] as const;
 
-const latestAt = (item: ReconciliationIssue) => item.updatedAt || item.expectedDate || "—";
+// The execution page owns follow-up records. Prefer its stored latest follow-up
+// time so the problem dashboard never reports a generated refresh timestamp.
+const latestAt = (item: ReconciliationIssue) =>
+  item.latestFollowUpAt || item.updatedAt || item.expectedDate || "—";
 const stageOf = (item: ReconciliationIssue) => item.stage;
 const followStateOf = (item: ReconciliationIssue) =>
   item.overdueDays > 7 ? "已超期" : item.overdueDays > 0 ? "待跟进" : "跟进中";

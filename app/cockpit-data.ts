@@ -28,6 +28,8 @@ export type CockpitRow = {
   expectedDate: string;
   actualDate?: string;
   updatedAt: string;
+  /** Latest follow-up time, kept in sync with the pending follow-up list. */
+  latestFollowUpAt?: string;
   transitInvoiceFail?: boolean;
   returnInvoiceFail?: boolean;
   lostInvoiceFail?: boolean;
@@ -451,11 +453,13 @@ const numberOf = (value: unknown) => {
 };
 const hasValue = (value: unknown) => String(value ?? "").trim() !== "";
 type LiveInvoice = { invoice?: string; date?: string; amount?: string };
+type LiveFollowUp = { time?: string; solution?: string };
 type LiveDetail = {
   resolutionSolution?: string;
   resolutionTime?: string;
   resolved?: boolean;
   reopened?: boolean;
+  followUps?: LiveFollowUp[];
   badDebtReason?: string;
   adjustmentReason?: string;
   transit?: LiveInvoice[];
@@ -543,6 +547,10 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           solution =
             detail?.resolutionSolution || String(entry[solutionAt] ?? ""),
           time = detail?.resolutionTime || String(entry[timeAt] ?? ""),
+          latestFollowUpAt = [...(detail?.followUps ?? [])]
+            .reverse()
+            .find((item) => String(item.time ?? "").trim())
+            ?.time?.trim(),
           hasOtherDetail = Boolean(
             detail?.otherInvoice?.length || detail?.other?.length,
           ),
@@ -614,7 +622,8 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           solution,
           expectedDate: time || "—",
           actualDate: detail?.resolved === true ? time : undefined,
-          updatedAt: new Date().toLocaleString("zh-CN"),
+          latestFollowUpAt,
+          updatedAt: latestFollowUpAt || time || "—",
           transitInvoiceFail: incomplete(detail?.transit),
           returnInvoiceFail: incomplete(detail?.returned),
           lostInvoiceFail: incomplete(detail?.lost),
