@@ -12,7 +12,6 @@ import { updateDashboardSnapshot } from "./cockpit-data";
 import {
   ensureArchiveFromActive,
   quarterOptions,
-  quarterOf,
   selectQuarter,
   selectedQuarter,
   sheetForQuarter,
@@ -338,61 +337,11 @@ const companyReceivableImportAliases = [
 ];
 const sum = (entries: Array<{ amount: string }>) =>
   entries.reduce((total, entry) => total + num(entry.amount), 0);
-const currentQuarterRange = (source: LocalSheet) => {
-  const match = quarterOf(source.fileName, source.headers, source.rows).match(
-    /^(\d{4}) Q([1-4])$/,
-  );
-  if (!match) return null;
-  const year = Number(match[1]);
-  const quarter = Number(match[2]);
-  const months: Record<number, [number, number]> = {
-    1: [1, 3],
-    2: [4, 6],
-    3: [7, 9],
-    4: [10, 12],
-  };
-  return { year, months: months[quarter] };
-};
-const isCurrentQuarterInvoice = (
-  date: string,
-  range: { year: number; months: [number, number] } | null,
-) => {
-  const digits = date.replace(/[^0-9]/g, "");
-  if (!range || digits.length < 6) return false;
-  const year = Number(digits.slice(0, 4)),
-    month = Number(digits.slice(4, 6));
-  return (
-    year === range.year && month >= range.months[0] && month <= range.months[1]
-  );
-};
-const needsDifferenceStripe = (
-  source: LocalSheet,
-  id: number,
-  difference: number,
-) => {
-  if (Math.abs(difference) < 0.01) return false;
-  const detail = source.details?.[String(id)],
-    range = currentQuarterRange(source);
-  if (!detail || !range) return true;
-  const invoiceEntries = [
-    ...detail.transit,
-    ...detail.returned,
-    ...(detail.lost ?? []),
-    ...(detail.instrument ?? []),
-    ...detail.otherInvoice,
-  ].filter(
-    (entry) =>
-      num(entry.amount) !== 0 ||
-      entry.invoice.trim() !== "" ||
-      entry.date.trim() !== "",
-  );
-  const hasNoInvoiceAmount = sum(detail.other) !== 0;
-  if (hasNoInvoiceAmount || !invoiceEntries.length) return true;
-  return invoiceEntries.some(
-    (entry) =>
-      !entry.invoice.trim() || !isCurrentQuarterInvoice(entry.date, range),
-  );
-};
+// A stripe identifies every row with an outstanding reconciliation difference.
+// It intentionally does not depend on the reconciliation status, so 未对账 rows
+// are highlighted as long as their difference amount is non-zero.
+const needsDifferenceStripe = (difference: number) =>
+  Math.abs(difference) >= 0.01;
 const backfillClearedStatus = (source: LocalSheet) => {
   const clearedAt = source.headers.findIndex((header) =>
     String(header).replace(/\s/g, "").includes("是否对清"),
@@ -858,11 +807,7 @@ export function QuarterlyReconciliation({
                     !value || String(row[Number(column)] ?? "").includes(value),
                 ) &&
                 (stripeFilter === "all" ||
-                  needsDifferenceStripe(
-                    sheet,
-                    id,
-                    num(row[index(T.difference)]),
-                  ))
+                  needsDifferenceStripe(num(row[index(T.difference)])))
               );
             })
         : [],
@@ -1581,7 +1526,7 @@ export function QuarterlyReconciliation({
                   </select>
                 </label>
                 <label>
-                  黄色标记
+                  橙色条纹
                   <select
                     value={stripeFilter}
                     onChange={(event) =>
@@ -1589,7 +1534,7 @@ export function QuarterlyReconciliation({
                     }
                   >
                     <option value="all">全部</option>
-                    <option value="review">仅需复核</option>
+                    <option value="review">仅有对账差额</option>
                   </select>
                 </label>
                 <label className="search-control">
@@ -1787,14 +1732,10 @@ export function QuarterlyReconciliation({
                         <tr
                           key={id}
                           className={[
-                            hasCustomerBook &&
                             num(row[index(T.difference)]) !== 0
                               ? "has-difference"
                               : "",
-                            hasCustomerBook &&
                             needsDifferenceStripe(
-                              sheet,
-                              id,
                               num(row[index(T.difference)]),
                             )
                               ? "has-history-difference"

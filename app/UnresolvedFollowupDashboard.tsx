@@ -1049,7 +1049,7 @@ export function UnresolvedFollowupDashboard() {
           </div>
         </footer>
       </section>
-      <section className="uf-grid">
+      <section className="uf-grid uf-region-grid">
         <article className="uf-card uf-region">
           <header>
             <div>
@@ -1153,37 +1153,6 @@ export function UnresolvedFollowupDashboard() {
               )}
             </div>
           </div>
-        </article>
-        <article className="uf-card uf-priority">
-          <header>
-            <div>
-              <p>财务重点关注事项</p>
-              <h2>风险优先级</h2>
-            </div>
-          </header>
-          <div className="uf-priority-tabs">
-            <b>财务关注 TOP5</b>
-            <span>长期未更新 {priority.untouched.length}</span>
-            <span>需财务介入 {priority.finance.length}</span>
-            <span>多次无进展 {priority.stalled.length}</span>
-          </div>
-          {priority.top.length ? (
-            priority.top.map((item, index) => (
-              <button key={item.id} onClick={() => setDetail(item)}>
-                <i>{index + 1}</i>
-                <span>
-                  <strong>{item.customer}</strong>
-                  <small>
-                    {item.region} · {item.owner || "未填写负责人"}
-                  </small>
-                </span>
-                <b>{money(item.amount)}</b>
-                <em>{dayDistance(latest(item)) ?? 0} 天</em>
-              </button>
-            ))
-          ) : (
-            <p className="uf-no-data">暂无可识别的财务重点事项。</p>
-          )}
         </article>
       </section>
       <section className="uf-grid uf-charts">
