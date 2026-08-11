@@ -2,8 +2,9 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { cockpitRows, type CockpitRow } from "./cockpit-data";
-import { selectedQuarter } from "./quarter-storage";
+import { selectedQuarter, sheetForQuarter } from "./quarter-storage";
 import "./dashboard-overview.css";
+import "./dashboard-overview-overrides.css";
 
 type RegionAnalysis = {
   region: string;
@@ -23,6 +24,43 @@ type Analysis = {
   trend: string;
   regions: RegionAnalysis[];
 };
+type DetailTemplate = { headers: string[]; rows: unknown[][] };
+
+const normalizeHeader = (value: unknown) => String(value ?? "").replace(/\s/g, "");
+const displayCell = (value: unknown) => {
+  const text = String(value ?? "").trim();
+  return text || "\u2014";
+};
+
+function unreconciledDetailTemplate(
+  quarter: string,
+  fallbackRows: CockpitRow[],
+): DetailTemplate {
+  const sheet = sheetForQuarter(quarter);
+  if (sheet?.headers?.length) {
+    const headers = sheet.headers.map((header) => String(header ?? ""));
+    const statusIndex = headers.findIndex((header) =>
+      normalizeHeader(header).includes("\u662f\u5426\u5bf9\u6e05"),
+    );
+    if (statusIndex >= 0)
+      return {
+        headers,
+        rows: sheet.rows.filter(
+          (row) => String(row[statusIndex] ?? "").trim() === "\u672a\u5bf9\u6e05",
+        ),
+      };
+  }
+  return {
+    headers: [
+      "\u8d26\u5957", "\u533a\u57df", "\u5ba2\u6237\u540d\u79f0", "\u5bf9\u8d26\u8d1f\u8d23\u4eba",
+      "\u516c\u53f8\u5e94\u6536", "\u5ba2\u6237\u8d26\u9762\u91d1\u989d", "\u5bf9\u8d26\u5dee\u989d", "\u662f\u5426\u5bf9\u6e05",
+    ],
+    rows: fallbackRows.filter((row) => row.filled && !row.cleared).map((row) => [
+      row.accountSet, row.region, row.customer, row.owner, row.companyReceivable,
+      row.customerBook, row.difference, "\u672a\u5bf9\u6e05",
+    ]),
+  };
+}
 
 function analyze(rows: CockpitRow[]): Analysis {
   const accounted = rows.filter((row) => row.filled);
@@ -91,7 +129,12 @@ export function DashboardOverview({
     window.addEventListener("reconciliation-quarter-updated", refresh);
     return () => { window.removeEventListener("reconciliation-dashboard-updated", refresh); window.removeEventListener("reconciliation-quarter-selected", refresh); window.removeEventListener("reconciliation-quarter-updated", refresh); };
   }, []);
-  const summary = analyze([...cockpitRows].filter((row) => !quarter || row.quarter === quarter));
+  const scopedRows = [...cockpitRows].filter((row) => !quarter || row.quarter === quarter);
+  const summary = analyze(scopedRows);
+  const unreconciledDetails = unreconciledDetailTemplate(
+    quarter || summary.quarter,
+    scopedRows,
+  );
   const bars = summary.regions
     .slice(0, 7)
     .map((region) => Math.max(8, region.rate));
@@ -161,17 +204,36 @@ export function DashboardOverview({
               {drawer === "exception" ? summary.exception : summary.trend}
             </p>
             {drawer === "exception" && (
-              <div className="overview-region-list">
-                {summary.regions.map((region) => (
-                  <p key={region.region}>
-                    {region.region}：已对清 {region.clear} 家，未对清{" "}
-                    {region.unclear} 家，待解决差额{" "}
-                    {region.pendingAmount.toLocaleString("zh-CN", {
-                      maximumFractionDigits: 2,
-                    })}
-                  </p>
-                ))}
-              </div>
+              <>
+                <div className="detail-drawer-summary">
+                  <span>未对清客户</span>
+                  <strong>{unreconciledDetails.rows.length} 家</strong>
+                  <em>数据与本季度对账详细情况同步</em>
+                </div>
+                <div className="overview-detail-table-wrap">
+                  <table className="overview-detail-table">
+                    <thead>
+                      <tr>
+                        {unreconciledDetails.headers.map((header, index) => (
+                          <th key={`${header}-${index}`} scope="col">{header || "—"}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unreconciledDetails.rows.map((row, rowIndex) => (
+                        <tr key={rowIndex}>
+                          {unreconciledDetails.headers.map((_, columnIndex) => (
+                            <td key={columnIndex}>{displayCell(row[columnIndex])}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {!unreconciledDetails.rows.length && (
+                    <p className="overview-detail-empty">当前季度暂无未对清客户</p>
+                  )}
+                </div>
+              </>
             )}
             <button
               type="button"
