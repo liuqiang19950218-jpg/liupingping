@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { cockpitRows, type CockpitRow } from "./cockpit-data";
 import { selectedQuarter, sheetForQuarter } from "./quarter-storage";
 import "./dashboard-overview.css";
@@ -21,7 +21,6 @@ type Analysis = {
   unclear: number;
   pending: number;
   exception: string;
-  trend: string;
   regions: RegionAnalysis[];
 };
 type DetailTemplate = { headers: string[]; rows: unknown[][] };
@@ -99,7 +98,6 @@ function analyze(rows: CockpitRow[]): Analysis {
   const exception = unclear
     ? `当前未对清 ${unclear} 家，${focus?.region ?? "当前范围"}未对清 ${focus?.unclear ?? 0} 家、待解决差额 ${focus?.pendingAmount.toLocaleString("zh-CN", { maximumFractionDigits: 2 }) ?? "0"}。`
     : "当前已填写账面金额的客户均已对清。";
-  const trend = `当前已对清 ${clear} 家，未对清 ${unclear} 家；待解决清单 ${pending.length} 家，待解决差额 ${pendingAmount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}。未导入上一季度明细时，不展示虚拟环比数据。`;
   return {
     quarter: rows[0]?.quarter || "当前季度",
     rate: accounted.length ? (clear / accounted.length) * 100 : 0,
@@ -107,7 +105,6 @@ function analyze(rows: CockpitRow[]): Analysis {
     unclear,
     pending: pending.length,
     exception,
-    trend,
     regions,
   };
 }
@@ -119,7 +116,7 @@ export function DashboardOverview({
 }) {
   const [, setRevision] = useState(0);
   const [quarter, setQuarter] = useState("");
-  const [drawer, setDrawer] = useState<"exception" | "trend" | null>(null);
+  const [drawer, setDrawer] = useState<"exception" | null>(null);
   useEffect(() => {
     const sync = () => setRevision((value) => value + 1);
     const refresh = () => { setQuarter(selectedQuarter()); sync(); };
@@ -135,9 +132,6 @@ export function DashboardOverview({
     quarter || summary.quarter,
     scopedRows,
   );
-  const bars = summary.regions
-    .slice(0, 7)
-    .map((region) => Math.max(8, region.rate));
   return (
     <>
       <section className="dashboard-overview" aria-label="季度核心结论">
@@ -153,20 +147,6 @@ export function DashboardOverview({
           action="查看详情"
           onClick={() => setDrawer("exception")}
           warning
-        />
-        <InsightCard
-          icon="▥"
-          title="当前数据趋势"
-          text={summary.trend}
-          action="查看趋势"
-          onClick={() => setDrawer("trend")}
-          chart={
-            <div className="mini-chart" aria-label="区域对清率图">
-              {bars.map((height, index) => (
-                <i key={index} style={{ height: `${height}%` }} />
-              ))}
-            </div>
-          }
         />
       </section>
       {drawer && (
@@ -192,16 +172,14 @@ export function DashboardOverview({
             </button>
             <p>
               {summary.quarter}{" "}
-              {drawer === "exception" ? "核心异常" : "当前数据趋势"}
+              核心异常
             </p>
             <h2 id="insight-title">
-              {drawer === "exception"
-                ? "需优先处理的对账事项"
-                : "当前对账数据分析"}
+              需优先处理的对账事项
             </h2>
             <div className="drawer-rate">{summary.rate.toFixed(1)}%</div>
             <p className="drawer-copy">
-              {drawer === "exception" ? summary.exception : summary.trend}
+              {summary.exception}
             </p>
             {drawer === "exception" && (
               <>
@@ -256,7 +234,6 @@ function InsightCard({
   action,
   onClick,
   warning = false,
-  chart,
 }: {
   icon: string;
   title: string;
@@ -264,7 +241,6 @@ function InsightCard({
   action: string;
   onClick: () => void;
   warning?: boolean;
-  chart?: ReactNode;
 }) {
   return (
     <article className="overview-insight">
@@ -276,7 +252,6 @@ function InsightCard({
       <button type="button" onClick={onClick}>
         {action} <span>›</span>
       </button>
-      {chart}
     </article>
   );
 }
