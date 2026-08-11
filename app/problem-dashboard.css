@@ -8,6 +8,9 @@
 /* “需财务介入”指标移除后，首屏 KPI 维持七列均分。 */
 .pd-kpis{grid-template-columns:repeat(7,minmax(0,1fr))}
 
+/* Give the five preview records more vertical breathing room for daily review. */
+.pd-preview{min-height:360px}.pd-preview table{font-size:12px}.pd-preview th{height:40px;padding-inline:13px;font-size:12px}.pd-preview td{height:51px;padding-inline:13px;font-size:12px;font-weight:600}.pd-preview .pd-avatar{width:21px;height:21px;margin-right:6px;font-size:10px}.pd-preview .pd-follow-tag{padding:4px 7px;font-size:11px}
+
 /* Fixed table columns keep the Top5 header aligned with its data values. */
 .pd-priority-card{min-height:288px}.pd-priority-table-wrap{overflow:hidden}.pd-priority-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px}.pd-priority-table col:nth-child(1){width:38px}.pd-priority-table col:nth-child(2){width:auto}.pd-priority-table col:nth-child(3){width:98px}.pd-priority-table col:nth-child(4){width:72px}.pd-priority-table col:nth-child(5){width:70px}.pd-priority-table th{height:30px;padding:0 7px;background:#f2f6fc;color:#64758b;font-size:11px;font-weight:800;text-align:right;white-space:nowrap}.pd-priority-table th:nth-child(1),.pd-priority-table th:nth-child(2){text-align:left}.pd-priority-table td{height:38px;padding:0 7px;border-bottom:1px solid #edf1f7;color:#334e70;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;font-weight:600}.pd-priority-table td:nth-child(1),.pd-priority-table td:nth-child(2){text-align:left}.pd-priority-table tbody tr{cursor:pointer}.pd-priority-table tbody tr:hover{background:#f4f8ff}.pd-priority-rank{display:grid;width:18px;height:18px;place-items:center;border-radius:4px;background:#a9b8cd;color:#fff;font-size:10px;font-style:normal;font-weight:800}.pd-priority-rank.rank-1{background:#ef4444}.pd-priority-rank.rank-2{background:#f58a1f}.pd-priority-rank.rank-3{background:#f6bd16}.pd-priority-amount{color:#ef4444!important;font-variant-numeric:tabular-nums}
 
