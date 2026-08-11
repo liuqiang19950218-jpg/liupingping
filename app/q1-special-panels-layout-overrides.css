@@ -91,6 +91,43 @@
   font-size: 15px;
 }
 
+/* Keep rank recognition subtle: only the numeral carries the status colour. */
+.reply-rank {
+  display: block;
+  width: 20px;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.reply-rank.excellent {
+  color: #6ca889;
+}
+
+.reply-rank.good {
+  color: #c6a04a;
+}
+
+.reply-rank.warning {
+  color: #d98282;
+}
+
+.reply-legend i.excellent {
+  background: #84bda0;
+}
+
+.reply-legend i.good {
+  background: #d5b867;
+}
+
+.reply-legend i.warning {
+  background: #e69b9b;
+}
+
 .reply-legend {
   gap: 12px;
   padding: 9px 10px 12px;
