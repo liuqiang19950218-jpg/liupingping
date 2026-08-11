@@ -107,6 +107,7 @@
 .legend { min-height: 23px; border-bottom: 1px solid #f1f4f8; }.legend:last-child { border-bottom: 0; }
 
 .follow-panel .table-wrap { max-height: 294px; }.follow-panel table td:nth-child(4) { color: #ef4444; font-weight: 800; font-variant-numeric: tabular-nums; }
+.follow-panel .overdue-days{color:#63728a;font-weight:700;font-variant-numeric:tabular-nums}.follow-panel .overdue-days.high{color:#ef4444}
 .trend-panel { min-height: 340px; }.cockpit-trend-chart { height: 274px; min-height: 274px; padding: 2px 8px 0; }
 .trend-panel > p { margin: 3px 14px 12px; border-top: 1px solid #eef2f7; padding-top: 8px; }
 .analysis { min-height: 340px; }.analysis ol { margin: 9px 17px 13px; line-height: 2.08; }.analysis footer { margin-top: auto; }

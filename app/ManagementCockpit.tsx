@@ -100,6 +100,10 @@ const level = (r: CockpitRow) =>
       : score(r) >= 40
         ? "需关注"
         : "低风险";
+// D 区风险口径按超期天数统一：超过 30 天为高风险，其余为低风险。
+const overdueRiskLevel = (r: CockpitRow) =>
+  r.overdueDays > 30 ? "高风险" : "低风险";
+
 const getRisks = (r: CockpitRow) =>
   [
     r.difference !==
@@ -718,6 +722,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   <th>区域</th>
                   <th>负责人</th>
                   <th>对账差额</th>
+                  <th>超期天数</th>
                   <th>状态</th>
                   <th>预计完成</th>
                   <th>风险</th>
@@ -730,15 +735,24 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                     <td>{r.region}</td>
                     <td>{r.owner}</td>
                     <td>{money(r.difference)}</td>
+                    <td
+                      className={`overdue-days ${
+                        r.overdueDays > 30 ? "high" : ""
+                      }`}
+                    >
+                      {r.overdueDays}天
+                    </td>
                     <td>
                       <span className="status">{r.followStatus}</span>
                     </td>
                     <td>{r.expectedDate}</td>
                     <td>
                       <span
-                        className={`risk-badge ${level(r) === "高风险" ? "high" : ""}`}
+                        className={`risk-badge ${
+                          overdueRiskLevel(r) === "高风险" ? "high" : ""
+                        }`}
                       >
-                        {level(r)}
+                        {overdueRiskLevel(r)}
                       </span>
                     </td>
                   </tr>
