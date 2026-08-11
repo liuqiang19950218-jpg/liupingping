@@ -11,6 +11,7 @@ import {
   DifferenceAgingAnalysisCard,
   DifferenceAgingDetail,
 } from "./DifferenceAgingAnalysis";
+import { issuesForQuarter } from "./reconciliation-insights";
 import "./management-cockpit.css";
 import "./management-cockpit-refined.css";
 type Props = {
@@ -306,9 +307,19 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   )
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
-  const highRiskUnresolvedCustomers = [...rows]
-    .filter((row) => isPendingFollowUp(row) && level(row) === "高风险")
-    .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
+  // D 区直接使用“未解决客户跟进”的待解决清单口径，不再额外按风险等级过滤。
+  // 因此 Top10 与执行页的待解决客户一致，并以未解决金额从高到低排序。
+  const highRiskUnresolvedCustomers = issuesForQuarter(f.quarter)
+    .filter(
+      (row) =>
+        (f.region === "全部" || row.region === f.region) &&
+        (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
+        (f.owner === "全部" || row.owner === f.owner) &&
+        (!f.customer || row.customer.includes(f.customer)) &&
+        (f.cleared === "全部" || (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
+        (f.follow === "全部" || row.followStatus === f.follow),
+    )
+    .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference) || b.overdueDays - a.overdueDays);
   const priority = [...rows]
       .filter(isPendingFollowUp)
       .sort((a, b) => score(b) - score(a) || b.difference - a.difference),
