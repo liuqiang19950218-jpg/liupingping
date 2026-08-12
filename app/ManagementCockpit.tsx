@@ -628,7 +628,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   <th>区域</th>
                   <th>客户数</th>
                   <th>金额完成率</th>
-                  <th>客户完成率</th>
+                  <th>客户对清率</th>
                   <th>未解决差额</th>
                   <th>异常</th>
                 </tr>
