@@ -1,4 +1,4 @@
-/* Effective reply rate: ranked, two-column, data-first regional cards. */
+/* Keep the regional reply-rate list compact while exposing two columns. */
 .collection-dashboard {
   grid-template-columns: minmax(485px, 1.32fr) minmax(450px, 1.22fr) minmax(390px, 1.05fr);
 }
@@ -6,19 +6,13 @@
 .reply-rate-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 18px;
-  padding: 16px 18px 12px;
+  column-gap: 16px;
   align-content: start;
 }
 
 .reply-rate-row {
-  grid-template-columns: 36px minmax(64px, 1fr) minmax(72px, auto) auto;
-  gap: 10px;
-  height: 58px;
-  padding: 0 12px;
-  border: 1px solid #e5eaf2;
-  border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(20, 40, 80, .02);
+  grid-template-columns: 26px minmax(44px, 1fr) minmax(56px, auto) auto;
+  gap: 6px;
 }
 
 /* Keep the three collection panels level with the two-column reply-rate content. */
@@ -80,82 +74,64 @@
   -webkit-line-clamp: unset;
 }
 
+.reply-rate-list {
+  padding: 0 16px;
+}
+
+.reply-rate-row {
+  height: 36px;
+}
+
 .reply-rate-row strong,
 .reply-count {
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .reply-rate-row b {
-  font-size: 17px;
+  font-size: 15px;
 }
 
-/* Status colour only appears in the rank dot and legends. */
+/* Keep rank recognition subtle: only the numeral carries the status colour. */
 .reply-rank {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
+  display: block;
+  width: 20px;
+  height: auto;
   border: 0;
-  border-radius: 50%;
-  color: #fff;
-  font-size: 14px;
-  line-height: 1;
+  border-radius: 0;
+  background: transparent !important;
+  font-size: 12px;
+  line-height: 20px;
   text-align: center;
 }
 
 .reply-rank.excellent {
-  background: #36c76c !important;
+  color: #9bcbb5;
 }
 
 .reply-rank.good {
-  background: #fdba21 !important;
+  color: #dfc47e;
 }
 
 .reply-rank.warning {
-  background: #ff5a5f !important;
+  color: #e9aaaa;
 }
 
 .reply-legend i.excellent {
-  background: #36c76c;
+  background: #b7dcca;
 }
 
 .reply-legend i.good {
-  background: #fdba21;
+  background: #e7d296;
 }
 
 .reply-legend i.warning {
-  background: #ff5a5f;
+  background: #efbcbc;
 }
 
 .reply-legend {
-  gap: 8px;
-  padding: 0;
-  margin: 0;
-  font-size: 13px;
-}
-
-.reply-card-head {
-  align-items: flex-start;
-  min-height: 92px;
-  padding: 18px 18px 14px;
-}
-
-.reply-card {
-  height: 660px;
-  min-height: 660px;
-}
-
-.reply-card-head h3 { font-size: 18px; }
-.reply-card-head p { margin: 6px 0 0; color: #7a879f; font-size: 12px; line-height: 1.45; }
-.reply-card-head > .reply-legend { flex-wrap: wrap; justify-content: flex-end; padding-top: 3px; }
-.reply-card-head > .reply-legend span { padding: 6px 8px; border: 1px solid #e4eaf3; border-radius: 8px; white-space: nowrap; }
-.reply-card footer .reply-legend { justify-content: center; padding: 11px 10px 14px; border-top: 1px solid #eef2f7; }
-.reply-card footer .reply-legend.compact { font-size: 11px; }
-.reply-rate-row:hover { border-color: #d7e4f7; background: #f8faff; }
-
-@media (max-width: 1420px) {
-  .reply-card-head > .reply-legend { display: none; }
-  .reply-card-head { min-height: 78px; }
+  gap: 12px;
+  padding: 9px 10px 12px;
+  font-size: 11px;
 }
 
 .advice-card {

@@ -75,14 +75,6 @@ const numberOf = (value: string) => {
 };
 const percent = (numerator: number, denominator: number) => denominator ? (numerator / denominator) * 100 : 0;
 const formatPercent = (value: number) => `${value.toFixed(1)}%`;
-type ReplyRateLevel = "excellent" | "good" | "warning";
-const getReplyRateLevel = (rate: number): ReplyRateLevel =>
-  rate >= 80 ? "excellent" : rate >= 60 ? "good" : "warning";
-const REPLY_RATE_LEVELS: ReadonlyArray<{ level: ReplyRateLevel; label: string; range: string }> = [
-  { level: "excellent", label: "\u4f18\u79c0", range: "\u226580%" },
-  { level: "good", label: "\u826f\u597d", range: "60%\uff5e<80%" },
-  { level: "warning", label: "\u5f85\u63d0\u5347", range: "<60%" },
-];
 
 function specialData(sheet?: SavedSheet) {
   const headers = sheet?.headers ?? [];
@@ -127,14 +119,8 @@ function MaterialIcon({ kind }: { kind: MaterialKind }) {
 }
 
 function ReplyLevelDot({ rank, rate }: { rank: number; rate: number }) {
-  const level = getReplyRateLevel(rate);
+  const level = rate >= 80 ? "excellent" : rate >= 60 ? "good" : "warning";
   return <span className={`reply-rank ${level}`}>{rank}</span>;
-}
-
-function ReplyRateLegend({ compact = false }: { compact?: boolean }) {
-  return <div className={`reply-legend ${compact ? "compact" : ""}`} aria-label="\u6709\u6548\u56de\u51fd\u7387\u72b6\u6001\u8bf4\u660e">
-    {REPLY_RATE_LEVELS.map((item) => <span key={item.level}><i className={item.level} />{item.label}\uff08{item.range}\uff09</span>)}
-  </div>;
 }
 
 function VerticalScrollList({ children, label }: { children: ReactNode; label: string }) {
@@ -165,11 +151,11 @@ function CollectionOverviewCard({ rows }: { rows: CollectionRow[] }) {
 
 function ReplyRateCard({ rows }: { rows: ReplyRateRow[] }) {
   return <article className="collection-card reply-card">
-    <header className="collection-card-head reply-card-head"><div><h3>{S.effectiveReply} <InfoTip text="\u6309\u533a\u57df\u5c55\u793a\u6709\u6548\u56de\u51fd\u5ba2\u6237\u6570 / \u5df2\u53d1\u51fd\u5ba2\u6237\u6570\u53ca\u6709\u6548\u56de\u51fd\u7387\u3002" /></h3><p>\u6309\u533a\u57df\u5c55\u793a\u6709\u6548\u56de\u51fd\u5ba2\u6237\u6570 / \u5df2\u53d1\u51fd\u5ba2\u6237\u6570\u53ca\u56de\u51fd\u7387</p></div><ReplyRateLegend /></header>
+    <header className="collection-card-head"><h3>{S.effectiveReply} <InfoTip text="\u6709\u6548\u56de\u51fd\u7387 = \u5df2\u6709\u6548\u56de\u51fd\u5ba2\u6237\u6570 \u00f7 \u5df2\u5bf9\u8d26\u5ba2\u6237\u6570\u3002" /></h3></header>
     <div className="reply-rate-list">{rows.length ? rows.map((item, index) => <button className="reply-rate-row" type="button" key={item.name} title={`${item.name}${formatPercent(item.rate)}`}>
       <ReplyLevelDot rank={index + 1} rate={item.rate} /><strong>{item.name}</strong><span className="reply-count">{item.replied} / {item.total}</span><b>{formatPercent(item.rate)}</b>
     </button>) : <p className="collection-empty">{S.noData}</p>}</div>
-    <footer><ReplyRateLegend compact /></footer>
+    <footer className="reply-legend"><span><i className="excellent" />{"\u4f18\u79c0\uff08\u226580%\uff09"}</span><span><i className="good" />{"\u826f\u597d\uff0860%\uff5e80%\uff09"}</span><span><i className="warning" />{"\u5f85\u63d0\u5347\uff08\u4f4e\u4e8e60%\uff09"}</span></footer>
   </article>;
 }
 
