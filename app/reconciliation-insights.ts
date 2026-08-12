@@ -81,7 +81,7 @@ export function issueSummary(items: ReconciliationIssue[]) {
     totalAmount,
     overdue: items.filter((item) => item.overdueDays > 7),
     untouched: items.filter((item) => item.overdueDays >= 7),
-    finance: items.filter((item) => item.followStatus.includes("财务")),
+    finance: items.filter((item) => item.financeAttention === "需财务复核"),
     high: items.filter((item) => item.riskLevel === "高风险"),
     stages: by((item) => item.stage),
     blockers: by((item) => item.cause || "未填写差额原因").sort((a, b) => b.count - a.count).slice(0, 5),

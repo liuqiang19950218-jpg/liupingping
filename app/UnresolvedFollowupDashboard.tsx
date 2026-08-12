@@ -132,7 +132,7 @@ const matchesDashboardMetric = (item: Item, filter: DashboardMetricFilter) => {
     case "internal":
       return stageOf(item) === "待财务调账";
     case "leader":
-      return riskOf(item) === "高风险";
+      return financeOf(item) === "需财务复核";
     case "week":
       return daysSinceFollowUp <= 7;
     default:
@@ -370,7 +370,7 @@ export function UnresolvedFollowupDashboard() {
     }
     if (initialFilter.region) setRegion(initialFilter.region);
     if (initialFilter.owner || initialFilter.customer) setQuery(initialFilter.owner || initialFilter.customer || "");
-    if (initialFilter.filter === "finance") setFinance("需财务复核");
+    if (initialFilter.filter === "finance" || initialFilter.filter === "leader") setFinance("需财务复核");
     if (PROCESS_STAGES.includes(initialFilter.stage as ProcessStage)) {
       setProcessStage(initialFilter.stage);
       setTab(initialFilter.stage === "已关闭" ? "resolved" : "pending");
@@ -385,7 +385,7 @@ export function UnresolvedFollowupDashboard() {
       if (filter.quarter && filter.quarter !== selectedQuarter()) selectQuarter(filter.quarter);
       if (filter.region) setRegion(filter.region);
       if (filter.owner || filter.customer) setQuery(filter.owner || filter.customer || "");
-      if (filter.filter === "finance") setFinance("需财务复核");
+      if (filter.filter === "finance" || filter.filter === "leader") setFinance("需财务复核");
       if (PROCESS_STAGES.includes(filter.stage as ProcessStage)) {
         setDashboardMetricFilter("");
         setProcessStage(filter.stage);

@@ -38,6 +38,8 @@ export type CockpitRow = {
   consecutiveUnclear?: boolean;
   duplicateInvoice?: boolean;
   processStage?: string;
+  /** Finance-attention state maintained in the pending follow-up list. */
+  financeAttention?: "无需关注" | "一般关注" | "需财务复核";
   /** Invoice-level difference details, sourced from the quarterly reconciliation record. */
   differenceInvoices?: Array<{
     category: string;
@@ -635,6 +637,7 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           consecutiveUnclear: false,
           duplicateInvoice: false,
           processStage: detail?.processStage,
+          financeAttention: detail?.financeAttention,
           differenceInvoices,
           historicalInvoices,
         };

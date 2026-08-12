@@ -106,7 +106,7 @@ export function buildProblemDashboard(items: ReconciliationIssue[], closedCount 
       item.stage === "待销售走申请" || item.stage === "待销售去医院处理",
   );
   const waitingInternal = items.filter((item) => item.stage === "待财务调账");
-  const high = items.filter((item) => item.riskLevel === "高风险");
+  const leader = items.filter((item) => item.financeAttention === "需财务复核");
   const finance = summary.finance;
   const overdue = items.filter((item) => item.overdueDays > 0);
   return {
@@ -126,7 +126,7 @@ export function buildProblemDashboard(items: ReconciliationIssue[], closedCount 
       customer: waitingCustomer,
       internal: waitingInternal,
       finance,
-      leader: high,
+      leader,
       week: items.filter((item) => item.overdueDays <= 7),
     },
     suggestions: [
