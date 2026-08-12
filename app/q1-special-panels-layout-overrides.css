@@ -91,29 +91,31 @@
   font-size: 15px;
 }
 
-/* Keep rank recognition subtle: only the numeral carries the status colour. */
+/* Compact circular rank badge, with the rate level carried by the background. */
 .reply-rank {
-  display: block;
+  display: grid;
+  place-items: center;
   width: 20px;
-  height: auto;
+  height: 20px;
   border: 0;
-  border-radius: 0;
-  background: transparent !important;
-  font-size: 12px;
-  line-height: 20px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
   text-align: center;
 }
 
 .reply-rank.excellent {
-  color: #9bcbb5;
+  background: #36c76c !important;
 }
 
 .reply-rank.good {
-  color: #dfc47e;
+  background: #fdba21 !important;
 }
 
 .reply-rank.warning {
-  color: #e9aaaa;
+  background: #ff5a5f !important;
 }
 
 .reply-legend i.excellent {
