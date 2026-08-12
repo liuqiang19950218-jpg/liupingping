@@ -114,9 +114,10 @@ export const buildDifferenceAgingBuckets = (rows: CockpitRow[], quarter: string)
             invoiceDate: normalizeDate(invoice.date),
             agingDays,
             differenceAmount: Math.abs(invoice.amount),
-            // The drawer is an invoice-level view: do not substitute customer-level
-            // causes or category names. An unfilled quarterly-detail explanation stays blank.
-            differenceReason: String(invoice.note ?? "").trim(),
+            // Prefer the invoice-level 差额说明 from quarterly details. If it has
+            // not been filled in, retain the original invoice difference category
+            // (在途、退票、丢票、仪器设备、其他等) as the business fallback.
+            differenceReason: String(invoice.note ?? "").trim() || String(invoice.category ?? "").trim(),
             reconciliationStatus: !row.filled ? "未对账" : row.cleared ? "已对清" : "未对清",
             owner: row.owner,
             ownerId: row.owner,
