@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  selectQuarter,
   selectedQuarter,
   sheetForQuarter,
   writeArchivedSheet,
@@ -57,12 +58,23 @@ type Item = {
   owner: string;
   amount: number;
   firstTime: string;
+  expectedDate: string;
   firstSolution: string;
   followUps: FollowUp[];
   resolved: boolean;
   financeAttention?: Finance;
   processStage?: Exclude<ProcessStage, "已关闭">;
 };
+
+type DashboardMetricFilter =
+  | ""
+  | "all"
+  | "overdue"
+  | "untouched"
+  | "customer"
+  | "internal"
+  | "leader"
+  | "week";
 
 const ALL = "全部区域";
 const OVERDUE_DAYS = 7;
@@ -107,6 +119,25 @@ const stageOf = (item: Item): ProcessStage => {
   if (content.includes("医院")) return "待销售去医院处理";
   if (content.includes("申请")) return "待销售走申请";
   return "待核查";
+};
+const matchesDashboardMetric = (item: Item, filter: DashboardMetricFilter) => {
+  const daysSinceFollowUp = dayDistance(latest(item)) ?? 0;
+  switch (filter) {
+    case "overdue":
+      return (dayDistance(item.expectedDate) ?? 0) > 0;
+    case "untouched":
+      return daysSinceFollowUp >= OVERDUE_DAYS;
+    case "customer":
+      return stageOf(item) === "待销售走申请" || stageOf(item) === "待销售去医院处理";
+    case "internal":
+      return stageOf(item) === "待财务调账";
+    case "leader":
+      return riskOf(item) === "高风险";
+    case "week":
+      return daysSinceFollowUp <= 7;
+    default:
+      return true;
+  }
 };
 const riskOf = (item: Item): Risk => {
   const days = dayDistance(latest(item)) ?? 0;
@@ -179,6 +210,7 @@ function toItems(source?: Sheet): Item[] {
         owner: value(row, source.headers, ["对账负责人"]),
         amount: amountOf(value(row, source.headers, ["对账差额"])),
         firstTime,
+        expectedDate: value(row, source.headers, ["预计完成日期", "预计完成时间", "预计完成"]) || firstTime,
         firstSolution,
         followUps,
         financeAttention: detail.financeAttention,
@@ -313,6 +345,7 @@ export function UnresolvedFollowupDashboard() {
   const [risk, setRisk] = useState("全部");
   const [finance, setFinance] = useState("全部");
   const [processStage, setProcessStage] = useState("全部");
+  const [dashboardMetricFilter, setDashboardMetricFilter] = useState<DashboardMetricFilter>("");
   const [tableFilters, setTableFilters] = useState<
     Partial<Record<TableFilterKey, string>>
   >({});
@@ -332,6 +365,9 @@ export function UnresolvedFollowupDashboard() {
   useEffect(() => {
     sync();
     const initialFilter = Object.fromEntries(new URLSearchParams(window.location.search));
+    if (initialFilter.quarter && initialFilter.quarter !== selectedQuarter()) {
+      selectQuarter(initialFilter.quarter);
+    }
     if (initialFilter.region) setRegion(initialFilter.region);
     if (initialFilter.owner || initialFilter.customer) setQuery(initialFilter.owner || initialFilter.customer || "");
     if (initialFilter.filter === "finance") setFinance("需财务复核");
@@ -339,18 +375,31 @@ export function UnresolvedFollowupDashboard() {
       setProcessStage(initialFilter.stage);
       setTab(initialFilter.stage === "已关闭" ? "resolved" : "pending");
     }
+    if (["all", "overdue", "untouched", "customer", "internal", "leader", "week"].includes(initialFilter.filter ?? "")) {
+      setDashboardMetricFilter(initialFilter.filter as DashboardMetricFilter);
+      setTab("pending");
+    }
     const applyDashboardFilter = (event: Event) => {
       const filter = (event as CustomEvent<Record<string, string>>).detail;
       if (!filter) return;
+      if (filter.quarter && filter.quarter !== selectedQuarter()) selectQuarter(filter.quarter);
       if (filter.region) setRegion(filter.region);
       if (filter.owner || filter.customer) setQuery(filter.owner || filter.customer || "");
       if (filter.filter === "finance") setFinance("需财务复核");
       if (PROCESS_STAGES.includes(filter.stage as ProcessStage)) {
+        setDashboardMetricFilter("");
         setProcessStage(filter.stage);
         setTab(filter.stage === "已关闭" ? "resolved" : "pending");
         return;
       }
-      if (filter.filter === "overdue") setQuery("");
+      if (["all", "overdue", "untouched", "customer", "internal", "leader", "week"].includes(filter.filter ?? "")) {
+        setDashboardMetricFilter(filter.filter as DashboardMetricFilter);
+        setProcessStage("全部");
+        setRisk("全部");
+        setFinance("全部");
+        setTableFilters({});
+        if (!filter.owner && !filter.customer) setQuery("");
+      } else setDashboardMetricFilter("");
       setTab("pending");
     };
     window.addEventListener("reconciliation-updated", sync);
@@ -396,6 +445,7 @@ export function UnresolvedFollowupDashboard() {
           (risk === "全部" || riskOf(item) === risk) &&
           (finance === "全部" || financeOf(item) === finance) &&
           (processStage === "全部" || stageOf(item) === processStage) &&
+          matchesDashboardMetric(item, dashboardMetricFilter) &&
           Object.entries(tableFilters).every(([key, filter]) =>
             !filter ||
             tableFilterValue(item, key as TableFilterKey)
@@ -403,7 +453,7 @@ export function UnresolvedFollowupDashboard() {
               .includes(filter.trim().toLocaleLowerCase()),
           ),
       ),
-    [base, region, search, risk, finance, processStage, tableFilters],
+    [base, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters],
   );
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const rows = visible.slice((page - 1) * pageSize, page * pageSize);
