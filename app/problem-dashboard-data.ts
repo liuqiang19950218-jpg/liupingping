@@ -133,7 +133,7 @@ export function buildProblemDashboard(items: ReconciliationIssue[], closedCount 
       { id: "overdue", icon: "◷", tone: "danger", title: "优先处理超期问题", description: `当前超期 ${overdue.length} 个，建议按风险等级优先处理。`, filter: "overdue" },
       { id: "customer", icon: "◌", tone: "cyan", title: "推进待销售处理", description: `待销售处理 ${waitingCustomer.length} 个，建议销售主动联系客户推进。`, filter: "customer" },
       { id: "finance", icon: "¥", tone: "blue", title: "安排财务复核", description: `需财务介入 ${finance.length} 个，建议尽快核查与调账。`, filter: "finance" },
-      { id: "leader", icon: "◎", tone: "purple", title: "升级高风险事项", description: `高风险问题 ${high.length} 个，建议统筹推进并打通阻塞。`, filter: "leader" },
+      { id: "leader", icon: "◎", tone: "purple", title: "升级需财务复核事项", description: `当前需财务复核 ${leader.length} 个，建议统筹推进并打通阻塞。`, filter: "leader" },
       { id: "large", icon: "▣", tone: "orange", title: "优先关闭大额问题", description: `关注前 ${priority.length} 个大额待解决问题，降低风险敞口。`, filter: "large" },
     ],
   };
