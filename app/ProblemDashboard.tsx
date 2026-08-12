@@ -109,7 +109,7 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
       <label>处理阶段<select value={filters.stage} onChange={(event) => change("stage", event.target.value)}><option>全部</option>{dashboard.stages.map((item) => <option key={item.name}>{item.name}</option>)}</select></label>
       <label>超期天数<select value={filters.aging} onChange={(event) => change("aging", event.target.value)}><option>全部</option>{dashboard.ages.map((item) => <option key={item.name}>{item.name}</option>)}</select></label>
       <label>最近跟进时间<select value={filters.follow} onChange={(event) => change("follow", event.target.value)}><option>全部</option><option>跟进中</option><option>待跟进</option><option>已超期</option></select></label>
-      <label>跟进状态<select value={filters.region} onChange={(event) => change("region", event.target.value)}><option>全部</option>{regions.map((item) => <option key={item}>{item}</option>)}</select></label>
+      <label>区域<select value={filters.region} onChange={(event) => change("region", event.target.value)}><option>全部</option>{regions.map((item) => <option key={item}>{item}</option>)}</select></label>
       <div className="pd-filter-actions"><button onClick={() => setFilters(emptyFilters(selectedQuarter()))}>↻ 重置</button><button className="primary" disabled={exporting} onClick={exportCurrent}>{exporting ? "导出中" : "↓ 导出"}</button></div>
     </section>
     <p className="pd-alert">⚠ 当前未关闭问题 <b>{dashboard.total}</b> 个，其中超期 <strong>{dashboard.metrics.overdue.length}</strong> 个，7 天未跟进 <em>{dashboard.metrics.untouched.length}</em> 个，待销售处理 <b>{dashboard.metrics.customer.length}</b> 个，请及时推进问题闭环。</p>
