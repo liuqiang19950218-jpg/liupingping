@@ -19,7 +19,6 @@ type Analysis = {
   rate: number;
   clear: number;
   unclear: number;
-  pending: number;
   exception: string;
   regions: RegionAnalysis[];
 };
@@ -65,7 +64,6 @@ function analyze(rows: CockpitRow[]): Analysis {
   const accounted = rows.filter((row) => row.filled);
   const clear = accounted.filter((row) => row.cleared).length;
   const unclear = accounted.length - clear;
-  const pending = accounted.filter((row) => row.followStatus === "待跟进");
   const map = new Map<string, RegionAnalysis>();
   accounted.forEach((row) => {
     const region = row.region || "未填写区域";
@@ -80,8 +78,9 @@ function analyze(rows: CockpitRow[]): Analysis {
     current.total += 1;
     if (row.cleared) current.clear += 1;
     else current.unclear += 1;
-    if (row.followStatus === "待跟进")
-      current.pendingAmount += Math.abs(row.difference);
+    // 核心异常中的待解决差额，统一按未对清客户的公司应收金额统计。
+    if (!row.cleared)
+      current.pendingAmount += Math.abs(row.companyReceivable);
     map.set(region, current);
   });
   const regions = [...map.values()]
@@ -91,10 +90,6 @@ function analyze(rows: CockpitRow[]): Analysis {
     }))
     .sort((a, b) => b.unclear - a.unclear || b.pendingAmount - a.pendingAmount);
   const focus = regions[0];
-  const pendingAmount = pending.reduce(
-    (sum, row) => sum + Math.abs(row.difference),
-    0,
-  );
   const exception = unclear
     ? `当前未对清 ${unclear} 家，${focus?.region ?? "当前范围"}未对清 ${focus?.unclear ?? 0} 家、待解决差额 ${focus?.pendingAmount.toLocaleString("zh-CN", { maximumFractionDigits: 2 }) ?? "0"}。`
     : "当前已填写账面金额的客户均已对清。";
@@ -103,7 +98,6 @@ function analyze(rows: CockpitRow[]): Analysis {
     rate: accounted.length ? (clear / accounted.length) * 100 : 0,
     clear,
     unclear,
-    pending: pending.length,
     exception,
     regions,
   };

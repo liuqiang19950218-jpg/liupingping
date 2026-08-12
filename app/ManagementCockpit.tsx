@@ -252,7 +252,8 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         0,
       ),
       amountRate: rows.reduce((sum, row) => sum + (row.cleared ? row.companyReceivable : 0), 0) / Math.max(rows.reduce((sum, row) => sum + row.companyReceivable, 0), 1) * 100,
-      pendingConfirmation: rows.filter((row) => !row.cleared).reduce((sum, row) => sum + Math.abs(row.difference), 0),
+      // 未对清金额按未对清客户的公司应收总额统计，不采用对账差额。
+      pendingConfirmation: rows.filter((row) => !row.cleared).reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0),
       unaccounted: unaccountedRows.length,
       clear,
       unclear,
@@ -439,7 +440,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     { name: "应对账总额", value: money(m.reconciliationTotal), list: rows, tone: "blue", icon: "¥", note: "客户账面金额总额" },
     { name: CUSTOMER_RATE_DETAIL_TITLE, value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", icon: "◎", note: "已对清客户占比" },
     { name: AMOUNT_RATE_DETAIL_TITLE, value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", icon: "✓", note: "较上季度 +0.6%" },
-    { name: "未对清金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", icon: "⌛", note: "未对清客户差额" },
+    { name: "未对清金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", icon: "⌛", note: "未对清客户公司应收总额" },
     { name: "未解决差额", value: money(m.unresolved), list: pendingFollowUpRows, detailTitle: PENDING_LIST_DETAIL_TITLE, tone: "red", icon: "△", note: "来自待解决清单" },
     { name: "调账金额", value: money(m.adjustmentAmount), list: currentDetailRows.filter((row) => row.adjustment !== 0), tone: "orange", icon: "⇄", note: "来自本年度对账明细" },
     { name: "死账金额", value: money(m.badDebtAmount), list: currentDetailRows.filter((row) => row.badDebt !== 0), tone: "purple", icon: "▣", note: "来自本年度对账明细" },
