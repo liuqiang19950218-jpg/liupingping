@@ -173,7 +173,7 @@ const num = (value: unknown) => {
   return Number.isFinite(n) ? n : 0;
 };
 const exactAmount = (value: unknown) => {
-  const normalized = String(value ?? "").replace(/[\s,￥¥]/g, "");
+  const normalized = String(value ?? "").replace(/[\s,\uFFE5\u00A5]/g, "");
   if (!normalized) return null;
   const amount = Number(normalized);
   return Number.isFinite(amount) ? amount : null;
@@ -238,8 +238,10 @@ const displayTableValue = (
   String(header) === T.difference && !hasValue(customerAmount)
     ? "—"
     : tableValue(header, value) || "—";
-const isMoneyHeader = (header: unknown) =>
-  [
+const isMoneyHeader = (header: unknown) => {
+  const name = String(header).trim();
+  return (
+    [
     T.company,
     T.customerBook,
     T.difference,
@@ -250,7 +252,10 @@ const isMoneyHeader = (header: unknown) =>
     T.other,
     T.badDebt,
     T.adjustment,
-  ].includes(String(header));
+    ].includes(name) ||
+    /(\u91d1\u989d|\u5dee\u989d)$/.test(name)
+  );
+};
 const matchesColumnFilter = (
   header: unknown,
   cellValue: unknown,
