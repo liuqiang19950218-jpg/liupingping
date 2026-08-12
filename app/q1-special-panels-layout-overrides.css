@@ -107,11 +107,11 @@
 }
 
 .reply-rank.excellent {
-  background: #36c76c !important;
+  background: #139a55 !important;
 }
 
 .reply-rank.good {
-  background: #fdba21 !important;
+  background: #f5b800 !important;
 }
 
 .reply-rank.warning {
@@ -122,15 +122,15 @@
 }
 
 .reply-legend i.excellent {
-  background: #b7dcca;
+  background: #139a55;
 }
 
 .reply-legend i.good {
-  background: #e7d296;
+  background: #f5b800;
 }
 
 .reply-legend i.warning {
-  background: #efbcbc;
+  background: #d92d20;
 }
 
 .reply-legend {
