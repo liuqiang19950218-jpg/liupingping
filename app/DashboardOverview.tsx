@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cockpitRows, type CockpitRow } from "./cockpit-data";
+import { cockpitRows, latestQuarterlyCockpitRows, type CockpitRow } from "./cockpit-data";
 import { selectedQuarter, sheetForQuarter } from "./quarter-storage";
 import "./dashboard-overview.css";
 import "./dashboard-overview-overrides.css";
@@ -11,6 +11,7 @@ type RegionAnalysis = {
   total: number;
   clear: number;
   unclear: number;
+  unreconciledReceivable: number;
   rate: number;
   pendingAmount: number;
 };
@@ -64,6 +65,9 @@ function analyze(rows: CockpitRow[]): Analysis {
   const accounted = rows.filter((row) => row.filled);
   const clear = accounted.filter((row) => row.cleared).length;
   const unclear = accounted.length - clear;
+  const unreconciledReceivable = accounted
+    .filter((row) => !row.cleared)
+    .reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0);
   const map = new Map<string, RegionAnalysis>();
   accounted.forEach((row) => {
     const region = row.region || "未填写区域";
@@ -89,15 +93,15 @@ function analyze(rows: CockpitRow[]): Analysis {
       rate: region.total ? (region.clear / region.total) * 100 : 0,
     }))
     .sort((a, b) => b.unclear - a.unclear || b.pendingAmount - a.pendingAmount);
-  const focus = regions[0];
   const exception = unclear
-    ? `当前未对清 ${unclear} 家，${focus?.region ?? "当前范围"}未对清 ${focus?.unclear ?? 0} 家、待解决差额 ${focus?.pendingAmount.toLocaleString("zh-CN", { maximumFractionDigits: 2 }) ?? "0"}。`
+    ? `当前未对清 ${unclear} 家，未对清客户我方应收总额 ${unreconciledReceivable.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}。`
     : "当前已填写账面金额的客户均已对清。";
   return {
     quarter: rows[0]?.quarter || "当前季度",
     rate: accounted.length ? (clear / accounted.length) * 100 : 0,
     clear,
     unclear,
+    unreconciledReceivable,
     exception,
     regions,
   };
@@ -120,7 +124,10 @@ export function DashboardOverview({
     window.addEventListener("reconciliation-quarter-updated", refresh);
     return () => { window.removeEventListener("reconciliation-dashboard-updated", refresh); window.removeEventListener("reconciliation-quarter-selected", refresh); window.removeEventListener("reconciliation-quarter-updated", refresh); };
   }, []);
-  const scopedRows = [...cockpitRows].filter((row) => !quarter || row.quarter === quarter);
+  const liveRows = latestQuarterlyCockpitRows();
+  const scopedRows = (liveRows.length ? liveRows : cockpitRows).filter(
+    (row) => !quarter || row.quarter === quarter,
+  );
   const summary = analyze(scopedRows);
   const unreconciledDetails = unreconciledDetailTemplate(
     quarter || summary.quarter,
