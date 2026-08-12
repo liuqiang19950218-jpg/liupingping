@@ -44,6 +44,8 @@ export type CockpitRow = {
     invoice: string;
     date: string;
     amount: number;
+    /** Invoice-level difference explanation from the quarterly reconciliation detail. */
+    note?: string;
   }>;
   historicalInvoices?: Array<{
     category: string;
@@ -452,7 +454,7 @@ const numberOf = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 const hasValue = (value: unknown) => String(value ?? "").trim() !== "";
-type LiveInvoice = { invoice?: string; date?: string; amount?: string };
+type LiveInvoice = { invoice?: string; date?: string; amount?: string; note?: string };
 type LiveFollowUp = { time?: string; solution?: string };
 type LiveDetail = {
   resolutionSolution?: string;
@@ -575,6 +577,7 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
                 invoice: String(item.invoice),
                 date: String(item.date),
                 amount: numberOf(item.amount),
+                note: String(item.note ?? "").trim(),
               })),
           );
           // The historical-risk view deliberately uses only prior-year invoices,
