@@ -1213,6 +1213,10 @@ export function UnresolvedFollowupDashboard() {
           </header>
           {regionStats
             .filter((stat) => stat.name !== ALL)
+            .sort(
+              (a, b) =>
+                b.list.length - a.list.length || b.amount - a.amount,
+            )
             .map((stat) => (
               <button
                 className="uf-bar"
@@ -1245,6 +1249,10 @@ export function UnresolvedFollowupDashboard() {
           </header>
           {regionStats
             .filter((stat) => stat.name !== ALL)
+            .sort(
+              (a, b) =>
+                b.amount - a.amount || b.list.length - a.list.length,
+            )
             .map((stat) => (
               <button
                 className="uf-bar"
