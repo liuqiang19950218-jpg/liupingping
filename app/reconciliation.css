@@ -92,6 +92,10 @@
 .difference-drawer-table td { height: 48px; padding: 6px 7px; border-top: 1px solid #e8eef5; color: #304a67; text-align: center; }
 .difference-drawer-table input { box-sizing: border-box; width: 100%; height: 31px; padding: 0 7px; border: 1px solid #d7e3ef; border-radius: 5px; color: #263c59; font: inherit; }
 .difference-drawer-table tfoot td { background: #f7faff; color: #1f446f; font-weight: 800; }
+.drawer-verification { display: inline-flex; align-items: center; justify-content: center; min-width: 78px; padding: 4px 7px; border-radius: 5px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.drawer-verification.correct { color: #16794b; background: #ecf9f1; }
+.drawer-verification.error { color: #d4382b; background: #fff0ef; }
+.drawer-verification.pending { color: #8a6b16; background: #fff7e6; }
 .drawer-row-actions { white-space: nowrap; }
 .drawer-row-actions button, .drawer-attachment button { width: auto; margin: 0 3px; padding: 0; border: 0; background: transparent; color: #1677ff; font: inherit; font-weight: 700; cursor: pointer; }
 .drawer-row-actions button:last-child { color: #ef4444; }

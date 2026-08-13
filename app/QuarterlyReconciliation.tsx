@@ -2062,6 +2062,8 @@ export function QuarterlyReconciliation({
               onChange={setForm}
               onClose={() => setActiveDifferenceType(null)}
               onPreview={setPreviewImage}
+              ledgerKeys={matchingLedgerKeys}
+              ledgerLookup={ledgerLookup}
             />
           )}
         </div>
@@ -2353,12 +2355,16 @@ function DifferenceDetailDrawer({
   onChange,
   onClose,
   onPreview,
+  ledgerKeys,
+  ledgerLookup,
 }: {
   type: DifferenceType;
   form: DetailForm;
   onChange: (next: DetailForm) => void;
   onClose: () => void;
   onPreview: (image: string) => void;
+  ledgerKeys: Set<string> | null;
+  ledgerLookup: LedgerLookup;
 }) {
   const meta = DIFFERENCE_SUMMARIES.find((item) => item.type === type)!;
   const entries = entriesFor(form, type);
@@ -2404,6 +2410,16 @@ function DifferenceDetailDrawer({
       );
     reader.readAsDataURL(file);
   };
+  const verification = (entry: InvoiceEntry) => {
+    if (!anyInvoice(entry)) return null;
+    if (!entry.date || !entry.invoice || entry.amount === "") {
+      return { label: "\u5f85\u6838\u9a8c", kind: "pending" };
+    }
+    if (!ledgerKeys) return { label: "\u6b63\u5728\u52a0\u8f7d", kind: "pending" };
+    return validLedgerEntry(entry, ledgerKeys, ledgerLookup)
+      ? { label: "\u5f80\u6765\u6838\u9a8c\u6b63\u786e", kind: "correct" }
+      : { label: "\u5f80\u6765\u6838\u9a8c\u9519\u8bef", kind: "error" };
+  };
   return (
     <aside className="difference-detail-drawer" role="dialog" aria-modal="true" aria-label={`填写${meta.label}差额明细`}>
       <header>
@@ -2426,6 +2442,7 @@ function DifferenceDetailDrawer({
               {meta.invoice && <><th>开票日期</th><th>发票号码</th></>}
               <th>金额（元）</th>
               <th>差额说明</th>
+              {meta.invoice && <th>往来核验</th>}
               {!meta.invoice && <th>图片附件</th>}
               <th>操作</th>
             </tr>
@@ -2437,12 +2454,16 @@ function DifferenceDetailDrawer({
                 {meta.invoice && <><td><input type="date" value={(entry as InvoiceEntry).date} onChange={(event) => update(index, "date", event.target.value)} /></td><td><input value={(entry as InvoiceEntry).invoice} onChange={(event) => update(index, "invoice", event.target.value)} placeholder="填写发票号码" /></td></>}
                 <td><input type="number" step="0.01" value={entry.amount} onChange={(event) => update(index, "amount", event.target.value)} placeholder="0.00" /></td>
                 <td><input value={entry.note} onChange={(event) => update(index, "note", event.target.value)} placeholder="填写差额说明" /></td>
+                {meta.invoice && (() => {
+                  const result = verification(entry as InvoiceEntry);
+                  return <td>{result && <span className={`drawer-verification ${result.kind}`}>{result.label}</span>}</td>;
+                })()}
                 {!meta.invoice && <td className="drawer-attachment"><label>上传图片<input type="file" accept="image/*" onChange={(event) => { addImage(index, event.target.files?.[0]); event.target.value = ""; }} /></label>{(entry as OtherEntry).image && <button type="button" onClick={() => onPreview((entry as OtherEntry).image!)}>查看</button>}</td>}
                 <td className="drawer-row-actions"><button type="button" onClick={() => copy(index)}>复制</button><button type="button" onClick={() => remove(index)}>删除</button></td>
               </tr>
             ))}
           </tbody>
-          <tfoot><tr><td colSpan={meta.invoice ? 6 : 5}>合计：{entries.length} 笔</td><td>{money(subtotal)}</td></tr></tfoot>
+          <tfoot><tr><td colSpan={meta.invoice ? 6 : 4}>合计：{entries.length} 笔</td><td>{money(subtotal)}</td></tr></tfoot>
         </table>
       </div>
     </aside>
