@@ -61,7 +61,7 @@
 .invoice-choices button { width: auto; margin: 0; padding: 3px 6px; border: 1px solid #f0ce8d; border-radius: 4px; background: #fff; color: #895400; font-size: 11px; cursor: pointer; }
 .photo-import { display: none; }
 .modal-backdrop { display: flex; justify-content: flex-end; overflow: hidden; padding: 0; }
-.sales-modal { display: flex; width: min(920px, 82vw); height: 100dvh; max-height: none; margin: 0; padding: 28px 32px; overflow: hidden; flex-direction: column; border-radius: 0; box-shadow: -14px 0 34px rgb(14 43 77 / 22%); overscroll-behavior: contain; }
+.sales-modal { display: flex; width: min(1280px, 66.667vw); height: 100dvh; max-height: none; margin: 0; padding: 28px 32px; overflow: hidden; flex-direction: column; border-radius: 0; box-shadow: -14px 0 34px rgb(14 43 77 / 22%); overscroll-behavior: contain; }
 .sales-modal-sticky { position: sticky; top: -28px; z-index: 11; margin: -28px -32px 16px; padding: 28px 64px 12px 32px; border-bottom: 1px solid #e5edf6; background: #fff; box-shadow: 0 8px 14px rgb(31 78 121 / 7%); }
 .sales-account { margin: 0 0 4px; color: #58708c; font-size: 13px; font-weight: 700; }
 .sales-modal-sticky .modal-close { z-index: 12; }
