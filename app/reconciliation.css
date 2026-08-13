@@ -89,6 +89,11 @@
 .difference-detail-drawer header > button { width: 34px; height: 34px; border: 0; border-radius: 7px; background: #f4f7fb; color: #60728a; font-size: 24px; cursor: pointer; }
 .drawer-tools { display: flex; gap: 8px; padding: 14px 28px; border-bottom: 1px solid #edf2f7; }
 .drawer-tools button:first-child { background: #1677ff; color: #fff; }
+.drawer-ocr-button { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 6px 12px; border: 1px solid #b8d8fb; border-radius: 6px; background: #fff; color: #1677ff; font-size: 13px; font-weight: 700; cursor: pointer; }
+.drawer-ocr-button:hover { border-color: #1677ff; background: #f4f9ff; }
+.drawer-ocr-button:has(input:disabled) { cursor: wait; opacity: .7; }
+.drawer-ocr-button input { display: none; }
+.drawer-ocr-status { margin: 0; padding: 9px 28px; border-bottom: 1px solid #edf2f7; background: #f7fbff; color: #58708d; font-size: 12px; }
 .difference-drawer-table-wrap { min-height: 0; flex: 1; overflow: auto; padding: 0 28px 24px; }
 .difference-drawer-table { width: 100%; min-width: 620px; border-spacing: 0; border: 1px solid #dfe8f2; border-radius: 8px; overflow: hidden; font-size: 12px; }
 .difference-drawer-table th { position: sticky; top: 0; z-index: 1; padding: 11px 8px; background: #f1f6fc; color: #344e6c; white-space: nowrap; }

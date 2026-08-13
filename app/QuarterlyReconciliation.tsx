@@ -2369,6 +2369,8 @@ function DifferenceDetailDrawer({
   const meta = DIFFERENCE_SUMMARIES.find((item) => item.type === type)!;
   const entries = entriesFor(form, type);
   const subtotal = entries.reduce((total, entry) => total + num(entry.amount), 0);
+  const [ocrStatus, setOcrStatus] = useState("");
+  const [ocrRecognizing, setOcrRecognizing] = useState(false);
   const setEntries = (next: InvoiceEntry[] | OtherEntry[]) =>
     onChange({ ...form, [type]: next } as DetailForm);
   const add = () =>
@@ -2415,6 +2417,65 @@ function DifferenceDetailDrawer({
       }) as InvoiceEntry[],
     );
   };
+  const fillRecognizedInvoices = (invoiceNumbers: string[]) => {
+    const invoiceEntries = entries as InvoiceEntry[];
+    const existingNumbers = new Set(
+      invoiceEntries.map((entry) => entry.invoice.trim()).filter(Boolean),
+    );
+    const newNumbers = invoiceNumbers.filter((invoice) => !existingNumbers.has(invoice));
+    if (!newNumbers.length) return { added: 0, matched: 0 };
+
+    let nextIndex = 0;
+    let matchedCount = 0;
+    const createRecognizedEntry = (invoice: string) => {
+      const matched = findLedgerMatch(invoice, ledgerLookup, ledgerKeys);
+      if (matched) matchedCount += 1;
+      return {
+        ...blankInvoice(),
+        invoice,
+        date: matched?.dates.length === 1 ? matched.dates[0] : "",
+        amount: matched ? matched.amount.toFixed(2) : "",
+      };
+    };
+    const nextEntries = invoiceEntries.map((entry) => {
+      if (nextIndex >= newNumbers.length || anyInvoice(entry)) return entry;
+      return createRecognizedEntry(newNumbers[nextIndex++]);
+    });
+    while (nextIndex < newNumbers.length) {
+      nextEntries.push(createRecognizedEntry(newNumbers[nextIndex++]));
+    }
+    setEntries(nextEntries);
+    return { added: newNumbers.length, matched: matchedCount };
+  };
+  const recognizeInvoices = async (files?: FileList | null) => {
+    if (!files?.length || !meta.invoice) return;
+    setOcrRecognizing(true);
+    setOcrStatus("正在识别发票，请稍候…");
+    try {
+      const recognized: string[] = [];
+      for (const file of Array.from(files)) {
+        const body = new FormData();
+        body.append("file", file);
+        const response = await fetch(OCR_INVOICE_ENDPOINT, { method: "POST", body });
+        if (!response.ok) throw new Error(`OCR ${response.status}`);
+        recognized.push(...extractInvoiceNumbersFromOcr(await response.json()));
+      }
+      const uniqueNumbers = [...new Set(recognized)];
+      const ledgerNumbers = uniqueNumbers.filter((invoice) =>
+        Boolean(findLedgerMatch(invoice, ledgerLookup, ledgerKeys)),
+      );
+      const result = fillRecognizedInvoices(ledgerNumbers.length ? ledgerNumbers : uniqueNumbers);
+      setOcrStatus(
+        result.added
+          ? `已识别 ${result.added} 个发票号，${result.matched} 个已自动带出开票日期和金额。`
+          : "未识别到新的发票号，请确认图片清晰且未重复导入。",
+      );
+    } catch {
+      setOcrStatus("OCR识别失败，请确认OCR服务可访问后重试。");
+    } finally {
+      setOcrRecognizing(false);
+    }
+  };
   const addImage = (index: number, file?: File) => {
     if (!file || !file.type.startsWith("image/")) return;
     const reader = new FileReader();
@@ -2449,7 +2510,21 @@ function DifferenceDetailDrawer({
       <div className="drawer-tools">
         <button type="button" onClick={add}>＋ 新增一行</button>
         <button type="button" onClick={batchAdd}>▣ 批量录入</button>
+        {meta.invoice && <label className="drawer-ocr-button">
+          {ocrRecognizing ? "OCR识别中…" : "OCR发票识别"}
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            disabled={ocrRecognizing}
+            onChange={(event) => {
+              void recognizeInvoices(event.target.files);
+              event.target.value = "";
+            }}
+          />
+        </label>}
       </div>
+      {meta.invoice && ocrStatus && <p className="drawer-ocr-status" role="status">{ocrStatus}</p>}
       <div className="difference-drawer-table-wrap">
         <table className="difference-drawer-table">
           <thead>
@@ -2584,6 +2659,22 @@ const extractInvoiceNumbers = (text: string) =>
     .split(/\r?\n/)
     .map((line) => line.replace(/\D/g, ""))
     .filter((digits) => digits.length >= 7);
+
+const OCR_INVOICE_ENDPOINT = "http://192.168.51.116:8000/ocr/recognize";
+
+function collectOcrText(value: unknown): string[] {
+  if (typeof value === "string" || typeof value === "number") return [String(value)];
+  if (Array.isArray(value)) return value.flatMap(collectOcrText);
+  if (!value || typeof value !== "object") return [];
+  return Object.values(value as Record<string, unknown>).flatMap(collectOcrText);
+}
+
+function extractInvoiceNumbersFromOcr(value: unknown): string[] {
+  const candidates = collectOcrText(value).flatMap((text) =>
+    text.match(/(?<!\d)\d{7,20}(?!\d)/g) ?? [],
+  );
+  return [...new Set(candidates)];
+}
 function InvoiceGroup({
   title,
   entries,
