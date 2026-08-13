@@ -287,14 +287,15 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           (x.reduce((sum, row) => sum + (row.cleared ? row.companyReceivable : 0), 0) /
             Math.max(x.reduce((sum, row) => sum + row.companyReceivable, 0), 1)) *
           100,
-        unresolved: x
-          .filter(isPendingFollowUp)
-          .reduce((s, r) => s + r.difference, 0),
+        // 区域表现的金额口径：未对清客户的公司应收，不使用待解决清单差额。
+        unreconciledAmount: x
+          .filter((row) => !row.cleared)
+          .reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0),
         risk: x.reduce((s, r) => s + getRisks(r).length, 0),
       };
     })
     .filter((x) => x.x.length)
-    .sort((a, b) => b.unresolved - a.unresolved || b.risk - a.risk);
+    .sort((a, b) => b.unreconciledAmount - a.unreconciledAmount || b.risk - a.risk);
   const cats = [
     { name: "在途金额", color: "#2c78f6", value: categoryRows.reduce((sum, row) => sum + row.transit, 0), matches: (row: CockpitRow) => row.transit > 0 },
     { name: "退票金额", color: "#18b79b", value: categoryRows.reduce((sum, row) => sum + row.returned, 0), matches: (row: CockpitRow) => row.returned > 0 },
@@ -621,7 +622,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         </article>
         </>
         <article className="panel region-panel">
-          <h3>B. 区域对账表现 <small>按未解决金额排序</small></h3>
+          <h3>B. 区域对账表现 <small>按未对清金额排序</small></h3>
           <div className="table-wrap">
             <table>
               <thead>
@@ -630,7 +631,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   <th>客户数</th>
                   <th>金额完成率</th>
                   <th>客户对清率</th>
-                  <th>未解决差额</th>
+                  <th>未对清金额</th>
                   <th>异常</th>
                 </tr>
               </thead>
@@ -655,7 +656,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                         {x.rate.toFixed(1)}%
                       </span>
                     </td>
-                    <td>{money(x.unresolved)}</td>
+                    <td>{money(x.unreconciledAmount)}</td>
                     <td>{x.unclear}</td>
                   </tr>
                 ))}
@@ -664,7 +665,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   <td>{m.total}</td>
                   <td>{m.amountRate.toFixed(1)}%</td>
                   <td>{m.rate.toFixed(1)}%</td>
-                  <td>{money(m.unresolved)}</td>
+                  <td>{money(rows.filter((row) => !row.cleared).reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0))}</td>
                   <td>{m.unclear}</td>
                 </tr>
               </tbody>
@@ -799,10 +800,10 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
               <b>{Math.abs(compare).toFixed(1)}</b> 个百分点；
             </li>
             <li>
-              {regionRows[0]?.region || "当前"}区域未解决差额最高，占比{" "}
+              {regionRows[0]?.region || "当前"}区域未对清金额最高，占比{" "}
               <b>
-                {m.unresolved
-                  ? `${((regionRows[0]?.unresolved / m.unresolved) * 100).toFixed(1)}%`
+                {m.pendingConfirmation
+                  ? `${((regionRows[0]?.unreconciledAmount / m.pendingConfirmation) * 100).toFixed(1)}%`
                   : "0%"}
               </b>
               ；
@@ -907,7 +908,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                       <th scope="col">区域</th>
                       <th scope="col">客户数</th>
                       <th scope="col">{modal.title}</th>
-                      <th scope="col">未解决差额</th>
+                      <th scope="col">未对清金额</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -917,7 +918,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                         <td>{row.region}</td>
                         <td className="detail-money">{row.x.length}</td>
                         <td className="detail-money primary-money">{rate.toFixed(1)}%</td>
-                        <td className={`detail-money ${row.unresolved ? "difference-money" : "muted-money"}`}>{detailMoney(row.unresolved)}</td>
+                        <td className={`detail-money ${row.unreconciledAmount ? "difference-money" : "muted-money"}`}>{detailMoney(row.unreconciledAmount)}</td>
                       </tr>;
                     })}
                   </tbody>
