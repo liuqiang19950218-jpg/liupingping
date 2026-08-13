@@ -75,20 +75,29 @@ const numberOf = (value: string) => {
 };
 const percent = (numerator: number, denominator: number) => denominator ? (numerator / denominator) * 100 : 0;
 const formatPercent = (value: number) => `${value.toFixed(1)}%`;
+const hasReconciliationDifference = (row: unknown[], headers: string[]) =>
+  Math.abs(numberOf(cell(row, headers, "\u5bf9\u8d26\u5dee\u989d"))) > 0.000001;
 
 function specialData(sheet?: SavedSheet) {
   const headers = sheet?.headers ?? [];
   const source = sheet?.rows ?? [];
   const reconciled = source.filter((row) => isReconciled(row, headers));
+  // 在途证明只面向有对账差额、且已对账的客户。未对账客户在前一步
+  // 已被排除，因此不会进入该资料的应收集数、已收集数或区域收集率。
+  const transitApplicable = reconciled.filter((row) => hasReconciliationDifference(row, headers));
   const regions = [...new Set(reconciled.map((row) => cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199"))];
   const collection = MATERIALS.map((material, order): CollectionRow => {
-    const completed = reconciled.filter((row) => isCollected(material.name, materialCell(row, headers, material.aliases))).length;
-    const followRegions = regions.map((name, regionOrder) => {
-      const regional = reconciled.filter((row) => (cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199") === name);
+    const population = material.kind === "transit" ? transitApplicable : reconciled;
+    const materialRegions = material.kind === "transit"
+      ? [...new Set(population.map((row) => cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199"))]
+      : regions;
+    const completed = population.filter((row) => isCollected(material.name, materialCell(row, headers, material.aliases))).length;
+    const followRegions = materialRegions.map((name, regionOrder) => {
+      const regional = population.filter((row) => (cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199") === name);
       const received = regional.filter((row) => isCollected(material.name, materialCell(row, headers, material.aliases))).length;
       return { name, rate: percent(received, regional.length), order: regionOrder };
     }).filter((item) => item.rate < 100).sort((a, b) => b.rate - a.rate || a.order - b.order).map(({ name, rate }) => ({ name, rate }));
-    return { ...material, completed, total: reconciled.length, rate: percent(completed, reconciled.length), followRegions, order };
+    return { ...material, completed, total: population.length, rate: percent(completed, population.length), followRegions, order };
   }).sort((a, b) => b.rate - a.rate || a.order - b.order);
   const replyRates = regions.map((name, order): ReplyRateRow => {
     const regional = reconciled.filter((row) => (cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199") === name);
