@@ -1,6 +1,7 @@
 export const ACTIVE_SHEET_KEY = "local-quarterly-reconciliation";
 export const QUARTER_ARCHIVE_KEY = "local-quarterly-reconciliation-archive";
 export const SELECTED_QUARTER_KEY = "local-quarterly-reconciliation-selected-quarter";
+export const SPD_SHEET_ARCHIVE_KEY = "local-quarterly-reconciliation-spd-sheet-archive";
 
 export type ArchivedSheet = {
   headers: string[];
@@ -9,6 +10,7 @@ export type ArchivedSheet = {
   details?: Record<string, unknown>;
 };
 export type QuarterArchive = Record<string, ArchivedSheet>;
+export type SpdSheetArchive = Record<string, ArchivedSheet>;
 
 const LEGACY_SPD_CONFIRMATION_HEADER = "SPD\u786e\u8ba4\u51fd";
 const SPD_CONFIRMATION_HEADER = "SPD\u786e\u8ba4\u8868";
@@ -142,6 +144,33 @@ export function selectedQuarter() {
 
 export function sheetForQuarter(quarter: string) {
   return ensureArchiveFromActive()[quarter];
+}
+
+export function readSpdSheetArchive(): SpdSheetArchive {
+  try {
+    const archive = JSON.parse(
+      localStorage.getItem(SPD_SHEET_ARCHIVE_KEY) || "{}",
+    );
+    return archive && typeof archive === "object" ? archive : {};
+  } catch {
+    return {};
+  }
+}
+
+export function spdSheetForQuarter(quarter: string) {
+  return readSpdSheetArchive()[quarter];
+}
+
+/** Stores the independent SPD material sheet without changing reconciliation details. */
+export function writeSpdSheetForQuarter(quarter: string, sheet: ArchivedSheet) {
+  const archive = readSpdSheetArchive();
+  archive[quarter] = {
+    ...sheet,
+    headers: [...sheet.headers],
+    rows: sheet.rows.map((row) => [...row]),
+  };
+  localStorage.setItem(SPD_SHEET_ARCHIVE_KEY, JSON.stringify(archive));
+  window.dispatchEvent(new Event("reconciliation-spd-sheet-updated"));
 }
 
 export function selectQuarter(quarter: string) {

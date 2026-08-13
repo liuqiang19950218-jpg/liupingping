@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { selectedQuarter, sheetForQuarter } from "./quarter-storage";
+import { selectedQuarter, sheetForQuarter, spdSheetForQuarter } from "./quarter-storage";
 import "./q1-special-panels.css";
 import "./q1-special-panels-layout-overrides.css";
 
@@ -78,7 +78,68 @@ const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 const hasReconciliationDifference = (row: unknown[], headers: string[]) =>
   Math.abs(numberOf(cell(row, headers, "\u5bf9\u8d26\u5dee\u989d"))) > 0.000001;
 
-function specialData(sheet?: SavedSheet) {
+const spdFieldAliases = (material: MaterialDefinition) =>
+  material.name === "SPD\u786e\u8ba4\u8868"
+    ? ["SPD\u786e\u8ba4\u8868", "SPD\u786e\u8ba4\u51fd"]
+    : ["SPD\u5e93\u5b58\u786e\u8ba4\u51fd"];
+
+function spdCollectionRows(sheet?: SavedSheet) {
+  const headers = sheet?.headers ?? [];
+  const source = sheet?.rows ?? [];
+  const accountAt = headers.findIndex((header) => normalize(header) === "\u8d26\u5957");
+  const regionAt = headers.findIndex((header) => normalize(header) === "\u533a\u57df");
+  const customerAt = headers.findIndex((header) => normalize(header) === "\u5ba2\u6237\u540d\u79f0");
+  const hasIdentity = accountAt >= 0 || regionAt >= 0 || customerAt >= 0;
+  const unique = new Map<string, unknown[]>();
+  source.forEach((row, index) => {
+    const key = hasIdentity
+      ? [row[accountAt], row[regionAt], row[customerAt]]
+          .map((value) => normalize(value))
+          .join("|")
+      : String(index);
+    if (key.replace(/\|/g, "")) unique.set(key, row);
+  });
+  return [...unique.values()];
+}
+
+function spdCollectionForMaterial(
+  material: MaterialDefinition,
+  spdSheet?: SavedSheet,
+  order = 0,
+): CollectionRow | null {
+  if (material.kind !== "spd" && material.kind !== "stock") return null;
+  const headers = spdSheet?.headers ?? [];
+  if (!headers.length) return null;
+  const population = spdCollectionRows(spdSheet);
+  const aliases = spdFieldAliases(material);
+  const regions = [...new Set(population.map((row) => cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199"))];
+  const completed = population.filter((row) =>
+    isProvided(materialCell(row, headers, aliases)),
+  ).length;
+  const followRegions = regions
+    .map((name, regionOrder) => {
+      const regional = population.filter(
+        (row) => (cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199") === name,
+      );
+      const received = regional.filter((row) =>
+        isProvided(materialCell(row, headers, aliases)),
+      ).length;
+      return { name, rate: percent(received, regional.length), order: regionOrder };
+    })
+    .filter((item) => item.rate < 100)
+    .sort((a, b) => b.rate - a.rate || a.order - b.order)
+    .map(({ name, rate }) => ({ name, rate }));
+  return {
+    ...material,
+    completed,
+    total: population.length,
+    rate: percent(completed, population.length),
+    followRegions,
+    order,
+  };
+}
+
+function specialData(sheet?: SavedSheet, spdSheet?: SavedSheet) {
   const headers = sheet?.headers ?? [];
   const source = sheet?.rows ?? [];
   const reconciled = source.filter((row) => isReconciled(row, headers));
@@ -87,6 +148,8 @@ function specialData(sheet?: SavedSheet) {
   const transitApplicable = reconciled.filter((row) => hasReconciliationDifference(row, headers));
   const regions = [...new Set(reconciled.map((row) => cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199"))];
   const collection = MATERIALS.map((material, order): CollectionRow => {
+    const fromSpdSheet = spdCollectionForMaterial(material, spdSheet, order);
+    if (fromSpdSheet) return fromSpdSheet;
     const population = material.kind === "transit" ? transitApplicable : reconciled;
     const materialRegions = material.kind === "transit"
       ? [...new Set(population.map((row) => cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199"))]
@@ -188,14 +251,15 @@ function FollowAdviceCard({ collection, replyRates }: { collection: CollectionRo
 export function Q1SpecialPanels() {
   const [quarter, setQuarter] = useState("");
   const [sheet, setSheet] = useState<SavedSheet>();
+  const [spdSheet, setSpdSheet] = useState<SavedSheet>();
   const [tab, setTab] = useState<"collection" | "unaccounted">("collection");
   useEffect(() => {
-    const sync = () => { const nextQuarter = selectedQuarter(); setQuarter(nextQuarter); setSheet(sheetForQuarter(nextQuarter) as SavedSheet | undefined); };
+    const sync = () => { const nextQuarter = selectedQuarter(); setQuarter(nextQuarter); setSheet(sheetForQuarter(nextQuarter) as SavedSheet | undefined); setSpdSheet(spdSheetForQuarter(nextQuarter) as SavedSheet | undefined); };
     sync();
-    window.addEventListener("reconciliation-quarter-selected", sync); window.addEventListener("reconciliation-quarter-updated", sync); window.addEventListener("reconciliation-updated", sync);
-    return () => { window.removeEventListener("reconciliation-quarter-selected", sync); window.removeEventListener("reconciliation-quarter-updated", sync); window.removeEventListener("reconciliation-updated", sync); };
+    window.addEventListener("reconciliation-quarter-selected", sync); window.addEventListener("reconciliation-quarter-updated", sync); window.addEventListener("reconciliation-updated", sync); window.addEventListener("reconciliation-spd-sheet-updated", sync);
+    return () => { window.removeEventListener("reconciliation-quarter-selected", sync); window.removeEventListener("reconciliation-quarter-updated", sync); window.removeEventListener("reconciliation-updated", sync); window.removeEventListener("reconciliation-spd-sheet-updated", sync); };
   }, []);
-  const data = useMemo(() => specialData(sheet), [sheet]);
+  const data = useMemo(() => specialData(sheet, spdSheet), [sheet, spdSheet]);
   if (!quarter) return null;
   return <section className="q1-special">
     <div className="special-head"><div><p>{quarter} {S.specialInfo}</p><h2>{S.pageTitle}</h2></div><div className="special-tabs" role="tablist" aria-label={S.pageTitle}>

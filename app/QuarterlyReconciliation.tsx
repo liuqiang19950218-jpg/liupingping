@@ -16,6 +16,7 @@ import {
   selectQuarter,
   selectedQuarter,
   sheetForQuarter,
+  writeSpdSheetForQuarter,
   writeArchivedSheet,
 } from "./quarter-storage";
 import "./reconciliation.css";
@@ -120,6 +121,7 @@ const T = {
   uploadMaterials: "\u5bfc\u5165\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868",
   uploadCompanyReceivable:
     "\u4e0a\u4f20\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868",
+  uploadSpdSheet: "\u5bfc\u5165SPD\u8868",
   clearData: "\u6e05\u9664\u672c\u673a\u6570\u636e",
   importTitle: "\u5b63\u5ea6\u5bf9\u8d26",
   importHint:
@@ -1303,6 +1305,43 @@ export function QuarterlyReconciliation({
     }
     event.target.value = "";
   }
+  async function importSpdSheet(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const quarter = activeQuarter || selectedQuarter();
+    if (!quarter) {
+      setMessage("\u8bf7\u5148\u4e0a\u4f20\u5bf9\u8d26\u5b63\u5ea6\u8868\uff0c\u786e\u5b9a\u5f53\u524d\u5bf9\u8d26\u5b63\u5ea6\u540e\u518d\u5bfc\u5165SPD\u8868\u3002");
+      event.target.value = "";
+      return;
+    }
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const all = XLSX.utils.sheet_to_json<unknown[]>(
+        workbook.Sheets[workbook.SheetNames[0]],
+        { header: 1, defval: "" },
+      );
+      const headers = (all[0] ?? []).map(String);
+      const rows = all
+        .slice(1)
+        .filter((row) => row.some((value) => String(value ?? "").trim() !== ""));
+      if (!headers.length || !rows.length)
+        throw new Error("SPD\u8868\u672a\u8bfb\u53d6\u5230\u53ef\u7528\u7684\u8868\u5934\u6216\u6570\u636e\u3002");
+      if (
+        headerIndex(headers, ["SPD\u786e\u8ba4\u8868", "SPD\u786e\u8ba4\u51fd"]) < 0 &&
+        headerIndex(headers, ["SPD\u5e93\u5b58\u786e\u8ba4\u51fd"]) < 0
+      )
+        throw new Error(
+          "SPD\u8868\u5fc5\u987b\u81f3\u5c11\u5305\u542bSPD\u786e\u8ba4\u8868\u6216SPD\u5e93\u5b58\u786e\u8ba4\u51fd\u5217\u3002",
+        );
+      writeSpdSheetForQuarter(quarter, { headers, rows, fileName: file.name });
+      setMessage(`\u5df2\u5bfc\u5165SPD\u8868\uff1a${rows.length}\u6761\u8bb0\u5f55\u3002\u4ec5\u7528\u4e8e\u5bf9\u8d26\u770b\u677f\u7684SPD\u786e\u8ba4\u8868\u548cSPD\u5e93\u5b58\u786e\u8ba4\u51fd\u7edf\u8ba1\u3002`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "SPD\u8868\u5bfc\u5165\u5931\u8d25\u3002",
+      );
+    }
+    event.target.value = "";
+  }
   async function importCurrentLedger(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     if (!files.length) return;
@@ -1504,6 +1543,14 @@ export function QuarterlyReconciliation({
                   type="file"
                   accept=".xlsx,.xls"
                   onChange={importMaterials}
+                />
+              </label>
+              <label className="file-button materials-upload">
+                {T.uploadSpdSheet}
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={importSpdSheet}
                 />
               </label>
               <label className="file-button company-receivable-upload">
