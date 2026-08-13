@@ -27,6 +27,13 @@ type InvoiceEntry = {
 };
 type LedgerLookup = Record<string, { amount: number; dates: string[] }>;
 type OtherEntry = { amount: string; note: string; image?: string };
+type DifferenceType =
+  | "transit"
+  | "returned"
+  | "lost"
+  | "instrument"
+  | "otherInvoice"
+  | "other";
 type DetailForm = {
   companyAmount: string;
   customerAmount: string;
@@ -557,6 +564,8 @@ export function QuarterlyReconciliation({
   const [message, setMessage] = useState("");
   const [active, setActive] = useState<number | null>(null);
   const [form, setForm] = useState<DetailForm>(empty());
+  const [activeDifferenceType, setActiveDifferenceType] =
+    useState<DifferenceType | null>(null);
   const [ledgerKeys, setLedgerKeys] = useState<Set<string> | null>(null);
   const [currentLedgerKeys, setCurrentLedgerKeys] = useState<Set<string>>(
     new Set(),
@@ -1927,7 +1936,10 @@ export function QuarterlyReconciliation({
                 type="button"
                 className="modal-close"
                 aria-label="关闭销售填写"
-                onClick={() => setActive(null)}
+                onClick={() => {
+                  setActiveDifferenceType(null);
+                  setActive(null);
+                }}
               >
                 {"\u00d7"}
               </button>
@@ -1973,61 +1985,11 @@ export function QuarterlyReconciliation({
               </div>
             </div>
             <div className="sales-modal-body">
-              <div className="detail-grid">
-                <InvoiceGroup
-                  title={T.transitReview}
-                  entries={form.transit}
-                  requiresReview={true}
-                  ledgerKeys={matchingLedgerKeys}
-                  ledgerLookup={ledgerLookup}
-                  setEntries={(entries) =>
-                    setForm({ ...form, transit: entries })
-                  }
-                />
-                <InvoiceGroup
-                  title={T.returnReview}
-                  entries={form.returned}
-                  requiresReview={true}
-                  ledgerKeys={matchingLedgerKeys}
-                  ledgerLookup={ledgerLookup}
-                  setEntries={(entries) =>
-                    setForm({ ...form, returned: entries })
-                  }
-                />
-                <InvoiceGroup
-                  title={T.lostReview}
-                  entries={form.lost}
-                  requiresReview={true}
-                  ledgerKeys={matchingLedgerKeys}
-                  ledgerLookup={ledgerLookup}
-                  setEntries={(entries) => setForm({ ...form, lost: entries })}
-                />
-                <InvoiceGroup
-                  title={T.instrumentReview}
-                  entries={form.instrument}
-                  requiresReview={true}
-                  ledgerKeys={matchingLedgerKeys}
-                  ledgerLookup={ledgerLookup}
-                  setEntries={(entries) =>
-                    setForm({ ...form, instrument: entries })
-                  }
-                />
-                <InvoiceGroup
-                  title={T.otherInvoice}
-                  entries={form.otherInvoice}
-                  requiresReview={true}
-                  ledgerKeys={matchingLedgerKeys}
-                  ledgerLookup={ledgerLookup}
-                  setEntries={(entries) =>
-                    setForm({ ...form, otherInvoice: entries })
-                  }
-                />
-                <OtherGroup
-                  entries={form.other}
-                  setEntries={(entries) => setForm({ ...form, other: entries })}
-                  onPreview={setPreviewImage}
-                />
-              </div>
+              <DifferenceSummaryList
+                form={form}
+                activeType={activeDifferenceType}
+                onOpen={setActiveDifferenceType}
+              />
               <div className="amount-bar evidence">
                 <span>
                   {T.total}
@@ -2035,9 +1997,11 @@ export function QuarterlyReconciliation({
                 </span>
                 <span>
                   {T.compare}
-                  <strong>
-                    {Math.abs(total - difference) < 0.01 ? T.same : T.different}
-                  </strong>
+                  <strong>{money(difference)}</strong>
+                </span>
+                <span>
+                  差额未分配：
+                  <strong>{money(Math.max(0, Math.abs(difference) - total))}</strong>
                 </span>
               </div>
               <div className="detail-grid two">
@@ -2091,6 +2055,15 @@ export function QuarterlyReconciliation({
               </div>
             </div>
           </section>
+          {activeDifferenceType && (
+            <DifferenceDetailDrawer
+              type={activeDifferenceType}
+              form={form}
+              onChange={setForm}
+              onClose={() => setActiveDifferenceType(null)}
+              onPreview={setPreviewImage}
+            />
+          )}
         </div>
       )}
       {previewImage && (
@@ -2318,6 +2291,161 @@ function TextField({
         onBlur={onBlur}
       />
     </label>
+  );
+}
+
+const DIFFERENCE_SUMMARIES: Array<{
+  type: DifferenceType;
+  label: string;
+  icon: string;
+  invoice: boolean;
+}> = [
+  { type: "transit", label: "在途金额", icon: "▣", invoice: true },
+  { type: "returned", label: "退票金额", icon: "↩", invoice: true },
+  { type: "lost", label: "丢票金额", icon: "▤", invoice: true },
+  { type: "instrument", label: "仪器设备金额", icon: "▥", invoice: true },
+  { type: "otherInvoice", label: "其他（有发票）", icon: "▧", invoice: true },
+  { type: "other", label: "其他（无发票及无法验证）", icon: "▨", invoice: false },
+];
+
+function entriesFor(form: DetailForm, type: DifferenceType) {
+  return form[type];
+}
+
+function DifferenceSummaryList({
+  form,
+  activeType,
+  onOpen,
+}: {
+  form: DetailForm;
+  activeType: DifferenceType | null;
+  onOpen: (type: DifferenceType) => void;
+}) {
+  return (
+    <section className="difference-summary-list" aria-label="差额类型总览">
+      <div className="difference-summary-heading">
+        <b>差额类型总览</b>
+        <small>点击右侧“填写”录入明细</small>
+      </div>
+      {DIFFERENCE_SUMMARIES.map((item) => {
+        const entries = entriesFor(form, item.type);
+        const filled = entries.filter((entry) => num(entry.amount) !== 0 || entry.note.trim() || ("invoice" in entry && entry.invoice.trim())).length;
+        const subtotal = entries.reduce((total, entry) => total + num(entry.amount), 0);
+        return (
+          <div className={`difference-summary-row ${activeType === item.type ? "active" : ""}`} key={item.type}>
+            <i aria-hidden="true">{item.icon}</i>
+            <strong>{item.label}</strong>
+            <span className="summary-tag">{item.invoice ? "需填报" : "可附图片"}</span>
+            <span>{filled} 笔</span>
+            <b>金额小计：{money(subtotal)}</b>
+            <button type="button" onClick={() => onOpen(item.type)}>填写</button>
+            <em aria-hidden="true">›</em>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function DifferenceDetailDrawer({
+  type,
+  form,
+  onChange,
+  onClose,
+  onPreview,
+}: {
+  type: DifferenceType;
+  form: DetailForm;
+  onChange: (next: DetailForm) => void;
+  onClose: () => void;
+  onPreview: (image: string) => void;
+}) {
+  const meta = DIFFERENCE_SUMMARIES.find((item) => item.type === type)!;
+  const entries = entriesFor(form, type);
+  const subtotal = entries.reduce((total, entry) => total + num(entry.amount), 0);
+  const setEntries = (next: InvoiceEntry[] | OtherEntry[]) =>
+    onChange({ ...form, [type]: next } as DetailForm);
+  const add = () =>
+    setEntries([
+      ...entries,
+      ...(meta.invoice ? [blankInvoice()] : [blankOther()]),
+    ] as InvoiceEntry[] & OtherEntry[]);
+  const batchAdd = () =>
+    setEntries([
+      ...entries,
+      ...(meta.invoice ? [blankInvoice(), blankInvoice(), blankInvoice()] : [blankOther(), blankOther(), blankOther()]),
+    ] as InvoiceEntry[] & OtherEntry[]);
+  const copy = (index: number) =>
+    setEntries([
+      ...entries.slice(0, index + 1),
+      { ...entries[index] },
+      ...entries.slice(index + 1),
+    ] as InvoiceEntry[] & OtherEntry[]);
+  const remove = (index: number) =>
+    setEntries(
+      entries.length === 1
+        ? (meta.invoice ? [blankInvoice()] : [blankOther()])
+        : entries.filter((_, entryIndex) => entryIndex !== index),
+    );
+  const update = (index: number, field: "date" | "invoice" | "amount" | "note", value: string) =>
+    setEntries(
+      entries.map((entry, entryIndex) =>
+        entryIndex === index ? { ...entry, [field]: value } : entry,
+      ) as InvoiceEntry[] & OtherEntry[],
+    );
+  const addImage = (index: number, file?: File) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () =>
+      setEntries(
+        entries.map((entry, entryIndex) =>
+          entryIndex === index ? { ...entry, image: String(reader.result ?? "") } : entry,
+        ) as OtherEntry[],
+      );
+    reader.readAsDataURL(file);
+  };
+  return (
+    <aside className="difference-detail-drawer" role="dialog" aria-modal="true" aria-label={`填写${meta.label}差额明细`}>
+      <header>
+        <div>
+          <p>填写差额明细</p>
+          <h2>{meta.label}差额明细</h2>
+          <span>{entries.filter((entry) => num(entry.amount) !== 0 || entry.note.trim()).length} 笔　金额小计：<b>{money(subtotal)}</b></span>
+        </div>
+        <button type="button" aria-label="关闭差额明细" onClick={onClose}>×</button>
+      </header>
+      <div className="drawer-tools">
+        <button type="button" onClick={add}>＋ 新增一行</button>
+        <button type="button" onClick={batchAdd}>▣ 批量录入</button>
+      </div>
+      <div className="difference-drawer-table-wrap">
+        <table className="difference-drawer-table">
+          <thead>
+            <tr>
+              <th>序号</th>
+              {meta.invoice && <><th>开票日期</th><th>发票号码</th></>}
+              <th>金额（元）</th>
+              <th>差额说明</th>
+              {!meta.invoice && <th>图片附件</th>}
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((entry, index) => (
+              <tr key={index}>
+                <td>{index + 1}</td>
+                {meta.invoice && <><td><input type="date" value={(entry as InvoiceEntry).date} onChange={(event) => update(index, "date", event.target.value)} /></td><td><input value={(entry as InvoiceEntry).invoice} onChange={(event) => update(index, "invoice", event.target.value)} placeholder="填写发票号码" /></td></>}
+                <td><input type="number" step="0.01" value={entry.amount} onChange={(event) => update(index, "amount", event.target.value)} placeholder="0.00" /></td>
+                <td><input value={entry.note} onChange={(event) => update(index, "note", event.target.value)} placeholder="填写差额说明" /></td>
+                {!meta.invoice && <td className="drawer-attachment"><label>上传图片<input type="file" accept="image/*" onChange={(event) => { addImage(index, event.target.files?.[0]); event.target.value = ""; }} /></label>{(entry as OtherEntry).image && <button type="button" onClick={() => onPreview((entry as OtherEntry).image!)}>查看</button>}</td>}
+                <td className="drawer-row-actions"><button type="button" onClick={() => copy(index)}>复制</button><button type="button" onClick={() => remove(index)}>删除</button></td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot><tr><td colSpan={meta.invoice ? 6 : 5}>合计：{entries.length} 笔</td><td>{money(subtotal)}</td></tr></tfoot>
+        </table>
+      </div>
+    </aside>
   );
 }
 async function cropInvoiceRows(file: File) {
