@@ -60,12 +60,13 @@
 .invoice-choices { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; padding: 7px; border-radius: 6px; background: #fff7e7; color: #8d5d08; font-size: 12px; }
 .invoice-choices button { width: auto; margin: 0; padding: 3px 6px; border: 1px solid #f0ce8d; border-radius: 4px; background: #fff; color: #895400; font-size: 11px; cursor: pointer; }
 .photo-import { display: none; }
-.sales-modal { display: flex; max-height: calc(100dvh - 56px); overflow: hidden; flex-direction: column; overscroll-behavior: contain; }
-.sales-modal-sticky { position: sticky; top: -32px; z-index: 11; margin: -32px -32px 16px; padding: 32px 64px 12px 32px; border-bottom: 1px solid #e5edf6; background: #fff; box-shadow: 0 8px 14px rgb(31 78 121 / 7%); }
+.modal-backdrop { display: flex; justify-content: flex-end; overflow: hidden; padding: 0; }
+.sales-modal { display: flex; width: min(920px, 82vw); height: 100dvh; max-height: none; margin: 0; padding: 28px 32px; overflow: hidden; flex-direction: column; border-radius: 0; box-shadow: -14px 0 34px rgb(14 43 77 / 22%); overscroll-behavior: contain; }
+.sales-modal-sticky { position: sticky; top: -28px; z-index: 11; margin: -28px -32px 16px; padding: 28px 64px 12px 32px; border-bottom: 1px solid #e5edf6; background: #fff; box-shadow: 0 8px 14px rgb(31 78 121 / 7%); }
 .sales-account { margin: 0 0 4px; color: #58708c; font-size: 13px; font-weight: 700; }
 .sales-modal-sticky .modal-close { z-index: 12; }
 .sales-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-.sales-modal { width: min(920px, calc(100vw - 48px)); }
+.sales-modal-body { padding-right: 2px; }
 .difference-summary-list { display: grid; gap: 8px; margin-bottom: 14px; }
 .difference-summary-heading { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 8px; color: #173150; }
 .difference-summary-heading small { color: #72849a; font-size: 12px; }
@@ -101,7 +102,7 @@
 .drawer-row-actions button:last-child { color: #ef4444; }
 .drawer-attachment label { display: inline-block; color: #1677ff; cursor: pointer; }
 .drawer-attachment input { display: none; }
-@media (max-width: 720px) { .difference-summary-row { grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 7px; padding: 8px 10px; } .difference-summary-row .summary-tag, .difference-summary-row > span:not(.summary-tag), .difference-summary-row > b, .difference-summary-row em { display: none; } .difference-detail-drawer { width: 100vw; } }
+@media (max-width: 720px) { .sales-modal { width: 100vw; padding: 24px; } .sales-modal-sticky { top: -24px; margin: -24px -24px 14px; padding: 24px 54px 12px 24px; } .difference-summary-row { grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 7px; padding: 8px 10px; } .difference-summary-row .summary-tag, .difference-summary-row > span:not(.summary-tag), .difference-summary-row > b, .difference-summary-row em { display: none; } .difference-detail-drawer { width: 100vw; } }
 .photo-import-button { display: inline-flex; width: auto; margin: 0 8px 6px 0; padding: 7px 10px; border-radius: 6px; background: #0d66d9; color: #fff; font-weight: 600; cursor: pointer; }
 .photo-import-button input { display: none; }
 .photo-import p { margin: 5px 0 0; color: #36546d; }
@@ -114,7 +115,6 @@
 .invoice-choices { background: #eef6ff; color: #125c89; }
 .invoice-choices button { border-color: #b9d5ef; color: #125c89; }
 @media (max-width: 640px) { .customer-save-row { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .sales-modal { max-height: calc(100dvh - 24px); } .sales-modal-sticky { top: -30px; margin: -30px -24px 14px; padding: 30px 54px 12px 24px; } }
 
 /* Reconciliation workspace */
 .detail-table-tool { overflow: visible; border: 0 !important; border-radius: 14px !important; background: transparent !important; box-shadow: none !important; }
