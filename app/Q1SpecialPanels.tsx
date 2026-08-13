@@ -65,6 +65,8 @@ const isMarkedUnreconciled = (row: unknown[], headers: string[]) => {
 const isReconciled = (row: unknown[], headers: string[]) =>
   !isMarkedUnreconciled(row, headers) && isReconciledAmount(cell(row, headers, "\u5ba2\u6237\u8d26\u9762\u91d1\u989d"));
 const isProvided = (value: string) => ["\u5df2\u63d0\u4f9b", "\u662f"].includes(normalize(value));
+// SPD表的是/否都表示已经填报；只有空白才是未收集。
+const isSpdCollected = (value: string) => value.trim() !== "";
 const isReply = (value: string) => ["\u5df2\u76d6\u7ae0", "\u672a\u76d6\u7ae0", "\u5df2\u56de\u51fd", "\u5df2\u63d0\u4f9b", "\u662f"].includes(normalize(value));
 const isConfirmationReply = (value: string) => ["\u5df2\u56de\u51fd", "\u662f", "\u5df2\u63d0\u4f9b"].includes(normalize(value));
 const isCollected = (name: string, value: string) =>
@@ -114,7 +116,7 @@ function spdCollectionForMaterial(
   const aliases = spdFieldAliases(material);
   const regions = [...new Set(population.map((row) => cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199"))];
   const completed = population.filter((row) =>
-    isProvided(materialCell(row, headers, aliases)),
+    isSpdCollected(materialCell(row, headers, aliases)),
   ).length;
   const followRegions = regions
     .map((name, regionOrder) => {
@@ -122,7 +124,7 @@ function spdCollectionForMaterial(
         (row) => (cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199") === name,
       );
       const received = regional.filter((row) =>
-        isProvided(materialCell(row, headers, aliases)),
+        isSpdCollected(materialCell(row, headers, aliases)),
       ).length;
       return { name, rate: percent(received, regional.length), order: regionOrder };
     })
