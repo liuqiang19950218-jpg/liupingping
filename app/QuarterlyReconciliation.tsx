@@ -2399,6 +2399,22 @@ function DifferenceDetailDrawer({
         entryIndex === index ? { ...entry, [field]: value } : entry,
       ) as InvoiceEntry[] & OtherEntry[],
     );
+  const updateInvoice = (index: number, invoice: string) => {
+    const matched = findLedgerMatch(invoice.trim(), ledgerLookup, ledgerKeys);
+    setEntries(
+      entries.map((entry, entryIndex) => {
+        if (entryIndex !== index) return entry;
+        const current = entry as InvoiceEntry;
+        if (!matched) return { ...current, invoice };
+        return {
+          ...current,
+          invoice,
+          date: matched.dates.length === 1 ? matched.dates[0] : current.date,
+          amount: matched.amount.toFixed(2),
+        };
+      }) as InvoiceEntry[],
+    );
+  };
   const addImage = (index: number, file?: File) => {
     if (!file || !file.type.startsWith("image/")) return;
     const reader = new FileReader();
@@ -2451,7 +2467,7 @@ function DifferenceDetailDrawer({
             {entries.map((entry, index) => (
               <tr key={index}>
                 <td>{index + 1}</td>
-                {meta.invoice && <><td><input type="date" value={(entry as InvoiceEntry).date} onChange={(event) => update(index, "date", event.target.value)} /></td><td><input value={(entry as InvoiceEntry).invoice} onChange={(event) => update(index, "invoice", event.target.value)} placeholder="填写发票号码" /></td></>}
+                {meta.invoice && <><td><input type="date" value={(entry as InvoiceEntry).date} onChange={(event) => update(index, "date", event.target.value)} /></td><td><input value={(entry as InvoiceEntry).invoice} onChange={(event) => updateInvoice(index, event.target.value)} placeholder="填写发票号码" /></td></>}
                 <td><input type="number" step="0.01" value={entry.amount} onChange={(event) => update(index, "amount", event.target.value)} placeholder="0.00" /></td>
                 <td><input value={entry.note} onChange={(event) => update(index, "note", event.target.value)} placeholder="填写差额说明" /></td>
                 {meta.invoice && (() => {
