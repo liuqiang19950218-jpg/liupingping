@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { updateDashboardSnapshot } from "./cockpit-data";
@@ -26,6 +27,26 @@ type InvoiceEntry = {
   note: string;
 };
 type LedgerLookup = Record<string, { amount: number; dates: string[] }>;
+type BrowserSpeechRecognition = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: {
+    resultIndex: number;
+    results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
+  }) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+};
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+declare global {
+  interface Window {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  }
+}
 type OtherEntry = { amount: string; note: string; image?: string };
 type DifferenceType =
   | "transit"
@@ -566,6 +587,9 @@ export function QuarterlyReconciliation({
   const [form, setForm] = useState<DetailForm>(empty());
   const [activeDifferenceType, setActiveDifferenceType] =
     useState<DifferenceType | null>(null);
+  const [speechRecording, setSpeechRecording] = useState(false);
+  const [speechMessage, setSpeechMessage] = useState("");
+  const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const [ledgerKeys, setLedgerKeys] = useState<Set<string> | null>(null);
   const [currentLedgerKeys, setCurrentLedgerKeys] = useState<Set<string>>(
     new Set(),
@@ -601,6 +625,59 @@ export function QuarterlyReconciliation({
           ? columns.filter((item) => item !== column)
           : [...columns, column],
       );
+  };
+  const stopSolutionRecording = () => {
+    speechRecognitionRef.current?.stop();
+    speechRecognitionRef.current = null;
+    setSpeechRecording(false);
+  };
+  const toggleSolutionRecording = () => {
+    if (speechRecording) {
+      stopSolutionRecording();
+      return;
+    }
+    const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!Recognition) {
+      setSpeechMessage("当前浏览器不支持语音转文字，请使用最新版 Chrome 或 Edge。");
+      return;
+    }
+    const recognition = new Recognition();
+    let transcript = "";
+    recognition.lang = "zh-CN";
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        if (event.results[index].isFinal) transcript += event.results[index][0].transcript;
+      }
+    };
+    recognition.onerror = (event) => {
+      const errorMessages: Record<string, string> = {
+        "not-allowed": "麦克风权限未开启，请允许浏览器使用麦克风后重试。",
+        "no-speech": "未识别到语音，请重新开始录音。",
+        "network": "语音识别服务连接失败，请检查网络后重试。",
+      };
+      setSpeechMessage(errorMessages[event.error] ?? "语音转文字失败，请重试。");
+    };
+    recognition.onend = () => {
+      if (transcript.trim()) {
+        setForm((current) => ({
+          ...current,
+          resolutionSolution: `${current.resolutionSolution}${current.resolutionSolution.trim() ? "；" : ""}${transcript.trim()}`,
+        }));
+        setSpeechMessage("\u8bed\u97f3\u5185\u5bb9\u5df2\u8ffd\u52a0\u5230\u89e3\u51b3\u65b9\u6848\u3002");
+      }
+      speechRecognitionRef.current = null;
+      setSpeechRecording(false);
+    };
+    try {
+      recognition.start();
+      speechRecognitionRef.current = recognition;
+      setSpeechRecording(true);
+      setSpeechMessage("正在录音，请说出解决方案；再次点击即可结束并转为文字。");
+    } catch {
+      setSpeechMessage("录音启动失败，请稍后重试。");
+    }
   };
 
   useEffect(() => {
@@ -1371,6 +1448,7 @@ export function QuarterlyReconciliation({
       details: { ...(sheet.details ?? {}), [String(active)]: form },
     });
     setMessage(T.saved);
+    stopSolutionRecording();
     setActive(null);
   }
 
@@ -1937,6 +2015,7 @@ export function QuarterlyReconciliation({
                 className="modal-close"
                 aria-label="关闭销售填写"
                 onClick={() => {
+                  stopSolutionRecording();
                   setActiveDifferenceType(null);
                   setActive(null);
                 }}
@@ -2045,13 +2124,29 @@ export function QuarterlyReconciliation({
                     setForm({ ...form, resolutionTime: value })
                   }
                 />
-                <TextField
-                  label={"\u89e3\u51b3\u65b9\u6848"}
-                  value={form.resolutionSolution}
-                  onChange={(value) =>
-                    setForm({ ...form, resolutionSolution: value })
-                  }
-                />
+                <div className="solution-field-with-speech">
+                  <TextField
+                    label={"\u89e3\u51b3\u65b9\u6848"}
+                    value={form.resolutionSolution}
+                    onChange={(value) =>
+                      setForm({ ...form, resolutionSolution: value })
+                    }
+                  />
+                  <button
+                    type="button"
+                    className={`speech-record-button${speechRecording ? " is-recording" : ""}`}
+                    onClick={toggleSolutionRecording}
+                    aria-pressed={speechRecording}
+                  >
+                    <span aria-hidden="true">{speechRecording ? "\u25cf" : "\u25c9"}</span>
+                    {speechRecording ? "\u7ed3\u675f\u5f55\u97f3" : "\u8bed\u97f3\u8f6c\u6587\u5b57"}
+                  </button>
+                  {speechMessage && (
+                    <p className="speech-record-hint" role="status">
+                      {speechMessage}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </section>

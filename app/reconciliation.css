@@ -117,6 +117,14 @@
 .photo-result button { flex: 0 0 auto; width: auto; margin: 0; padding: 5px 8px; border: 0; border-radius: 5px; background: #1677ff; color: #fff; cursor: pointer; }
 .customer-save-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(150px, .8fr); align-items: end; gap: 12px; margin: 12px 0; }
 .customer-save-row .field { margin: 0; }
+.solution-field-with-speech { position: relative; min-width: 0; }
+.solution-field-with-speech .field { margin: 0; }
+.solution-field-with-speech .field > span { display: block; min-height: 24px; padding-right: 118px; }
+.speech-record-button { position: absolute; top: 0; right: 0; display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: auto; min-height: 24px; margin: 0; padding: 3px 8px; border: 1px solid #b8d7ff; border-radius: 6px; background: #f4f9ff; color: #1677ff; font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.speech-record-button span { font-size: 12px; line-height: 1; }
+.speech-record-button:hover { border-color: #1677ff; background: #eaf3ff; }
+.speech-record-button.is-recording { border-color: #ef6a5b; background: #fff2f0; color: #df3f31; }
+.speech-record-hint { margin: 5px 0 0; color: #6b7a90; font-size: 11px; line-height: 1.45; }
 .top-save-button { width: 100%; min-height: 42px; margin: 0; align-self: end; background: #e6f1f8; color: #125c89; }
 .local-tool .file-button, .local-tool .fill-button, .sales-modal .save-button { background: #e6f1f8 !important; color: #125c89 !important; }
 .invoice-choices { background: #eef6ff; color: #125c89; }
