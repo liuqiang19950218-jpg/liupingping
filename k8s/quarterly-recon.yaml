@@ -29,6 +29,8 @@ spec:
           env:
             - name: NODE_ENV
               value: development
+            - name: PATH
+              value: /node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           volumeMounts:
             - name: wrangler-data
               mountPath: /app/.wrangler
