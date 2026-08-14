@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quarterly-recon
+  namespace: quarterly-recon
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: quarterly-recon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: quarterly-recon
+    spec:
+      containers:
+        - name: web
+          image: quarterly-recon:current-v3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: development
+          volumeMounts:
+            - name: wrangler-data
+              mountPath: /app/.wrangler
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1536Mi
+      volumes:
+        - name: wrangler-data
+          hostPath:
+            path: /var/lib/quarterly-recon/wrangler
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quarterly-recon
+  namespace: quarterly-recon
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: quarterly-recon
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
