@@ -25,7 +25,13 @@ type CollectionDrillRow = {
   customerBookAmount: string;
   differenceAmount: string;
 };
-type CollectionDrilldown = { title: string; description: string; rows: CollectionDrillRow[] };
+type CollectionDrilldown = {
+  title: string;
+  description: string;
+  rows: CollectionDrillRow[];
+  positiveStatus: string;
+  negativeStatus: string;
+};
 type CollectionDrillSelection =
   | { type: "material"; material: MaterialDefinition }
   | { type: "reply"; region: string };
@@ -244,6 +250,8 @@ function buildCollectionDrilldown(
       title: `${selection.region}\u6709\u6548\u56de\u51fd\u660e\u7ec6`,
       description: "\u5f53\u524d\u5bf9\u8d26\u5b63\u5ea6\u3001\u5f53\u524d\u533a\u57df\u7684\u5df2\u5bf9\u8d26\u5ba2\u6237\u3002\u6709\u6548\u56de\u51fd\u4ec5\u8ba4\u5b9a\u4e3a\u300c\u5df2\u76d6\u7ae0\u300d\u3002",
       rows,
+      positiveStatus: "\u6709\u6548\u56de\u51fd",
+      negativeStatus: "\u672a\u6709\u6548\u56de\u51fd",
     };
   }
 
@@ -275,6 +283,8 @@ function buildCollectionDrilldown(
       ? "\u6570\u636e\u6765\u6e90\uff1a\u72ec\u7acb\u5bfc\u5165\u7684SPD\u8868\u3002"
       : "\u6570\u636e\u6765\u6e90\uff1a\u5f53\u524d\u5b63\u5ea6\u5df2\u5bf9\u8d26\u5ba2\u6237\u3002",
     rows,
+    positiveStatus: "\u5df2\u6536\u96c6",
+    negativeStatus: "\u672a\u6536\u96c6",
   };
 }
 
@@ -328,22 +338,35 @@ function ReplyRateCard({ rows, onDrilldown }: { rows: ReplyRateRow[]; onDrilldow
   </article>;
 }
 
-function CollectionDrilldownDrawer({ data, onClose }: { data: CollectionDrilldown; onClose: () => void }) {
+function CollectionDrilldownDialog({ data, onClose }: { data: CollectionDrilldown; onClose: () => void }) {
+  const [category, setCategory] = useState<"all" | "positive" | "negative">("all");
+  useEffect(() => setCategory("all"), [data.title]);
+  const rows = useMemo(() => {
+    if (category === "positive") return data.rows.filter((row) => row.materialStatus === data.positiveStatus);
+    if (category === "negative") return data.rows.filter((row) => row.materialStatus === data.negativeStatus);
+    return data.rows;
+  }, [category, data]);
+  const categoryCount = (status: string) => data.rows.filter((row) => row.materialStatus === status).length;
   return <div className="collection-drill-mask" role="presentation" onMouseDown={onClose}>
-    <aside className="collection-drill-drawer detail-table-tool" role="dialog" aria-modal="true" aria-label={data.title} onMouseDown={(event) => event.stopPropagation()}>
+    <section className="collection-drill-dialog detail-table-tool" role="dialog" aria-modal="true" aria-label={data.title} onMouseDown={(event) => event.stopPropagation()}>
       <header className="collection-drill-head">
         <div><p>\u8d44\u6599\u6536\u96c6\u4e0e\u672a\u5bf9\u8d26\u5ba2\u6237</p><h2>{data.title}</h2><span>{data.description}</span></div>
         <button type="button" aria-label="\u5173\u95ed\u660e\u7ec6" onClick={onClose}>×</button>
       </header>
-      <div className="collection-drill-summary">\u5171 <b>{data.rows.length}</b> \u5bb6\u5ba2\u6237\uff0c\u70b9\u51fb\u6765\u6e90\u770b\u677f\u4e2d\u7684\u8d44\u6599\u6216\u533a\u57df\u5373\u53ef\u67e5\u770b\u6b64\u660e\u7ec6\u3002</div>
+      <div className="collection-drill-tabs" role="tablist" aria-label="\u660e\u7ec6\u5206\u7c7b">
+        <button type="button" role="tab" aria-selected={category === "all"} className={category === "all" ? "active" : ""} onClick={() => setCategory("all")}>\u5168\u90e8 <b>{data.rows.length}</b></button>
+        <button type="button" role="tab" aria-selected={category === "positive"} className={category === "positive" ? "active" : ""} onClick={() => setCategory("positive")}>{data.positiveStatus} <b>{categoryCount(data.positiveStatus)}</b></button>
+        <button type="button" role="tab" aria-selected={category === "negative"} className={category === "negative" ? "active" : ""} onClick={() => setCategory("negative")}>{data.negativeStatus} <b>{categoryCount(data.negativeStatus)}</b></button>
+      </div>
+      <div className="collection-drill-summary">\u5f53\u524d\u5206\u7c7b\u5171 <b>{rows.length}</b> \u5bb6\u5ba2\u6237\uff0c\u660e\u7ec6\u8303\u56f4\u4e0e\u6765\u6e90\u770b\u677f\u4fdd\u6301\u4e00\u81f4\u3002</div>
       <div className="collection-drill-table local-table">
         <table><thead><tr><th>\u5e8f\u53f7</th><th>\u8d26\u5957</th><th>\u533a\u57df</th><th>\u5ba2\u6237\u540d\u79f0</th><th>\u8d44\u6599\u72b6\u6001</th><th>\u5bf9\u8d26\u72b6\u6001</th><th>\u516c\u53f8\u5e94\u6536</th><th>\u5ba2\u6237\u8d26\u9762\u91d1\u989d</th><th>\u5bf9\u8d26\u5dee\u989d</th></tr></thead>
-          <tbody>{data.rows.length ? data.rows.map((row, index) => <tr key={row.id} className={Math.abs(numberOf(row.differenceAmount)) > 0.000001 ? "has-difference" : ""}>
+          <tbody>{rows.length ? rows.map((row, index) => <tr key={row.id} className={Math.abs(numberOf(row.differenceAmount)) > 0.000001 ? "has-difference" : ""}>
             <td>{index + 1}</td><td>{row.accountSet}</td><td>{row.region}</td><td className="collection-drill-customer">{row.customer}</td><td><span className={`collection-drill-status ${row.materialStatus.includes("\u672a") ? "pending" : "done"}`}>{row.materialStatus}</span></td><td>{row.reconciliationStatus}</td><td className="money-cell">{row.companyReceivable}</td><td className="money-cell">{row.customerBookAmount}</td><td className="money-cell difference-cell">{row.differenceAmount}</td>
           </tr>) : <tr><td colSpan={9} className="table-empty">\u5f53\u524d\u6761\u4ef6\u4e0b\u6682\u65e0\u660e\u7ec6\u6570\u636e</td></tr>}</tbody>
         </table>
       </div>
-    </aside>
+    </section>
   </div>;
 }
 
@@ -389,6 +412,6 @@ export function Q1SpecialPanels() {
     </div></div>
     {tab === "collection" ? <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} onDrilldown={(material) => setDrillSelection({ type: "material", material })} /><ReplyRateCard rows={data.replyRates} onDrilldown={(region) => setDrillSelection({ type: "reply", region })} /><FollowAdviceCard collection={data.collection} replyRates={data.replyRates} /></div>
       : <div className="special-legacy-panel"><VerticalScrollList label={S.unaccounted}><table><thead><tr><th>{S.region}</th><th>{S.customer}</th><th>{S.note}</th></tr></thead><tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td>{item.note || "—"}</td></tr>) : <tr><td colSpan={3}>{S.unaccountedEmpty}</td></tr>}</tbody></table></VerticalScrollList></div>}
-    {drilldown && <CollectionDrilldownDrawer data={drilldown} onClose={() => setDrillSelection(null)} />}
+    {drilldown && <CollectionDrilldownDialog data={drilldown} onClose={() => setDrillSelection(null)} />}
   </section>;
 }
