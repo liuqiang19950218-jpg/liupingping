@@ -20,11 +20,12 @@ spec:
     spec:
       containers:
         - name: web
-          image: quarterly-recon:current-v3
+          image: quarterly-recon:current-v6
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 3000
+              hostPort: 8000
           env:
             - name: NODE_ENV
               value: development
@@ -66,7 +67,7 @@ metadata:
   name: quarterly-recon
   namespace: quarterly-recon
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app.kubernetes.io/name: quarterly-recon
   ports:
