@@ -58,7 +58,7 @@ spec:
       volumes:
         - name: wrangler-data
           hostPath:
-            path: /var/lib/quarterly-recon/wrangler
+            path: /var/lib/quarterly-recon/database/wrangler
             type: DirectoryOrCreate
 ---
 apiVersion: v1

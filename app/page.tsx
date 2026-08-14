@@ -10,6 +10,7 @@ import { UnresolvedFollowupDashboard } from "./UnresolvedFollowupDashboard";
 import { ManagementCockpit } from "./ManagementCockpit";
 import { ProblemDashboard } from "./ProblemDashboard";
 import { CurrentYearLinkedSummary } from "./CurrentYearLinkedSummary";
+import { ServerStateBridge } from "./ServerStateBridge";
 import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
 import "./app-shell.css";
 import "./shell-overrides.css";
@@ -51,7 +52,7 @@ export default function Home() {
     return () => window.removeEventListener("reconciliation-open-current-detail", openCurrentDetail);
   }, []);
 
-  return <main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
+  return <><ServerStateBridge /><main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
     <aside className="side-nav">
       <div className="side-brand"><i>账</i><div><strong>{T.brand}</strong><span>{T.sub}</span></div></div>
       <nav>
@@ -72,5 +73,5 @@ export default function Home() {
         {view === "history" ? <><CurrentYearLinkedSummary/><DashboardOverview selected={6}/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>} 
       </div>
     </section>
-  </main>;
+  </main></>;
 }
