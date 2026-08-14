@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { selectedQuarter, sheetForQuarter, spdSheetForQuarter } from "./quarter-storage";
 import "./q1-special-panels.css";
 import "./q1-special-panels-layout-overrides.css";
+import "./q1-special-drilldown.css";
 
 type SavedSheet = { headers?: string[]; rows?: unknown[][] };
 type MaterialKind = "confirmation" | "letter" | "spd" | "stock" | "delivery" | "transit" | "writeoff";
@@ -13,6 +14,21 @@ type CollectionRow = MaterialDefinition & { completed: number; total: number; ra
 type ReplyRateRow = { name: string; replied: number; total: number; rate: number; order: number };
 type LostRow = { region: string; customer: string; amount: number; note: string };
 type UnaccountedRow = { region: string; customer: string; note: string };
+type CollectionDrillRow = {
+  id: string;
+  accountSet: string;
+  region: string;
+  customer: string;
+  materialStatus: string;
+  reconciliationStatus: string;
+  companyReceivable: string;
+  customerBookAmount: string;
+  differenceAmount: string;
+};
+type CollectionDrilldown = { title: string; description: string; rows: CollectionDrillRow[] };
+type CollectionDrillSelection =
+  | { type: "material"; material: MaterialDefinition }
+  | { type: "reply"; region: string };
 
 const S = {
   specialInfo: "\u4e13\u9879\u7ba1\u7406\u4fe1\u606f",
@@ -183,6 +199,85 @@ function specialData(sheet?: SavedSheet, spdSheet?: SavedSheet) {
   return { collection, replyRates, lost, unaccounted };
 }
 
+const displayValue = (value: string) => value.trim() || "—";
+const reconciliationStatus = (row: unknown[], headers: string[]) =>
+  cell(row, headers, "\u662f\u5426\u5bf9\u6e05") || (isReconciled(row, headers) ? "\u5df2\u5bf9\u6e05" : "\u672a\u5bf9\u8d26");
+
+function toCollectionDrillRow(
+  row: unknown[],
+  headers: string[],
+  materialStatus: string,
+  index: number,
+): CollectionDrillRow {
+  return {
+    id: [cell(row, headers, "\u8d26\u5957"), cell(row, headers, "\u533a\u57df"), cell(row, headers, "\u5ba2\u6237\u540d\u79f0"), index].join("|"),
+    accountSet: displayValue(cell(row, headers, "\u8d26\u5957")),
+    region: displayValue(cell(row, headers, "\u533a\u57df")),
+    customer: displayValue(cell(row, headers, "\u5ba2\u6237\u540d\u79f0")),
+    materialStatus,
+    reconciliationStatus: displayValue(reconciliationStatus(row, headers)),
+    companyReceivable: displayValue(cell(row, headers, "\u516c\u53f8\u5e94\u6536")),
+    customerBookAmount: displayValue(cell(row, headers, "\u5ba2\u6237\u8d26\u9762\u91d1\u989d")),
+    differenceAmount: displayValue(cell(row, headers, "\u5bf9\u8d26\u5dee\u989d")),
+  };
+}
+
+function buildCollectionDrilldown(
+  selection: CollectionDrillSelection,
+  sheet?: SavedSheet,
+  spdSheet?: SavedSheet,
+): CollectionDrilldown {
+  if (selection.type === "reply") {
+    const headers = sheet?.headers ?? [];
+    const rows = (sheet?.rows ?? [])
+      .filter((row) => isReconciled(row, headers))
+      .filter((row) => (cell(row, headers, "\u533a\u57df") || "\u672a\u586b\u5199") === selection.region)
+      .map((row, index) =>
+        toCollectionDrillRow(
+          row,
+          headers,
+          normalize(materialCell(row, headers, ["\u5bf9\u8d26\u51fd"])) === "\u5df2\u76d6\u7ae0" ? "\u6709\u6548\u56de\u51fd" : "\u672a\u6709\u6548\u56de\u51fd",
+          index,
+        ),
+      );
+    return {
+      title: `${selection.region}\u6709\u6548\u56de\u51fd\u660e\u7ec6`,
+      description: "\u5f53\u524d\u5bf9\u8d26\u5b63\u5ea6\u3001\u5f53\u524d\u533a\u57df\u7684\u5df2\u5bf9\u8d26\u5ba2\u6237\u3002\u6709\u6548\u56de\u51fd\u4ec5\u8ba4\u5b9a\u4e3a\u300c\u5df2\u76d6\u7ae0\u300d\u3002",
+      rows,
+    };
+  }
+
+  const { material } = selection;
+  const fromSpd = material.kind === "spd" || material.kind === "stock";
+  const sourceSheet = fromSpd ? spdSheet : sheet;
+  const headers = sourceSheet?.headers ?? [];
+  const source = sourceSheet?.rows ?? [];
+  const population = fromSpd
+    ? spdCollectionRows(sourceSheet)
+    : source.filter((row) => isReconciled(row, headers)).filter(
+        (row) => material.kind !== "transit" || hasReconciliationDifference(row, headers),
+      );
+  const aliases = fromSpd ? spdFieldAliases(material) : material.aliases;
+  const rows = population.map((row, index) => {
+    const collected = fromSpd
+      ? isSpdCollected(materialCell(row, headers, aliases))
+      : isCollected(material.name, materialCell(row, headers, aliases));
+    return toCollectionDrillRow(
+      row,
+      headers,
+      collected ? "\u5df2\u6536\u96c6" : "\u672a\u6536\u96c6",
+      index,
+    );
+  });
+  return {
+    title: `${material.name}\u6536\u96c6\u660e\u7ec6`,
+    description: fromSpd
+      ? "\u6570\u636e\u6765\u6e90\uff1a\u72ec\u7acb\u5bfc\u5165\u7684SPD\u8868\u3002"
+      : "\u6570\u636e\u6765\u6e90\uff1a\u5f53\u524d\u5b63\u5ea6\u5df2\u5bf9\u8d26\u5ba2\u6237\u3002",
+    rows,
+  };
+}
+
 function InfoTip({ text }: { text: string }) {
   return <span className="collection-info" tabIndex={0} title={text} aria-label={text}>i</span>;
 }
@@ -209,11 +304,11 @@ function VerticalScrollList({ children, label }: { children: ReactNode; label: s
   </div>;
 }
 
-function CollectionOverviewCard({ rows }: { rows: CollectionRow[] }) {
+function CollectionOverviewCard({ rows, onDrilldown }: { rows: CollectionRow[]; onDrilldown: (material: MaterialDefinition) => void }) {
   return <article className="collection-card overview-card">
     <header className="collection-card-head"><h3>{S.overview} <InfoTip text="\u5c55\u793a\u5404\u7c7b\u8d44\u6599\u7684\u6536\u96c6\u5b8c\u6210\u60c5\u51b5\u53ca\u9700\u91cd\u70b9\u8ddf\u8fdb\u533a\u57df\u3002" /></h3></header>
     <div className="collection-table-wrap"><table className="collection-overview-table"><thead><tr><th>{S.materialType}</th><th>{S.collected}</th><th>{S.rate}</th><th>{S.followRegions}</th></tr></thead>
-      <tbody>{rows.length ? rows.map((item) => <tr key={item.name}>
+      <tbody>{rows.length ? rows.map((item) => <tr key={item.name} className="collection-drill-row" tabIndex={0} onClick={() => onDrilldown(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onDrilldown(item); } }}>
         <td><div className="collection-material-name"><MaterialIcon kind={item.kind} /><span>{item.name}</span></div></td>
         <td className="collection-numeric">{item.completed} / {item.total}</td>
         <td className={`collection-rate ${item.rate < 90 ? "low" : ""}`}>{formatPercent(item.rate)}</td>
@@ -223,14 +318,33 @@ function CollectionOverviewCard({ rows }: { rows: CollectionRow[] }) {
   </article>;
 }
 
-function ReplyRateCard({ rows }: { rows: ReplyRateRow[] }) {
+function ReplyRateCard({ rows, onDrilldown }: { rows: ReplyRateRow[]; onDrilldown: (region: string) => void }) {
   return <article className="collection-card reply-card">
     <header className="collection-card-head"><h3>{S.effectiveReply} <InfoTip text="\u6709\u6548\u56de\u51fd\u7387 = \u5df2\u6709\u6548\u56de\u51fd\u5ba2\u6237\u6570 \u00f7 \u5df2\u5bf9\u8d26\u5ba2\u6237\u6570\u3002" /></h3></header>
-    <div className="reply-rate-list">{rows.length ? rows.map((item, index) => <button className="reply-rate-row" type="button" key={item.name} title={`${item.name}${formatPercent(item.rate)}`}>
+    <div className="reply-rate-list">{rows.length ? rows.map((item, index) => <button className="reply-rate-row" type="button" key={item.name} title={`${item.name}${formatPercent(item.rate)}`} onClick={() => onDrilldown(item.name)}>
       <ReplyLevelDot rank={index + 1} rate={item.rate} /><strong>{item.name}</strong><span className="reply-count">{item.replied} / {item.total}</span><b>{formatPercent(item.rate)}</b>
     </button>) : <p className="collection-empty">{S.noData}</p>}</div>
     <footer className="reply-legend"><span><i className="excellent" />{"\u4f18\u79c0\uff08\u226580%\uff09"}</span><span><i className="good" />{"\u826f\u597d\uff0860%\uff5e80%\uff09"}</span><span><i className="warning" />{"\u5f85\u63d0\u5347\uff08\u4f4e\u4e8e60%\uff09"}</span></footer>
   </article>;
+}
+
+function CollectionDrilldownDrawer({ data, onClose }: { data: CollectionDrilldown; onClose: () => void }) {
+  return <div className="collection-drill-mask" role="presentation" onMouseDown={onClose}>
+    <aside className="collection-drill-drawer detail-table-tool" role="dialog" aria-modal="true" aria-label={data.title} onMouseDown={(event) => event.stopPropagation()}>
+      <header className="collection-drill-head">
+        <div><p>\u8d44\u6599\u6536\u96c6\u4e0e\u672a\u5bf9\u8d26\u5ba2\u6237</p><h2>{data.title}</h2><span>{data.description}</span></div>
+        <button type="button" aria-label="\u5173\u95ed\u660e\u7ec6" onClick={onClose}>×</button>
+      </header>
+      <div className="collection-drill-summary">\u5171 <b>{data.rows.length}</b> \u5bb6\u5ba2\u6237\uff0c\u70b9\u51fb\u6765\u6e90\u770b\u677f\u4e2d\u7684\u8d44\u6599\u6216\u533a\u57df\u5373\u53ef\u67e5\u770b\u6b64\u660e\u7ec6\u3002</div>
+      <div className="collection-drill-table local-table">
+        <table><thead><tr><th>\u5e8f\u53f7</th><th>\u8d26\u5957</th><th>\u533a\u57df</th><th>\u5ba2\u6237\u540d\u79f0</th><th>\u8d44\u6599\u72b6\u6001</th><th>\u5bf9\u8d26\u72b6\u6001</th><th>\u516c\u53f8\u5e94\u6536</th><th>\u5ba2\u6237\u8d26\u9762\u91d1\u989d</th><th>\u5bf9\u8d26\u5dee\u989d</th></tr></thead>
+          <tbody>{data.rows.length ? data.rows.map((row, index) => <tr key={row.id} className={Math.abs(numberOf(row.differenceAmount)) > 0.000001 ? "has-difference" : ""}>
+            <td>{index + 1}</td><td>{row.accountSet}</td><td>{row.region}</td><td className="collection-drill-customer">{row.customer}</td><td><span className={`collection-drill-status ${row.materialStatus.includes("\u672a") ? "pending" : "done"}`}>{row.materialStatus}</span></td><td>{row.reconciliationStatus}</td><td className="money-cell">{row.companyReceivable}</td><td className="money-cell">{row.customerBookAmount}</td><td className="money-cell difference-cell">{row.differenceAmount}</td>
+          </tr>) : <tr><td colSpan={9} className="table-empty">\u5f53\u524d\u6761\u4ef6\u4e0b\u6682\u65e0\u660e\u7ec6\u6570\u636e</td></tr>}</tbody>
+        </table>
+      </div>
+    </aside>
+  </div>;
 }
 
 function FollowAdviceCard({ collection, replyRates }: { collection: CollectionRow[]; replyRates: ReplyRateRow[] }) {
@@ -255,6 +369,7 @@ export function Q1SpecialPanels() {
   const [sheet, setSheet] = useState<SavedSheet>();
   const [spdSheet, setSpdSheet] = useState<SavedSheet>();
   const [tab, setTab] = useState<"collection" | "unaccounted">("collection");
+  const [drillSelection, setDrillSelection] = useState<CollectionDrillSelection | null>(null);
   useEffect(() => {
     const sync = () => { const nextQuarter = selectedQuarter(); setQuarter(nextQuarter); setSheet(sheetForQuarter(nextQuarter) as SavedSheet | undefined); setSpdSheet(spdSheetForQuarter(nextQuarter) as SavedSheet | undefined); };
     sync();
@@ -262,13 +377,18 @@ export function Q1SpecialPanels() {
     return () => { window.removeEventListener("reconciliation-quarter-selected", sync); window.removeEventListener("reconciliation-quarter-updated", sync); window.removeEventListener("reconciliation-updated", sync); window.removeEventListener("reconciliation-spd-sheet-updated", sync); };
   }, []);
   const data = useMemo(() => specialData(sheet, spdSheet), [sheet, spdSheet]);
+  const drilldown = useMemo(
+    () => drillSelection ? buildCollectionDrilldown(drillSelection, sheet, spdSheet) : null,
+    [drillSelection, sheet, spdSheet],
+  );
   if (!quarter) return null;
   return <section className="q1-special">
     <div className="special-head"><div><p>{quarter} {S.specialInfo}</p><h2>{S.pageTitle}</h2></div><div className="special-tabs" role="tablist" aria-label={S.pageTitle}>
       <button role="tab" aria-selected={tab === "collection"} className={tab === "collection" ? "active" : ""} onClick={() => setTab("collection")}>{S.collection}</button>
       <button role="tab" aria-selected={tab === "unaccounted"} className={tab === "unaccounted" ? "active" : ""} onClick={() => setTab("unaccounted")}>{S.unaccounted}</button>
     </div></div>
-    {tab === "collection" ? <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} /><ReplyRateCard rows={data.replyRates} /><FollowAdviceCard collection={data.collection} replyRates={data.replyRates} /></div>
+    {tab === "collection" ? <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} onDrilldown={(material) => setDrillSelection({ type: "material", material })} /><ReplyRateCard rows={data.replyRates} onDrilldown={(region) => setDrillSelection({ type: "reply", region })} /><FollowAdviceCard collection={data.collection} replyRates={data.replyRates} /></div>
       : <div className="special-legacy-panel"><VerticalScrollList label={S.unaccounted}><table><thead><tr><th>{S.region}</th><th>{S.customer}</th><th>{S.note}</th></tr></thead><tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td>{item.note || "—"}</td></tr>) : <tr><td colSpan={3}>{S.unaccountedEmpty}</td></tr>}</tbody></table></VerticalScrollList></div>}
+    {drilldown && <CollectionDrilldownDrawer data={drilldown} onClose={() => setDrillSelection(null)} />}
   </section>;
 }
