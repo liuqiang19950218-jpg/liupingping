@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: quarterly-recon:current-v6
+          image: quarterly-recon:current-v7
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
