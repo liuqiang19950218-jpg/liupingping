@@ -40,6 +40,8 @@ export type CockpitRow = {
   processStage?: string;
   /** Finance-attention state maintained in the pending follow-up list. */
   financeAttention?: "无需关注" | "一般关注" | "需财务复核";
+  /** Overdue days derived from the expected completion date. */
+  overdueDays?: number;
   /** Invoice-level difference details, sourced from the quarterly reconciliation record. */
   differenceInvoices?: Array<{
     category: string;
@@ -455,7 +457,10 @@ const numberOf = (value: unknown) => {
   const parsed = Number(String(value ?? "").replace(/,/g, ""));
   return Number.isFinite(parsed) ? parsed : 0;
 };
-const hasValue = (value: unknown) => String(value ?? "").trim() !== "";
+const hasValue = (value: unknown) =>
+  !["", "—", "-", "未填写", "未对账", "null", "undefined"].includes(
+    String(value ?? "").replace(/\s/g, ""),
+  );
 type LiveInvoice = { invoice?: string; date?: string; amount?: string; note?: string };
 type LiveFollowUp = { time?: string; solution?: string };
 type LiveDetail = {
@@ -473,6 +478,7 @@ type LiveDetail = {
   otherInvoice?: LiveInvoice[];
   other?: LiveInvoice[];
   processStage?: string;
+  financeAttention?: "无需关注" | "一般关注" | "需财务复核";
 };
 type LiveSheet = {
   headers?: string[];
@@ -545,7 +551,13 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
       .map((entry, index) => {
         const detail = saved.details?.[String(index)],
           customerBook = entry[customerAt],
-          difference = hasValue(customerBook)
+          // “是否对清 = 未对账” is the authoritative business marker.  Some
+          // imported rows may still contain 0 (or an old amount) in 客户账面金额;
+          // they must never enter any reconciliation-rate denominator.
+          explicitlyUnreconciled =
+            String(entry[clearedAt] ?? "").replace(/\s/g, "") === "未对账",
+          filled = !explicitlyUnreconciled && hasValue(customerBook),
+          difference = filled
             ? numberOf(entry[differenceAt])
             : numberOf(entry[companyAt]) - numberOf(customerBook),
           solution =
@@ -614,7 +626,7 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           adjustment: numberOf(entry[adjustmentAt]),
           badDebtReason: detail?.badDebtReason || String(entry[badDebtReasonAt] ?? ""),
           adjustmentReason: detail?.adjustmentReason || String(entry[adjustmentReasonAt] ?? ""),
-          filled: hasValue(customerBook),
+          filled,
           cleared: String(entry[clearedAt] ?? "") === "对清",
           cause: String(entry[noteAt] ?? ""),
           followStatus:
@@ -678,7 +690,10 @@ export const updateDashboardSnapshot = () => {
 // until the user explicitly clicks "一键更新其他看板" again.
 export const cockpitRows = new Proxy([] as CockpitRow[], {
   get(_, property) {
-    const rows = dashboardRows() ?? archivedCockpitRows() ?? fallbackCockpitRows;
+    // Quarterly detail is the source of truth.  Recalculate it first so an
+    // old saved dashboard snapshot cannot retain the pre-fix “未对账” count.
+    const liveRows = archivedCockpitRows();
+    const rows = liveRows.length ? liveRows : dashboardRows() ?? fallbackCockpitRows;
     const value = Reflect.get(rows, property);
     return typeof value === "function" ? value.bind(rows) : value;
   },

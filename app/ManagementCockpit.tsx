@@ -102,7 +102,7 @@ const level = (r: CockpitRow) =>
         : "低风险";
 // D 区风险口径按超期天数统一：超过 30 天为高风险，其余为低风险。
 const overdueRiskLevel = (r: CockpitRow) =>
-  r.overdueDays > 30 ? "高风险" : "低风险";
+  (r.overdueDays ?? 0) > 30 ? "高风险" : "低风险";
 
 const getRisks = (r: CockpitRow) =>
   [

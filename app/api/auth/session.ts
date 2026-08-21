@@ -18,7 +18,9 @@ function fromBase64Url(value: string) {
 }
 
 async function signature(payload: string) {
-  const secret = env.AUTH_SECRET ?? "9b308e8c86544f7bacef962ed92d53a5d35f9ab93b3854bb4ab349aef52df167";
+  const secret = typeof env.AUTH_SECRET === "string"
+    ? env.AUTH_SECRET
+    : "9b308e8c86544f7bacef962ed92d53a5d35f9ab93b3854bb4ab349aef52df167";
   const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return base64Url(new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(payload))));
 }

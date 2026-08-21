@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: quarterly-recon-postgresql-backup
+  namespace: quarterly-recon
+spec:
+  schedule: "30 2 * * *"
+  timeZone: Asia/Shanghai
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: backup
+              image: postgres:16.4-alpine
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - secretRef:
+                    name: quarterly-recon-data-secrets
+              command: ["sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  export PGPASSWORD="$POSTGRES_PASSWORD"
+                  stamp="$(date +%Y%m%d-%H%M%S)"
+                  target="/backup/quarterly_recon-${stamp}.dump"
+                  pg_dump -h quarterly-recon-postgresql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -f "$target"
+                  sha256sum "$target" > "${target}.sha256"
+                  find /backup -type f -mtime +30 -delete
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          volumes:
+            - name: backup
+              hostPath:
+                path: /var/lib/quarterly-recon/backups/postgresql
+                type: DirectoryOrCreate

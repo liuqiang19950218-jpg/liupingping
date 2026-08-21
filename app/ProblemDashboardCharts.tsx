@@ -6,6 +6,18 @@ import type { AgeItem, CountItem } from "./problem-dashboard-data";
 
 type ChartProps<T> = { data: T[]; onSelect: (name: string) => void };
 
+type TooltipDatum = {
+  name?: string;
+  value?: unknown;
+  percent?: number;
+  dataIndex?: number;
+};
+
+function getTooltipDatum(value: unknown): TooltipDatum {
+  if (Array.isArray(value)) return (value[0] ?? {}) as TooltipDatum;
+  return (value ?? {}) as TooltipDatum;
+}
+
 function useChart(
   host: RefObject<HTMLDivElement | null>,
   option: echarts.EChartsOption,
@@ -25,8 +37,8 @@ function useChart(
 export function BlockingReasonDonutChart({ data, total, onSelect }: ChartProps<CountItem> & { total: number }) {
   const host = useRef<HTMLDivElement>(null);
   useChart(host, {
-    tooltip: { trigger: "item", formatter: (p: { name: string; value: number; percent: number }) => `${p.name}<br/>问题数：${p.value}<br/>占比：${p.percent}%` },
-    graphic: [{ type: "text", left: "center", top: "41%", style: { text: String(total), fill: "#17233d", font: "700 22px Microsoft YaHei", textAlign: "center" } }, { type: "text", left: "center", top: "57%", style: { text: "未关闭问题", fill: "#64748b", font: "11px Microsoft YaHei", textAlign: "center" } }],
+    tooltip: { trigger: "item", formatter: (raw: unknown) => { const item = getTooltipDatum(raw); return `${item.name ?? ""}<br/>问题数：${String(item.value ?? 0)}<br/>占比：${Number(item.percent ?? 0).toFixed(1)}%`; } },
+    graphic: [{ type: "text", left: "center", top: "41%", style: { text: String(total), fill: "#17233d", font: "700 22px Microsoft YaHei" } }, { type: "text", left: "center", top: "57%", style: { text: "未关闭问题", fill: "#64748b", font: "11px Microsoft YaHei" } }],
     series: [{ type: "pie", radius: ["56%", "78%"], center: ["50%", "50%"], label: { show: false }, itemStyle: { borderColor: "#fff", borderWidth: 3 }, data: data.map((item) => ({ name: item.name, value: item.count, itemStyle: { color: item.color } })) }],
   }, onSelect);
   return <div className="pd-chart pd-donut-chart" ref={host} role="img" aria-label="阻塞原因分析环形图" />;
@@ -35,7 +47,7 @@ export function BlockingReasonDonutChart({ data, total, onSelect }: ChartProps<C
 export function IssueAgeBarChart({ data, onSelect }: ChartProps<AgeItem>) {
   const host = useRef<HTMLDivElement>(null);
   useChart(host, {
-    tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, formatter: (items: Array<{ dataIndex: number }>) => { const item = data[items[0]?.dataIndex ?? 0]; return `${item.name}<br/>问题数：${item.count}<br/>占比：${(item.ratio * 100).toFixed(1)}%`; } },
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, formatter: (raw: unknown) => { const datum = getTooltipDatum(raw); const item = data[datum.dataIndex ?? 0]; if (!item) return "暂无数据"; return `${item.name}<br/>问题数：${item.count}<br/>占比：${(item.ratio * 100).toFixed(1)}%`; } },
     grid: { left: 36, right: 10, top: 26, bottom: 44 },
     xAxis: { type: "category", data: data.map((item) => item.name), axisTick: { show: false }, axisLine: { lineStyle: { color: "#dfe7f1" } }, axisLabel: { interval: 0, fontSize: 10, lineHeight: 15, color: "#64748b", formatter: (value: string, index: number) => `${value}\n(${(data[index]?.ratio * 100 || 0).toFixed(1)}%)` } },
     yAxis: { type: "value", minInterval: 1, axisLabel: { fontSize: 10, color: "#8090a4" }, splitLine: { lineStyle: { color: "#edf1f7" } } },

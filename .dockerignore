@@ -1,0 +1,15 @@
+node_modules
+.git
+.next
+.vinext
+.wrangler
+dist
+outputs
+work
+deploy.ps1
+.deploy.env
+CODEBUDDY_HANDOFF.md
+TASK_BOARD.md
+*.log
+npm-debug.log*
+.DS_Store

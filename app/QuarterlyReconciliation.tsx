@@ -12,13 +12,17 @@ import {
 import { updateDashboardSnapshot } from "./cockpit-data";
 import {
   ensureArchiveFromActive,
+  quarterOf,
   quarterOptions,
   selectQuarter,
   selectedQuarter,
   sheetForQuarter,
+  removeArchivedSheet,
   writeSpdSheetForQuarter,
   writeArchivedSheet,
 } from "./quarter-storage";
+import { ImportDashboard } from "./ImportDashboard";
+import { recordImport } from "./import-history";
 import "./reconciliation.css";
 
 type InvoiceEntry = {
@@ -123,6 +127,7 @@ const T = {
     "\u4e0a\u4f20\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868",
   uploadSpdSheet: "\u5bfc\u5165SPD\u8868",
   clearData: "\u6e05\u9664\u672c\u673a\u6570\u636e",
+  withdrawQuarter: "\u64a4\u56de\u672c\u5b63\u5ea6\u5bf9\u8d26\u660e\u7ec6",
   importTitle: "\u5b63\u5ea6\u5bf9\u8d26",
   importHint:
     "\u5386\u53f2\u5f80\u6765\u660e\u7ec6\u5df2\u7ecf\u4fdd\u7559\uff1b\u6bcf\u5b63\u5ea6\u4e0a\u4f20\u672c\u5e74\u6700\u65b0\u5f80\u6765\u660e\u7ec6\uff0c\u6838\u9a8c\u65f6\u4f1a\u4e00\u8d77\u67e5\u627e\u3002",
@@ -400,6 +405,24 @@ const companyReceivableImportAliases = [
 ];
 const sum = (entries: Array<{ amount: string }>) =>
   entries.reduce((total, entry) => total + num(entry.amount), 0);
+// 发票类差额以“发票号”为唯一的填报起点。没有发票号的占位行不属于
+// 发票明细，不计入汇总、导出或往来核验；这样旧数据中的 0/0.00 占位值
+// 也不会再被保存或误判为一笔待核验发票。
+const hasInvoiceNumber = (entry: InvoiceEntry) => Boolean(entry.invoice.trim());
+const anyInvoice = hasInvoiceNumber;
+
+const meaningfulInvoiceEntries = (entries?: InvoiceEntry[]) =>
+  (entries ?? []).filter(hasInvoiceNumber);
+const sumInvoiceEntries = (entries?: InvoiceEntry[]) =>
+  sum(meaningfulInvoiceEntries(entries));
+
+const normalizeInvoiceEntries = (entries?: InvoiceEntry[]) => {
+  const normalized = meaningfulInvoiceEntries(entries).map((entry) => ({
+    ...entry,
+    invoice: entry.invoice.trim(),
+  }));
+  return normalized.length ? normalized : [blankInvoice()];
+};
 // A stripe identifies every row with an outstanding reconciliation difference.
 // It intentionally does not depend on the reconciliation status, so 未对账 rows
 // are highlighted as long as their difference amount is non-zero.
@@ -420,11 +443,11 @@ const backfillClearedStatus = (source: LocalSheet) => {
     const row = [...sourceRow];
     const difference = num(row[companyAt]) - num(customerValue);
     const total = detail
-      ? sum(detail.transit) +
-        sum(detail.returned) +
-        sum(detail.lost ?? []) +
-        sum(detail.instrument ?? []) +
-        sum(detail.otherInvoice) +
+      ? sumInvoiceEntries(detail.transit) +
+        sumInvoiceEntries(detail.returned) +
+        sumInvoiceEntries(detail.lost ?? []) +
+        sumInvoiceEntries(detail.instrument ?? []) +
+        sumInvoiceEntries(detail.otherInvoice) +
         sum(detail.other)
       : 0;
     const status = !filled
@@ -440,8 +463,6 @@ const backfillClearedStatus = (source: LocalSheet) => {
   });
   return changed ? { ...source, rows } : source;
 };
-const anyInvoice = (entry: InvoiceEntry) =>
-  Boolean(entry.date || entry.invoice || entry.amount || entry.note);
 const ledgerKey = (entry: InvoiceEntry) =>
   `${entry.invoice.trim()}|${entry.date.replace(/[^0-9]/g, "").slice(0, 8)}|${num(entry.amount).toFixed(2)}`;
 const validLedgerEntry = (
@@ -449,7 +470,7 @@ const validLedgerEntry = (
   keys: Set<string> | null,
   lookup: LedgerLookup = historicalLedgerLookup,
 ) => {
-  if (!anyInvoice(entry)) return true;
+  if (!hasInvoiceNumber(entry)) return true;
   if (!entry.date || !entry.invoice || entry.amount === "") return false;
   const matched = lookup[entry.invoice.trim()];
   return Boolean(
@@ -988,8 +1009,8 @@ export function QuarterlyReconciliation({
     Object.entries(ordered.details ?? {}).forEach(([id, detail]) => {
       const row = rows[Number(id)];
       if (row) {
-        row[ordered.headers.indexOf(T.lost)] = sum(detail.lost ?? []);
-        row[ordered.headers.indexOf(T.instrument)] = sum(
+        row[ordered.headers.indexOf(T.lost)] = sumInvoiceEntries(detail.lost ?? []);
+        row[ordered.headers.indexOf(T.instrument)] = sumInvoiceEntries(
           detail.instrument ?? [],
         );
         row[ordered.headers.indexOf(solution)] = detail.resolutionSolution;
@@ -1056,7 +1077,68 @@ export function QuarterlyReconciliation({
         ),
       ),
     ]);
-    XLSX.utils.book_append_sheet(workbook, worksheet, "本年度对账明细");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "本季度对账明细");
+
+    // Keep the summary table compact, while exporting every sales-entered
+    // difference item at invoice level in its own sheet.  This keeps an
+    // invoice's date, number, amount and explanation together instead of
+    // only exporting the aggregated six-category totals on the main row.
+    const differenceHeaders = [
+      "主表序号",
+      "差额分类",
+      "账套",
+      "区域",
+      "客户名称",
+      "对账负责人",
+      "开票日期",
+      "发票号",
+      "差额金额（元）",
+      "差额说明",
+      "图片附件",
+    ];
+    const differenceRows = shown.flatMap(({ row, id }) => {
+      const detail = sheet.details?.[String(id)];
+      if (!detail) return [];
+      const base = [
+        row[0] ?? id + 1,
+        "",
+        accountIndex >= 0 ? row[accountIndex] ?? "" : "",
+        regionIndex >= 0 ? row[regionIndex] ?? "" : "",
+        customerIndex >= 0 ? row[customerIndex] ?? "" : "",
+        detail.responsible || (responsibleIndex >= 0 ? row[responsibleIndex] ?? "" : ""),
+      ];
+      return DIFFERENCE_SUMMARIES.flatMap((category) =>
+        entriesFor(detail, category.type)
+          .filter((entry) =>
+            category.invoice
+              ? anyInvoice(entry as InvoiceEntry)
+              : num(entry.amount) !== 0 || Boolean(entry.note.trim()) || Boolean((entry as OtherEntry).image),
+          )
+          .map((entry) => {
+            const invoiceEntry = entry as InvoiceEntry;
+            const otherEntry = entry as OtherEntry;
+            return [
+              ...base.slice(0, 1),
+              category.label,
+              ...base.slice(2),
+              category.invoice ? invoiceEntry.date : "",
+              category.invoice ? invoiceEntry.invoice : "",
+              entry.amount === "" ? "" : num(entry.amount),
+              entry.note,
+              category.invoice ? "" : otherEntry.image ? "已上传" : "",
+            ];
+          }),
+      );
+    });
+    const differenceSheet = XLSX.utils.aoa_to_sheet([
+      differenceHeaders,
+      ...differenceRows,
+    ]);
+    differenceSheet["!cols"] = [
+      { wch: 10 }, { wch: 22 }, { wch: 16 }, { wch: 12 }, { wch: 28 },
+      { wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 16 }, { wch: 42 }, { wch: 12 },
+    ];
+    XLSX.utils.book_append_sheet(workbook, differenceSheet, "差额发票明细");
     XLSX.writeFile(
       workbook,
       `${sheet.fileName.replace(/\.(xlsx|xls)$/i, "")}-导出.xlsx`,
@@ -1107,9 +1189,29 @@ export function QuarterlyReconciliation({
           "\u6ca1\u6709\u8bfb\u53d6\u5230\u53ef\u7528\u7684\u8868\u5934\u6216\u6570\u636e\u3002",
         );
       saveSheet({ headers, rows, fileName: file.name, details: {} }, true);
+      recordImport({
+        fileName: file.name,
+        importedAt: new Date().toISOString(),
+        dataType: "reconciliation",
+        description: "本季度对账表数据。",
+        recordCount: rows.length,
+        targetStore: "local-quarterly-reconciliation-archive",
+        quarter: quarterOf(file.name, headers, rows),
+        status: "success",
+        stats: { inserted: rows.length },
+      });
       setRegion(T.all);
       setMessage(`\u5df2\u5bfc\u5165 ${rows.length} \u6761\u8bb0\u5f55\u3002`);
     } catch (error) {
+      recordImport({
+        fileName: file.name,
+        importedAt: new Date().toISOString(),
+        dataType: "reconciliation",
+        description: error instanceof Error ? error.message : "对账表导入失败。",
+        targetStore: "local-quarterly-reconciliation-archive",
+        status: "failed",
+        stats: { errors: 1 },
+      });
       setMessage(
         error instanceof Error
           ? error.message
@@ -1201,12 +1303,34 @@ export function QuarterlyReconciliation({
         return next;
       });
       saveSheet({ ...prepared, rows });
+      recordImport({
+        fileName: file.name,
+        importedAt: new Date().toISOString(),
+        dataType: "materials",
+        description: "客户资料提供状态数据。",
+        recordCount: matched,
+        targetStore: "local-quarterly-reconciliation-archive（按客户更新）",
+        quarter: activeQuarter || selectedQuarter(),
+        status: matched === sourceRows.length ? "success" : "partial",
+        stats: { updated: matched, skipped: Math.max(0, sourceRows.length - matched) },
+      });
       setMessage(
         "\u5df2\u5bfc\u5165\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868\uff1a\u5339\u914d " +
           matched +
           " \u6761\u5ba2\u6237\u8bb0\u5f55\u3002",
       );
     } catch (error) {
+      recordImport({
+        fileName: file.name,
+        importedAt: new Date().toISOString(),
+        dataType: "materials",
+        description:
+          error instanceof Error ? error.message : "资料提供情况表导入失败。",
+        targetStore: "local-quarterly-reconciliation-archive（按客户更新）",
+        quarter: activeQuarter || selectedQuarter(),
+        status: "failed",
+        stats: { errors: 1 },
+      });
       setMessage(
         error instanceof Error
           ? error.message
@@ -1293,10 +1417,31 @@ export function QuarterlyReconciliation({
         return next;
       });
       saveSheet({ ...sheet, rows });
+      recordImport({
+        fileName: file.name,
+        importedAt: new Date().toISOString(),
+        dataType: "companyReceivable",
+        description: "公司应收更新数据。",
+        recordCount: updated,
+        targetStore: "local-quarterly-reconciliation-archive（公司应收字段）",
+        quarter: activeQuarter || selectedQuarter(),
+        status: updated === sourceRows.length ? "success" : "partial",
+        stats: { updated, skipped: Math.max(0, sourceRows.length - updated) },
+      });
       setMessage(
         `\u5df2\u4e0a\u4f20\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\uff1a\u5339\u914d ${matched} \u6761\uff0c\u4ec5\u66f4\u65b0\u5176\u4e2d ${updated} \u6761\u7684\u516c\u53f8\u5e94\u6536\u3002`,
       );
     } catch (error) {
+      recordImport({
+        fileName: file.name,
+        importedAt: new Date().toISOString(),
+        dataType: "companyReceivable",
+        description: error instanceof Error ? error.message : "公司应收更新表上传失败。",
+        targetStore: "local-quarterly-reconciliation-archive（公司应收字段）",
+        quarter: activeQuarter || selectedQuarter(),
+        status: "failed",
+        stats: { errors: 1 },
+      });
       setMessage(
         error instanceof Error
           ? error.message
@@ -1334,8 +1479,29 @@ export function QuarterlyReconciliation({
           "SPD\u8868\u5fc5\u987b\u81f3\u5c11\u5305\u542bSPD\u786e\u8ba4\u8868\u6216SPD\u5e93\u5b58\u786e\u8ba4\u51fd\u5217\u3002",
         );
       writeSpdSheetForQuarter(quarter, { headers, rows, fileName: file.name });
+      recordImport({
+        fileName: file.name,
+        importedAt: new Date().toISOString(),
+        dataType: "spd",
+        description: "SPD 确认表和 SPD 库存确认函数据。",
+        recordCount: rows.length,
+        targetStore: "local-quarterly-reconciliation-spd-sheet-archive",
+        quarter,
+        status: "success",
+        stats: { inserted: rows.length },
+      });
       setMessage(`\u5df2\u5bfc\u5165SPD\u8868\uff1a${rows.length}\u6761\u8bb0\u5f55\u3002\u4ec5\u7528\u4e8e\u5bf9\u8d26\u770b\u677f\u7684SPD\u786e\u8ba4\u8868\u548cSPD\u5e93\u5b58\u786e\u8ba4\u51fd\u7edf\u8ba1\u3002`);
     } catch (error) {
+      recordImport({
+        fileName: file.name,
+        importedAt: new Date().toISOString(),
+        dataType: "spd",
+        description: error instanceof Error ? error.message : "SPD表导入失败。",
+        targetStore: "local-quarterly-reconciliation-spd-sheet-archive",
+        quarter: activeQuarter || selectedQuarter(),
+        status: "failed",
+        stats: { errors: 1 },
+      });
       setMessage(
         error instanceof Error ? error.message : "SPD\u8868\u5bfc\u5165\u5931\u8d25\u3002",
       );
@@ -1358,6 +1524,17 @@ export function QuarterlyReconciliation({
         updatedAt: new Date().toLocaleString("zh-CN"),
       };
       await saveCurrentLedger(upload);
+      recordImport({
+        fileName: upload.fileNames.join("、"),
+        importedAt: new Date().toISOString(),
+        dataType: "ledger",
+        description: "本年往来明细数据。",
+        recordCount: keys.length,
+        targetStore: "IndexedDB · quarterly-reconciliation/ledger/current",
+        quarter: activeQuarter || selectedQuarter(),
+        status: "success",
+        stats: { inserted: keys.length },
+      });
       setCurrentLedgerKeys(new Set(keys));
       setLedgerKeys(
         historicalLedgerKeys
@@ -1369,6 +1546,16 @@ export function QuarterlyReconciliation({
         `\u5df2\u66ff\u6362\u672c\u5e74\u5f80\u6765\u660e\u7ec6\uff1a${keys.length} \u6761\u53ef\u6838\u9a8c\u8bb0\u5f55\u3002`,
       );
     } catch (error) {
+      recordImport({
+        fileName: files.map((file) => file.name).join("、"),
+        importedAt: new Date().toISOString(),
+        dataType: "ledger",
+        description: error instanceof Error ? error.message : "往来明细上传失败。",
+        targetStore: "IndexedDB · quarterly-reconciliation/ledger/current",
+        quarter: activeQuarter || selectedQuarter(),
+        status: "failed",
+        stats: { errors: 1 },
+      });
       setMessage(
         error instanceof Error
           ? error.message
@@ -1387,6 +1574,30 @@ export function QuarterlyReconciliation({
       "\u5df2\u6e05\u9664\u672c\u673a\u4fdd\u5b58\u7684\u6570\u636e\u3002",
     );
   }
+
+  function withdrawCurrentQuarter() {
+    const quarter = activeQuarter || selectedQuarter();
+    if (!quarter || !sheetForQuarter(quarter)) {
+      setMessage("\u5f53\u524d\u6ca1\u6709\u53ef\u64a4\u56de\u7684\u5bf9\u8d26\u5b63\u5ea6\u8868\u3002");
+      return;
+    }
+    const confirmed = window.confirm(
+      `\u786e\u8ba4\u64a4\u56de ${quarter} \u7684\u5bf9\u8d26\u660e\u7ec6\u5417\uff1f\n\n\u5c06\u5220\u9664\u8be5\u5b63\u5ea6\u7684\u4e3b\u5bf9\u8d26\u8868\u53ca\u5176\u5df2\u4fdd\u5b58\u7684\u9500\u552e\u586b\u5199\u5185\u5bb9\u3002\n\u4e0d\u5f71\u54cd\u5176\u4ed6\u5b63\u5ea6\u3001\u5f80\u6765\u660e\u7ec6\u3001\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868\u548cSPD\u8868\u3002`,
+    );
+    if (!confirmed) return;
+
+    const result = removeArchivedSheet(quarter);
+    setSheet((result?.sheet as LocalSheet | null) ?? null);
+    setActiveQuarter(result?.nextQuarter ?? "");
+    setArchivedQuarters(quarterOptions());
+    setRegion(T.all);
+    setPage(1);
+    setMessage(
+      result?.nextQuarter
+        ? `\u5df2\u64a4\u56de ${quarter} \u5bf9\u8d26\u660e\u7ec6\uff0c\u5df2\u5207\u6362\u81f3 ${result.nextQuarter}\u3002`
+        : `\u5df2\u64a4\u56de ${quarter} \u5bf9\u8d26\u660e\u7ec6\u3002`,
+    );
+  }
   function open(id: number) {
     if (!sheet) return;
     const row = sheet.rows[id];
@@ -1399,18 +1610,19 @@ export function QuarterlyReconciliation({
             ...old,
             companyAmount: old.companyAmount ?? String(row[companyIndex] ?? ""),
             responsible: old.responsible ?? String(row[responsibleIndex] ?? ""),
-            lost: old.lost ?? [blankInvoice()],
-            instrument: old.instrument ?? [blankInvoice()],
+            transit: normalizeInvoiceEntries(old.transit),
+            returned: normalizeInvoiceEntries(old.returned),
+            lost: normalizeInvoiceEntries(old.lost),
+            instrument: normalizeInvoiceEntries(old.instrument),
+            otherInvoice: normalizeInvoiceEntries(old.otherInvoice),
           }
         : {
             ...empty(),
             companyAmount: value(T.company),
             customerAmount: value(T.customerBook),
             responsible: String(row[responsibleIndex] ?? ""),
-            transit: [{ ...blankInvoice(), amount: value(T.transit) }],
-            returned: [{ ...blankInvoice(), amount: value(T.returned) }],
-            lost: [{ ...blankInvoice(), amount: value(T.lost) }],
-            instrument: [{ ...blankInvoice(), amount: value(T.instrument) }],
+            // 对账表中的分类金额只是汇总值，不能自动生成没有发票号的
+            // 发票明细。发票类明细必须由销售填写真实发票号后才参与核验。
             badDebt: value(T.badDebt),
             adjustment: value(T.adjustment),
           },
@@ -1425,7 +1637,7 @@ export function QuarterlyReconciliation({
       ...form.lost,
       ...form.instrument,
       ...form.otherInvoice,
-    ].filter(anyInvoice);
+    ].filter(hasInvoiceNumber);
     if (ledgerError) {
       window.alert("往来明细核验数据加载失败，请刷新后重试。");
       return;
@@ -1434,8 +1646,14 @@ export function QuarterlyReconciliation({
       window.alert("正在加载往来明细，请稍候再保存。");
       return;
     }
+    // Keep the save gate identical to the per-row verification displayed in
+    // the difference drawer.  The lookup contains the normalized invoice
+    // date/amount returned by the ledger search; checking keys alone made a
+    // row appear "核验正确" while the subsequent save was rejected.
     if (
-      needsCheck.some((entry) => !validLedgerEntry(entry, matchingLedgerKeys))
+      needsCheck.some(
+        (entry) => !validLedgerEntry(entry, matchingLedgerKeys, ledgerLookup),
+      )
     ) {
       window.alert(
         "存在未通过往来明细核验的发票，不能保存。请确认日期、发票号和金额。",
@@ -1445,11 +1663,11 @@ export function QuarterlyReconciliation({
     const company = num(form.companyAmount);
     const customer = num(form.customerAmount);
     const difference = company - customer;
-    const transit = sum(form.transit);
-    const returned = sum(form.returned);
-    const lost = sum(form.lost);
-    const instrument = sum(form.instrument);
-    const otherInvoice = sum(form.otherInvoice);
+    const transit = sumInvoiceEntries(form.transit);
+    const returned = sumInvoiceEntries(form.returned);
+    const lost = sumInvoiceEntries(form.lost);
+    const instrument = sumInvoiceEntries(form.instrument);
+    const otherInvoice = sumInvoiceEntries(form.otherInvoice);
     const other = sum(form.other);
     const total = transit + returned + lost + instrument + otherInvoice + other;
     const rows = sheet.rows.map((row) => [...row]);
@@ -1464,11 +1682,11 @@ export function QuarterlyReconciliation({
     setCell(row, T.badDebt, form.badDebt);
     setCell(row, T.adjustment, form.adjustment);
     const notes = [
-      ...form.transit.map((e) => e.note && `在途：${e.note}`),
-      ...form.returned.map((e) => e.note && `退票：${e.note}`),
-      ...form.lost.map((e) => e.note && `丢票：${e.note}`),
-      ...form.instrument.map((e) => e.note && `仪器设备：${e.note}`),
-      ...form.otherInvoice.map((e) => e.note && `其他（有发票）：${e.note}`),
+      ...meaningfulInvoiceEntries(form.transit).map((e) => e.note && `在途：${e.note}`),
+      ...meaningfulInvoiceEntries(form.returned).map((e) => e.note && `退票：${e.note}`),
+      ...meaningfulInvoiceEntries(form.lost).map((e) => e.note && `丢票：${e.note}`),
+      ...meaningfulInvoiceEntries(form.instrument).map((e) => e.note && `仪器设备：${e.note}`),
+      ...meaningfulInvoiceEntries(form.otherInvoice).map((e) => e.note && `其他（有发票）：${e.note}`),
       ...form.other.map((e) => e.note && `其他：${e.note}`),
     ]
       .filter(Boolean)
@@ -1484,7 +1702,17 @@ export function QuarterlyReconciliation({
     saveSheet({
       ...sheet,
       rows,
-      details: { ...(sheet.details ?? {}), [String(active)]: form },
+      details: {
+        ...(sheet.details ?? {}),
+        [String(active)]: {
+          ...form,
+          transit: normalizeInvoiceEntries(form.transit),
+          returned: normalizeInvoiceEntries(form.returned),
+          lost: normalizeInvoiceEntries(form.lost),
+          instrument: normalizeInvoiceEntries(form.instrument),
+          otherInvoice: normalizeInvoiceEntries(form.otherInvoice),
+        },
+      },
     });
     setMessage(T.saved);
     stopSolutionRecording();
@@ -1494,11 +1722,11 @@ export function QuarterlyReconciliation({
   const company = num(form.companyAmount);
   const difference = company - num(form.customerAmount);
   const total =
-    sum(form.transit) +
-    sum(form.returned) +
-    sum(form.lost) +
-    sum(form.instrument) +
-    sum(form.otherInvoice) +
+    sumInvoiceEntries(form.transit) +
+    sumInvoiceEntries(form.returned) +
+    sumInvoiceEntries(form.lost) +
+    sumInvoiceEntries(form.instrument) +
+    sumInvoiceEntries(form.otherInvoice) +
     sum(form.other);
   const isClear =
     form.customerAmount !== "" &&
@@ -1568,6 +1796,15 @@ export function QuarterlyReconciliation({
                   onClick={updateDashboards}
                 >
                   一键更新其他看板
+                </button>
+              )}
+              {sheet && (
+                <button
+                  type="button"
+                  className="clear-button withdraw-quarter-button"
+                  onClick={withdrawCurrentQuarter}
+                >
+                  {T.withdrawQuarter}
                 </button>
               )}
               {sheet && (
@@ -1660,14 +1897,17 @@ export function QuarterlyReconciliation({
           </div>
         )}
         {mode === "import" ? (
-          <div className="import-status">
-            <strong>{sheet ? "本年度对账表已导入" : T.needImport}</strong>
-            <span>
-              {sheet
-                ? `${sheet.fileName}，共 ${sheet.rows.length} 条记录。数据已保存在本机，可返回“本季度对账详细情况”继续填写。`
-                : "请先上传对账季度表，再按需要上传或替换本年往来明细。"}
-            </span>
-          </div>
+          <>
+            <div className="import-status">
+              <strong>{sheet ? "本年度对账表已导入" : T.needImport}</strong>
+              <span>
+                {sheet
+                  ? `${sheet.fileName}，共 ${sheet.rows.length} 条记录。数据已保存在本机，可返回“本季度对账详细情况”继续填写。`
+                  : "请先上传对账季度表，再按需要上传或替换本年往来明细。"}
+              </span>
+            </div>
+            <ImportDashboard ledger={currentLedgerInfo} />
+          </>
         ) : !sheet ? (
           <div className="local-empty">
             <strong>{T.needImport}</strong>
@@ -2262,8 +2502,8 @@ export function QuarterlyReconciliation({
           <>
             <div className="local-summary">
               <div>
-                <strong>{sheet.fileName}</strong>
-                <span>{`\u5171 ${sheet.rows.length} \u6761\u8bb0\u5f55`}</span>
+                <strong>{sheet!.fileName}</strong>
+                <span>{`\u5171 ${sheet!.rows.length} \u6761\u8bb0\u5f55`}</span>
               </div>
               <label>
                 {`\u6309${T.region}\u67e5\u770b`}
@@ -2283,7 +2523,7 @@ export function QuarterlyReconciliation({
               <table>
                 <thead>
                   <tr>
-                    {sheet.headers.map((header, i) => (
+                    {sheet!.headers.map((header, i) => (
                       <th key={i}>{header}</th>
                     ))}
                     <th>{T.sales}</th>
@@ -2292,7 +2532,7 @@ export function QuarterlyReconciliation({
                 <tbody>
                   {shown.map(({ row, id }) => (
                     <tr key={id}>
-                      {sheet.headers.map((_, i) => (
+                      {sheet!.headers.map((_, i) => (
                         <td key={i}>{String(row[i] ?? "")}</td>
                       ))}
                       <td>
@@ -2318,7 +2558,7 @@ export function QuarterlyReconciliation({
               ×
             </button>
             <p className="eyebrow">{T.sales}</p>
-            <h2>{`${String(sheet.rows[active][customerIndex] ?? T.customerFallback)} ${T.detail}`}</h2>
+            <h2>{`${String(sheet!.rows[active!][customerIndex!] ?? T.customerFallback)} ${T.detail}`}</h2>
             <div className="amount-bar">
               <span>
                 {`${T.company}：`}
@@ -2350,6 +2590,7 @@ export function QuarterlyReconciliation({
                 entries={form.transit}
                 requiresReview={true}
                 ledgerKeys={ledgerKeys}
+                ledgerLookup={ledgerLookup}
                 setEntries={(entries) => setForm({ ...form, transit: entries })}
               />
               <InvoiceGroup
@@ -2357,6 +2598,7 @@ export function QuarterlyReconciliation({
                 entries={form.returned}
                 requiresReview={true}
                 ledgerKeys={ledgerKeys}
+                ledgerLookup={ledgerLookup}
                 setEntries={(entries) =>
                   setForm({ ...form, returned: entries })
                 }
@@ -2366,6 +2608,7 @@ export function QuarterlyReconciliation({
                 entries={form.otherInvoice}
                 requiresReview={false}
                 ledgerKeys={ledgerKeys}
+                ledgerLookup={ledgerLookup}
                 setEntries={(entries) =>
                   setForm({ ...form, otherInvoice: entries })
                 }
@@ -2373,6 +2616,7 @@ export function QuarterlyReconciliation({
               <OtherGroup
                 entries={form.other}
                 setEntries={(entries) => setForm({ ...form, other: entries })}
+                onPreview={setPreviewImage}
               />
             </div>
             <div className="amount-bar evidence">
@@ -2473,8 +2717,13 @@ function DifferenceSummaryList({
       </div>
       {DIFFERENCE_SUMMARIES.map((item) => {
         const entries = entriesFor(form, item.type);
-        const filled = entries.filter((entry) => num(entry.amount) !== 0 || entry.note.trim() || ("invoice" in entry && entry.invoice.trim())).length;
-        const subtotal = entries.reduce((total, entry) => total + num(entry.amount), 0);
+        const meaningfulEntries = item.invoice
+          ? meaningfulInvoiceEntries(entries as InvoiceEntry[])
+          : (entries as OtherEntry[]).filter(
+              (entry) => num(entry.amount) !== 0 || entry.note.trim() || Boolean(entry.image),
+            );
+        const filled = meaningfulEntries.length;
+        const subtotal = meaningfulEntries.reduce((total, entry) => total + num(entry.amount), 0);
         return (
           <div className={`difference-summary-row ${activeType === item.type ? "active" : ""}`} key={item.type}>
             <i aria-hidden="true">{item.icon}</i>
@@ -2510,7 +2759,12 @@ function DifferenceDetailDrawer({
 }) {
   const meta = DIFFERENCE_SUMMARIES.find((item) => item.type === type)!;
   const entries = entriesFor(form, type);
-  const subtotal = entries.reduce((total, entry) => total + num(entry.amount), 0);
+  const meaningfulEntries = meta.invoice
+    ? meaningfulInvoiceEntries(entries as InvoiceEntry[])
+    : (entries as OtherEntry[]).filter(
+        (entry) => num(entry.amount) !== 0 || entry.note.trim() || Boolean(entry.image),
+      );
+  const subtotal = meaningfulEntries.reduce((total, entry) => total + num(entry.amount), 0);
   const [ocrStatus, setOcrStatus] = useState("");
   const [ocrRecognizing, setOcrRecognizing] = useState(false);
   const setEntries = (next: InvoiceEntry[] | OtherEntry[]) =>
@@ -2539,20 +2793,26 @@ function DifferenceDetailDrawer({
     );
   const update = (index: number, field: "date" | "invoice" | "amount" | "note", value: string) =>
     setEntries(
-      entries.map((entry, entryIndex) =>
-        entryIndex === index ? { ...entry, [field]: value } : entry,
-      ) as InvoiceEntry[] & OtherEntry[],
+      entries.map((entry, entryIndex) => {
+        if (entryIndex !== index) return entry;
+        // 无发票号时，本行只是待填写的占位行，不能写入金额、日期或说明，
+        // 否则旧的 0 会再次作为一笔待核验发票保存。
+        if (meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)) return entry;
+        return { ...entry, [field]: value };
+      }) as InvoiceEntry[] & OtherEntry[],
     );
   const updateInvoice = (index: number, invoice: string) => {
-    const matched = findLedgerMatch(invoice.trim(), ledgerLookup, ledgerKeys);
+    const normalizedInvoice = invoice.trim();
+    const matched = findLedgerMatch(normalizedInvoice, ledgerLookup, ledgerKeys);
     setEntries(
       entries.map((entry, entryIndex) => {
         if (entryIndex !== index) return entry;
         const current = entry as InvoiceEntry;
-        if (!matched) return { ...current, invoice };
+        if (!normalizedInvoice) return blankInvoice();
+        if (!matched) return { ...current, invoice: normalizedInvoice, date: "", amount: "" };
         return {
           ...current,
-          invoice,
+          invoice: normalizedInvoice,
           date: matched.dates.length === 1 ? matched.dates[0] : current.date,
           amount: matched.amount.toFixed(2),
         };
@@ -2630,7 +2890,7 @@ function DifferenceDetailDrawer({
     reader.readAsDataURL(file);
   };
   const verification = (entry: InvoiceEntry) => {
-    if (!anyInvoice(entry)) return null;
+    if (!hasInvoiceNumber(entry)) return null;
     if (!entry.date || !entry.invoice || entry.amount === "") {
       return { label: "\u5f85\u6838\u9a8c", kind: "pending" };
     }
@@ -2645,7 +2905,7 @@ function DifferenceDetailDrawer({
         <div>
           <p>填写差额明细</p>
           <h2>{meta.label}差额明细</h2>
-          <span>{entries.filter((entry) => num(entry.amount) !== 0 || entry.note.trim()).length} 笔　金额小计：<b>{money(subtotal)}</b></span>
+          <span>{meaningfulEntries.length} 笔　金额小计：<b>{money(subtotal)}</b></span>
         </div>
         <button type="button" aria-label="关闭差额明细" onClick={onClose}>×</button>
       </header>
@@ -2684,9 +2944,9 @@ function DifferenceDetailDrawer({
             {entries.map((entry, index) => (
               <tr key={index}>
                 <td>{index + 1}</td>
-                {meta.invoice && <><td><input type="date" value={(entry as InvoiceEntry).date} onChange={(event) => update(index, "date", event.target.value)} /></td><td><input value={(entry as InvoiceEntry).invoice} onChange={(event) => updateInvoice(index, event.target.value)} placeholder="填写发票号码" /></td></>}
-                <td><input type="number" step="0.01" value={entry.amount} onChange={(event) => update(index, "amount", event.target.value)} placeholder="0.00" /></td>
-                <td><input value={entry.note} onChange={(event) => update(index, "note", event.target.value)} placeholder="填写差额说明" /></td>
+                {meta.invoice && <><td><input type="date" value={(entry as InvoiceEntry).date} disabled={!hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "date", event.target.value)} /></td><td><input value={(entry as InvoiceEntry).invoice} onChange={(event) => updateInvoice(index, event.target.value)} placeholder="填写发票号码" /></td></>}
+                <td><input type="number" step="0.01" value={entry.amount} disabled={meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "amount", event.target.value)} placeholder="填写金额" /></td>
+                <td><input value={entry.note} disabled={meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "note", event.target.value)} placeholder="填写差额说明" /></td>
                 {meta.invoice && (() => {
                   const result = verification(entry as InvoiceEntry);
                   return <td>{result && <span className={`drawer-verification ${result.kind}`}>{result.label}</span>}</td>;
@@ -2696,7 +2956,7 @@ function DifferenceDetailDrawer({
               </tr>
             ))}
           </tbody>
-          <tfoot><tr><td colSpan={meta.invoice ? 6 : 4}>合计：{entries.length} 笔</td><td>{money(subtotal)}</td></tr></tfoot>
+          <tfoot><tr><td colSpan={meta.invoice ? 6 : 4}>合计：{meaningfulEntries.length} 笔</td><td>{money(subtotal)}</td></tr></tfoot>
         </table>
       </div>
     </aside>
@@ -2882,11 +3142,11 @@ function InvoiceGroup({
       ReturnType<typeof import("tesseract.js").createWorker>
     > | null = null;
     try {
-      const { createWorker } = await import("tesseract.js");
+      const { createWorker, PSM } = await import("tesseract.js");
       worker = await createWorker("eng");
       await worker.setParameters({
         tessedit_char_whitelist: "0123456789",
-        tessedit_pageseg_mode: "7",
+        tessedit_pageseg_mode: PSM.SINGLE_LINE,
       });
       const numbers = new Set<string>();
       let rows = 0;
@@ -2985,7 +3245,7 @@ function InvoiceGroup({
             </div>
           )}
           {entries.map((entry, index) => {
-            const has = anyInvoice(entry);
+            const has = hasInvoiceNumber(entry);
             const matched = validLedgerEntry(entry, ledgerKeys);
             const status = !has
               ? ""

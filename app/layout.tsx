@@ -13,5 +13,9 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-CN"><body>{children}</body></html>;
+  // 浏览器翻译、密码管理器等扩展可能在 React 接管前修改 html/body，
+  // 这不会影响业务数据，但在本地运行时会触发无意义的 hydration 覆盖层。
+  // 首屏业务内容本身已在客户端挂载后才读取本机账套数据，因此仅忽略根节点
+  // 的第三方属性差异，不放宽页面内的真实渲染和校验错误。
+  return <html lang="zh-CN" suppressHydrationWarning><body suppressHydrationWarning>{children}</body></html>;
 }

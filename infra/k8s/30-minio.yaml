@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: quarterly-recon-minio
+  namespace: quarterly-recon
+spec:
+  selector:
+    app: quarterly-recon-minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: quarterly-recon-minio
+  namespace: quarterly-recon
+spec:
+  serviceName: quarterly-recon-minio
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quarterly-recon-minio
+  template:
+    metadata:
+      labels:
+        app: quarterly-recon-minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+          imagePullPolicy: IfNotPresent
+          args: ["server", "/data", "--console-address", ":9001"]
+          envFrom:
+            - secretRef:
+                name: quarterly-recon-data-secrets
+          ports:
+            - containerPort: 9000
+              name: api
+            - containerPort: 9001
+              name: console
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          hostPath:
+            path: /var/lib/quarterly-recon/minio
+            type: DirectoryOrCreate

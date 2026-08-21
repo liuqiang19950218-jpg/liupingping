@@ -16,7 +16,7 @@ type Props = {
 };
 
 export function DifferenceStructureChart({ data, total, onClick }: Props) {
-  const host = useRef<HTMLDivElement>(null);
+  const host = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const element = host.current;
@@ -26,8 +26,11 @@ export function DifferenceStructureChart({ data, total, onClick }: Props) {
     chart.setOption({
       tooltip: {
         trigger: "item",
-        formatter: (params: { name: string; value: number; percent: number }) =>
-          `${params.name}<br/>${params.value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })} 元（${params.percent}%）`,
+        formatter: (raw: unknown) => {
+          const params = raw as { name?: string; value?: unknown; percent?: number };
+          const value = Number(params.value ?? 0);
+          return `${params.name ?? ""}<br/>${value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })} 元（${params.percent ?? 0}%）`;
+        },
       },
       series: [
         {
@@ -49,14 +52,13 @@ export function DifferenceStructureChart({ data, total, onClick }: Props) {
             text: `${(total / 10000).toLocaleString("zh-CN", { maximumFractionDigits: 1 })}万`,
             fill: "#17233d",
             font: "700 18px Microsoft YaHei",
-            textAlign: "center",
           },
         },
         {
           type: "text",
           left: "center",
           top: "57%",
-          style: { text: "未解决差额合计", fill: "#73839a", font: "11px Microsoft YaHei", textAlign: "center" },
+          style: { text: "未解决差额合计", fill: "#73839a", font: "11px Microsoft YaHei" },
         },
       ],
     });

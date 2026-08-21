@@ -40,3 +40,13 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/.deploy.env
+/deploy.ps1
+/deploy.production.config.psd1
+/infra/k8s/01-secrets.yaml
+/.cache/
+/site-package-*/
+/*.tar.gz
+/*.tgz
+/tsconfig.tsbuildinfo
+/project-output/

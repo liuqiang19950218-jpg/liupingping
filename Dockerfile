@@ -14,4 +14,8 @@ ENV NODE_ENV=production
 ENV WRANGLER_LOG_PATH=.wrangler/wrangler.log
 EXPOSE 3000
 
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+# The built Vinext server imports Cloudflare bindings (for D1/R2).  Run the
+# compiled Worker through Wrangler instead of the Vite development server or
+# Node's plain ESM loader, and persist the local bindings under the mounted
+# .wrangler data directory.
+CMD ["npx", "wrangler", "dev", "--config", "dist/server/wrangler.json", "--ip", "0.0.0.0", "--port", "3000", "--persist-to", ".wrangler"]

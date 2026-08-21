@@ -20,6 +20,7 @@ type Analysis = {
   rate: number;
   clear: number;
   unclear: number;
+  unreconciledReceivable: number;
   exception: string;
   regions: RegionAnalysis[];
 };
@@ -76,6 +77,7 @@ function analyze(rows: CockpitRow[]): Analysis {
       total: 0,
       clear: 0,
       unclear: 0,
+      unreconciledReceivable: 0,
       rate: 0,
       pendingAmount: 0,
     };
@@ -83,8 +85,10 @@ function analyze(rows: CockpitRow[]): Analysis {
     if (row.cleared) current.clear += 1;
     else current.unclear += 1;
     // 核心异常中的待解决差额，统一按未对清客户的公司应收金额统计。
-    if (!row.cleared)
+    if (!row.cleared) {
       current.pendingAmount += Math.abs(row.companyReceivable);
+      current.unreconciledReceivable += Math.abs(row.companyReceivable);
+    }
     map.set(region, current);
   });
   const regions = [...map.values()]

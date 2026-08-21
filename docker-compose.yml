@@ -2,14 +2,12 @@ services:
   web:
     build: .
     container_name: quarterly-recon-web
-    # vinext start fails on `cloudflare:` protocol in plain Node; dev mode uses
-    # the cloudflare vite plugin which simulates the Workers runtime (D1/R2).
-    command: npm run dev -- --host 0.0.0.0 --port 3000
+    command: npx wrangler dev --config dist/server/wrangler.json --ip 0.0.0.0 --port 3000 --persist-to .wrangler
     ports:
       - "8000:3000"
     restart: always
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
     volumes:
       - app-data:/app/.wrangler
     healthcheck:

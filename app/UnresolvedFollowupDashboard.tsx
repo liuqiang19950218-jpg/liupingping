@@ -187,10 +187,11 @@ function toItems(source?: Sheet): Item[] {
   return source.rows
     .map((row, id) => {
       const detail = source.details?.[String(id)] ?? {};
-      const firstSolution =
-        detail.resolutionSolution || value(row, source.headers, ["解决方案"]);
-      const firstTime =
-        detail.resolutionTime || value(row, source.headers, ["解决时间"]);
+      // 待解决清单只认可“本季度对账详细情况”填写弹层保存的值。
+      // 不能回退读取导入 Excel 行内可能遗留的解决方案/解决时间，
+      // 否则未在当前系统填写解决时间的客户会被误带入待解决清单。
+      const firstSolution = String(detail.resolutionSolution ?? "").trim();
+      const firstTime = String(detail.resolutionTime ?? "").trim();
       const followUps = Array.isArray(detail.followUps)
         ? detail.followUps
             .filter((entry): entry is FollowUp =>
@@ -215,12 +216,14 @@ function toItems(source?: Sheet): Item[] {
         followUps,
         financeAttention: detail.financeAttention,
         processStage: detail.processStage,
-        resolved:
-          detail.resolved === true ||
-          (Boolean(firstSolution && !firstTime) && detail.reopened !== true),
+        // 是否进入已解决档案只由人工归档状态决定，不能再把
+        // “填写了解决方案但未填写解决时间”的记录误判为已解决。
+        resolved: detail.resolved === true && detail.reopened !== true,
       };
     })
-    .filter((item) => item.customer && item.firstSolution.trim());
+    // 待解决清单沿用原有业务口径：只有已填写解决时间的客户才进入
+    // 未解决客户跟进；未填写解决时间的记录不在待解决清单中展示。
+    .filter((item) => item.customer && item.firstTime.trim());
 }
 
 function saveDetail(id: number, changes: Partial<Detail>) {

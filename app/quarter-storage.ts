@@ -115,6 +115,35 @@ export function writeArchivedSheet(sheet: ArchivedSheet) {
   return quarter;
 }
 
+/**
+ * Removes only one quarter's reconciliation workbook.  Independent imports
+ * (ledger, materials and SPD sheets) are intentionally left untouched so an
+ * accidental primary-table import can be corrected safely.
+ */
+export function removeArchivedSheet(quarter: string) {
+  const archive = readArchive();
+  if (!archive[quarter]) return null;
+
+  delete archive[quarter];
+  localStorage.setItem(QUARTER_ARCHIVE_KEY, JSON.stringify(archive));
+
+  const remainingQuarters = Object.keys(archive).sort((a, b) =>
+    b.localeCompare(a),
+  );
+  const nextQuarter = remainingQuarters[0] || "";
+  if (nextQuarter) {
+    localStorage.setItem(ACTIVE_SHEET_KEY, JSON.stringify(archive[nextQuarter]));
+    localStorage.setItem(SELECTED_QUARTER_KEY, nextQuarter);
+  } else {
+    localStorage.removeItem(ACTIVE_SHEET_KEY);
+    localStorage.removeItem(SELECTED_QUARTER_KEY);
+  }
+
+  window.dispatchEvent(new Event("reconciliation-quarter-updated"));
+  window.dispatchEvent(new Event("reconciliation-quarter-selected"));
+  return { nextQuarter, sheet: nextQuarter ? archive[nextQuarter] : null };
+}
+
 export function ensureArchiveFromActive() {
   const archive = readArchive();
   if (Object.keys(archive).length) return archive;

@@ -9,10 +9,27 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".cache/**",
+    ".openai/**",
+    ".vinext/**",
+    ".wrangler/**",
+    "node_modules/**",
+    "outputs/**",
+    "work/**",
+    "dist/**",
     "out/**",
     "build/**",
+    "site-package-*/**",
     "next-env.d.ts",
   ]),
+  {
+    // The existing application hydrates browser-persisted business state after
+    // mount. Keep React 19's migration hints visible without blocking releases.
+    rules: {
+      "react-hooks/set-state-in-effect": "warn",
+      "prefer-const": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;

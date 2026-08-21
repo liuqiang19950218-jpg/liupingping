@@ -8,8 +8,11 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+      # hostPort 8000 can only be bound by one Pod on this single-node k3s
+      # cluster. Allow one controlled replacement instead of leaving the new
+      # Pod permanently Pending behind the old Pod.
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: quarterly-recon
@@ -20,7 +23,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: quarterly-recon:current-v10
+          image: quarterly-recon:current-v13
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -28,7 +31,7 @@ spec:
               hostPort: 8000
           env:
             - name: NODE_ENV
-              value: development
+              value: production
             - name: PATH
               value: /node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           volumeMounts:

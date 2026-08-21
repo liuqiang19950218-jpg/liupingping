@@ -36,9 +36,18 @@ function GlobalQuarterFilter() {
 export default function Home() {
   const [view, setView] = useState<View>("history");
   const [tab, setTab] = useState<"cockpit" | "issue">("cockpit");
+  // All reconciliation workbooks live in browser storage.  Delay their
+  // rendering until the browser has mounted so SSR never compares an empty
+  // server snapshot with the user's local workbook.
+  const [hydrated, setHydrated] = useState(false);
   const title = view === "history" ? T.history : view === "current" ? T.current : view === "import" ? T.import : view === "tracker" ? T.tracker : view === "problem" ? T.issue : T.cockpit;
   const hint = view === "history" ? "查看历史季度对清情况与专项信息" : view === "current" ? "查看、筛选、填写与导出对账明细" : view === "import" ? "上传季度表、替换往来明细与管理本机数据" : view === "tracker" ? "全量台账、持续跟进、动态处理" : view === "problem" ? "看问题、看责任、看进度、促闭环" : "看全局、看风险、看趋势、做决策";
-  const [updatedAt] = useState(() => new Intl.DateTimeFormat("zh-CN", { dateStyle:"medium", timeStyle:"short", hour12:false }).format(new Date()));
+  // Render the clock after hydration so the server and browser never compare
+  // two separately generated timestamps.
+  const [updatedAt, setUpdatedAt] = useState("");
+  useEffect(() => {
+    setUpdatedAt(new Intl.DateTimeFormat("zh-CN", { dateStyle:"medium", timeStyle:"short", hour12:false }).format(new Date()));
+  }, []);
   const cockpit = (next:"cockpit" | "issue") => { setTab(next); setView("cockpit"); };
   const openTracker = (filters: Record<string, string> = {}) => {
     const query = new URLSearchParams(filters).toString();
@@ -51,6 +60,14 @@ export default function Home() {
     window.addEventListener("reconciliation-open-current-detail", openCurrentDetail);
     return () => window.removeEventListener("reconciliation-open-current-detail", openCurrentDetail);
   }, []);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  if (!hydrated) {
+    return <main className="app-shell app-shell-loading" aria-busy="true"><div>正在加载本机对账数据…</div></main>;
+  }
 
   return <><ServerStateBridge /><main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
     <aside className="side-nav">
