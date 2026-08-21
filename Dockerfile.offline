@@ -1,0 +1,16 @@
+ARG BASE_IMAGE=quarterly-recon:current-v14
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+
+# 生产服务器无法稳定访问 Docker Hub 时，复用现有生产镜像中的
+# Node.js、npm 与 node_modules，仅覆盖源码并重新构建应用。
+COPY . .
+RUN npm run build
+
+ENV NODE_ENV=production
+ENV WRANGLER_LOG_PATH=.wrangler/wrangler.log
+
+EXPOSE 3000
+
+CMD ["npx", "wrangler", "dev", "--config", "dist/server/wrangler.json", "--ip", "0.0.0.0", "--port", "3000", "--persist-to", ".wrangler"]

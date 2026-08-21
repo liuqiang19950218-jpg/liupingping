@@ -17,6 +17,7 @@ $SshPort = if ($Config.SshPort) { [int]$Config.SshPort } elseif ($Config.Port) {
 $PublicPort = if ($Config.PublicPort) { [int]$Config.PublicPort } elseif ($Config.ApplicationPort) { [int]$Config.ApplicationPort } else { 8000 }
 $RemotePath = if ($Config.RemotePath) { [string]$Config.RemotePath } else { '/home/liupp/apps/quarterly-recon' }
 $Namespace = if ($Config.KubernetesNamespace) { [string]$Config.KubernetesNamespace } else { 'quarterly-recon' }
+$OfflineBaseImage = if ($Config.OfflineBaseImage) { [string]$Config.OfflineBaseImage } else { 'quarterly-recon:current-v14' }
 $Remote = "$($Config.User)@$($Config.Host)"
 
 if (-not $Config.Host -or -not $Config.User) { throw '部署配置必须包含 Host 和 User。' }
@@ -75,7 +76,7 @@ function Invoke-ApplicationDeploy {
     Invoke-Ssh "set -eu; mkdir -p '$ReleasePath' '$RemotePath/backups'; if [ -d /var/lib/quarterly-recon/database/wrangler ]; then sudo tar -czf '$RemotePath/backups/wrangler-$ReleaseId.tgz' -C /var/lib/quarterly-recon/database wrangler; sudo chown `$(id -u):`$(id -g) '$RemotePath/backups/wrangler-$ReleaseId.tgz'; fi"
     & scp -P $SshPort $Bundle ($Remote + ':' + $ReleasePath + '/application.tgz')
     if ($LASTEXITCODE -ne 0) { throw '上传应用发布包失败。' }
-    $DeployCommand = "set -eu; cd '$ReleasePath'; tar -xzf application.tgz; docker build -f Dockerfile -t '$Image' .; docker save '$Image' | sudo k3s ctr images import -; sudo k3s kubectl -n '$Namespace' set image deployment/quarterly-recon web='$Image'; sudo k3s kubectl -n '$Namespace' annotate deployment/quarterly-recon deployment.quarterly-recon/release='$ReleaseId' --overwrite; sudo k3s kubectl -n '$Namespace' rollout status deployment/quarterly-recon --timeout=420s; ln -sfn '$ReleasePath' '$RemotePath/current'"
+    $DeployCommand = "set -eu; cd '$ReleasePath'; tar -xzf application.tgz; if docker image inspect '$OfflineBaseImage' >/dev/null 2>&1; then echo '使用服务器现有生产镜像离线构建'; docker build -f Dockerfile.offline --build-arg BASE_IMAGE='$OfflineBaseImage' -t '$Image' .; else echo '未找到离线基础镜像，使用标准 Dockerfile'; docker build -f Dockerfile -t '$Image' .; fi; docker save '$Image' | sudo k3s ctr images import -; sudo k3s kubectl -n '$Namespace' set image deployment/quarterly-recon web='$Image'; sudo k3s kubectl -n '$Namespace' annotate deployment/quarterly-recon deployment.quarterly-recon/release='$ReleaseId' --overwrite; sudo k3s kubectl -n '$Namespace' rollout status deployment/quarterly-recon --timeout=420s; ln -sfn '$ReleasePath' '$RemotePath/current'"
     Invoke-Ssh $DeployCommand
     Invoke-HealthCheck
   }
