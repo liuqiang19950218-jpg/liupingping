@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 
 const SYNC_MARKER = "reconciliation-server-snapshot-updated-at";
 const LEDGER_SYNC_MARKER = "reconciliation-server-ledger-updated-at";
@@ -22,6 +22,16 @@ type LedgerManifest = {
   updatedAt: string;
   totalChunks: number;
   totalKeys: number;
+};
+
+type MigrationMode = "export" | "import" | null;
+
+type MigrationBundle = {
+  version: 1;
+  exportedAt: string;
+  sourceOrigin: string;
+  snapshot: Record<string, string>;
+  ledger: LedgerUpload | null;
 };
 
 function businessSnapshot() {
@@ -99,33 +109,45 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   return payload;
 }
 
+function isLoopbackHost() {
+  return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+}
+
+async function postServerJson<T>(serverOrigin: string, targetPath: string, payload: unknown): Promise<T> {
+  if (isLoopbackHost() && serverOrigin !== window.location.origin) {
+    return requestJson<T>("/api/server-sync", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetPath, payload }),
+    });
+  }
+  return requestJson<T>(`${serverOrigin}${targetPath}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 async function uploadLedger(serverOrigin: string, ledger: LedgerUpload): Promise<void> {
   const totalChunks = Math.ceil(ledger.keys.length / LEDGER_CHUNK_SIZE);
   const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  await requestJson(`${serverOrigin}/api/ledger-state`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action: "begin", uploadId, totalChunks, totalKeys: ledger.keys.length }),
+  await postServerJson(serverOrigin, "/api/ledger-state", {
+    action: "begin",
+    uploadId,
+    totalChunks,
+    totalKeys: ledger.keys.length,
   });
   for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
     const keys = ledger.keys.slice(chunkIndex * LEDGER_CHUNK_SIZE, (chunkIndex + 1) * LEDGER_CHUNK_SIZE);
-    await requestJson(`${serverOrigin}/api/ledger-state`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "chunk", uploadId, chunkIndex, keys }),
-    });
+    await postServerJson(serverOrigin, "/api/ledger-state", { action: "chunk", uploadId, chunkIndex, keys });
   }
-  await requestJson(`${serverOrigin}/api/ledger-state`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      action: "commit",
-      uploadId,
-      totalChunks,
-      totalKeys: ledger.keys.length,
-      fileNames: ledger.fileNames,
-      updatedAt: ledger.updatedAt,
-    }),
+  await postServerJson(serverOrigin, "/api/ledger-state", {
+    action: "commit",
+    uploadId,
+    totalChunks,
+    totalKeys: ledger.keys.length,
+    fileNames: ledger.fileNames,
+    updatedAt: ledger.updatedAt,
   });
 }
 
@@ -149,8 +171,17 @@ async function downloadLedger(serverOrigin: string): Promise<LedgerUpload | null
  * 生产地址随后会自动恢复这两类数据，使所有使用者共享同一份初始业务数据。
  */
 export function ServerStateBridge() {
+  const [migrationMode, setMigrationMode] = useState<MigrationMode>(null);
+  const [migrationStatus, setMigrationStatus] = useState("");
+  const [migrationBusy, setMigrationBusy] = useState(false);
+
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
+    const requestedMigration = query.get("migration");
+    if (requestedMigration === "export" || requestedMigration === "import") {
+      const timer = window.setTimeout(() => setMigrationMode(requestedMigration), 0);
+      return () => window.clearTimeout(timer);
+    }
     const isOneTimeSync = query.get("syncServer") === "1";
     const serverOrigin = query.get("serverOrigin") || REMOTE_ORIGIN;
 
@@ -163,11 +194,7 @@ export function ServerStateBridge() {
           return;
         }
         if (Object.keys(snapshot).length > 0) {
-          await requestJson(`${serverOrigin}/api/local-state`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ snapshot }),
-          });
+          await postServerJson(serverOrigin, "/api/local-state", { snapshot, mode: "merge" });
         }
         if (ledger?.keys.length) await uploadLedger(serverOrigin, ledger);
         window.alert(`本机数据已完整同步到服务器。往来索引：${ledger?.keys.length.toLocaleString("zh-CN") ?? 0} 条。`);
@@ -198,5 +225,127 @@ export function ServerStateBridge() {
     });
   }, []);
 
-  return null;
+  async function handleExport() {
+    setMigrationBusy(true);
+    setMigrationStatus("正在整理当前网址中的 Q1 数据……");
+    try {
+      const snapshot = businessSnapshot();
+      const ledger = await readCurrentLedger();
+      if (Object.keys(snapshot).length === 0 && (!ledger || ledger.keys.length === 0)) {
+        throw new Error("当前网址下没有找到可导出的对账数据");
+      }
+      const bundle: MigrationBundle = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        sourceOrigin: window.location.origin,
+        snapshot,
+        ledger,
+      };
+      const blob = new Blob([JSON.stringify(bundle)], { type: "application/json;charset=utf-8" });
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(/T/, "-").slice(0, 15);
+      link.href = URL.createObjectURL(blob);
+      link.download = `季度对账_Q1浏览器数据_${timestamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+      setMigrationStatus(`导出完成：业务数据 ${Object.keys(snapshot).length} 项，往来索引 ${ledger?.keys.length.toLocaleString("zh-CN") ?? 0} 条。`);
+    } catch (error) {
+      setMigrationStatus(`导出失败：${error instanceof Error ? error.message : "未知错误"}`);
+    } finally {
+      setMigrationBusy(false);
+    }
+  }
+
+  async function handleImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setMigrationBusy(true);
+    setMigrationStatus("正在把 Q1 合并到服务器，现有季度不会被覆盖……");
+    try {
+      const bundle = JSON.parse(await file.text()) as Partial<MigrationBundle>;
+      if (bundle.version !== 1 || !bundle.snapshot || typeof bundle.snapshot !== "object") {
+        throw new Error("文件不是本系统生成的季度数据迁移包");
+      }
+      await requestJson("/api/local-state", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ snapshot: bundle.snapshot, mode: "merge" }),
+      });
+      if (bundle.ledger?.keys?.length) {
+        const serverLedger = await downloadLedger(window.location.origin);
+        const mergedLedger: LedgerUpload = serverLedger
+          ? {
+              keys: Array.from(new Set([...serverLedger.keys, ...bundle.ledger.keys])),
+              fileNames: Array.from(new Set([...serverLedger.fileNames, ...bundle.ledger.fileNames])),
+              updatedAt: new Date().toISOString(),
+            }
+          : bundle.ledger;
+        await uploadLedger(window.location.origin, mergedLedger);
+      }
+      setMigrationStatus("Q1 已合并到服务器。即将刷新并显示合并后的季度数据……");
+      window.setTimeout(() => {
+        window.location.href = "/";
+      }, 1200);
+    } catch (error) {
+      setMigrationStatus(`导入失败：${error instanceof Error ? error.message : "未知错误"}`);
+      setMigrationBusy(false);
+    }
+  }
+
+  if (!migrationMode) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/55 p-6">
+      <section className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-7 shadow-2xl">
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p className="mb-1 text-sm font-semibold text-blue-600">季度数据安全迁移</p>
+            <h2 className="text-2xl font-bold text-slate-900">
+              {migrationMode === "export" ? "从旧网址导出 Q1 数据" : "将 Q1 合并到 182 服务器"}
+            </h2>
+          </div>
+          <button
+            type="button"
+            aria-label="关闭"
+            className="rounded-lg px-3 py-1.5 text-xl text-slate-500 hover:bg-slate-100"
+            onClick={() => { window.location.href = "/"; }}
+          >
+            ×
+          </button>
+        </div>
+        <p className="mb-6 leading-7 text-slate-600">
+          {migrationMode === "export"
+            ? "此操作只读取当前旧网址浏览器内保存的数据，并下载一个迁移文件，不会删除或修改原数据。"
+            : "选择从旧网址下载的迁移文件。系统只补入缺失季度；182 服务器中已经存在的数据优先保留。"}
+        </p>
+        {migrationMode === "export" ? (
+          <button
+            type="button"
+            disabled={migrationBusy}
+            className="w-full rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={() => { void handleExport(); }}
+          >
+            {migrationBusy ? "正在导出……" : "导出当前网址的 Q1 数据"}
+          </button>
+        ) : (
+          <label className={`block w-full rounded-lg bg-blue-600 px-5 py-3 text-center font-semibold text-white ${migrationBusy ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-blue-700"}`}>
+            {migrationBusy ? "正在合并……" : "选择 Q1 数据迁移文件"}
+            <input
+              type="file"
+              accept="application/json,.json"
+              disabled={migrationBusy}
+              className="sr-only"
+              onChange={(event) => { void handleImport(event); }}
+            />
+          </label>
+        )}
+        {migrationStatus ? (
+          <p className="mt-4 rounded-lg bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">{migrationStatus}</p>
+        ) : null}
+      </section>
+    </div>
+  );
 }

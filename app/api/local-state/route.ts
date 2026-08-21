@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { mergeStorageSnapshots, type StorageSnapshot } from "../../server-state-merge";
 
 const SNAPSHOT_ID = "shared";
 const MAX_SNAPSHOT_BYTES = 20 * 1024 * 1024;
@@ -35,23 +36,28 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { snapshot?: Record<string, string> };
-    const snapshot = body.snapshot;
-    if (!snapshot || typeof snapshot !== "object") {
+    const body = (await request.json()) as { snapshot?: StorageSnapshot; mode?: "replace" | "merge" };
+    const incomingSnapshot = body.snapshot;
+    if (!incomingSnapshot || typeof incomingSnapshot !== "object") {
       return Response.json({ error: "缺少本机数据快照" }, { status: 400, headers: corsHeaders });
     }
-    if (Object.keys(snapshot).length === 0) {
+    if (Object.keys(incomingSnapshot).length === 0) {
       return Response.json({ error: "禁止使用空数据覆盖服务器快照" }, { status: 400, headers: corsHeaders });
-    }
-    const payload = JSON.stringify(snapshot);
-    if (new TextEncoder().encode(payload).byteLength > MAX_SNAPSHOT_BYTES) {
-      return Response.json({ error: "本机数据过大，请联系管理员处理" }, { status: 413, headers: corsHeaders });
     }
     await ensureSnapshotTable();
     const updatedAt = new Date().toISOString();
     const current = await env.DB.prepare(
       "SELECT payload, updated_at FROM app_state_snapshots WHERE id = ?",
     ).bind(SNAPSHOT_ID).first<{ payload: string; updated_at: string }>();
+    let snapshot = incomingSnapshot;
+    if (body.mode === "merge" && current) {
+      const currentSnapshot = JSON.parse(current.payload) as StorageSnapshot;
+      snapshot = mergeStorageSnapshots(incomingSnapshot, currentSnapshot);
+    }
+    const payload = JSON.stringify(snapshot);
+    if (new TextEncoder().encode(payload).byteLength > MAX_SNAPSHOT_BYTES) {
+      return Response.json({ error: "本机数据过大，请联系管理员处理" }, { status: 413, headers: corsHeaders });
+    }
     if (current) {
       await env.DB.prepare(
         "INSERT INTO app_state_snapshot_history (id, payload, created_at) VALUES (?, ?, ?)",
