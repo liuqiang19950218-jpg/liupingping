@@ -86,8 +86,8 @@ function Invoke-ApplicationDeploy {
 function Invoke-HealthCheck {
   $BaseUrl = "http://$($Config.Host):$PublicPort"
   Write-Host "检查生产服务 $BaseUrl ..."
-  $Home = Invoke-WebRequest -Uri $BaseUrl -UseBasicParsing -TimeoutSec 30
-  if ($Home.StatusCode -ne 200) { throw "首页健康检查失败：$($Home.StatusCode)" }
+  $HomeResponse = Invoke-WebRequest -Uri $BaseUrl -UseBasicParsing -TimeoutSec 30
+  if ($HomeResponse.StatusCode -ne 200) { throw "首页健康检查失败：$($HomeResponse.StatusCode)" }
   $State = Invoke-WebRequest -Uri "$BaseUrl/api/local-state" -UseBasicParsing -TimeoutSec 30
   if ($State.StatusCode -ne 200) { throw "业务状态接口检查失败：$($State.StatusCode)" }
   Write-Host '生产服务健康检查通过。'
