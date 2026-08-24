@@ -143,6 +143,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  let stage = "解析上传文件";
   try {
     const body = (await request.json()) as { snapshot?: StorageSnapshot; mode?: "replace" | "merge" };
     const incomingSnapshot = body.snapshot;
@@ -152,22 +153,29 @@ export async function POST(request: Request) {
     if (Object.keys(incomingSnapshot).length === 0) {
       return Response.json({ error: "禁止使用空数据覆盖服务器快照" }, { status: 400, headers: corsHeaders });
     }
+    stage = "初始化数据库";
     await ensureSnapshotTable();
     const updatedAt = new Date().toISOString();
+    stage = "读取服务器现有数据";
     const current = await readCurrentSnapshot();
     let snapshot = incomingSnapshot;
     if (body.mode === "merge" && current) {
+      stage = "合并本机与服务器数据";
       snapshot = mergeStorageSnapshots(incomingSnapshot, current.snapshot);
     }
+    stage = "检查合并数据大小";
     const payload = JSON.stringify(snapshot);
     if (new TextEncoder().encode(payload).byteLength > MAX_SNAPSHOT_BYTES) {
       return Response.json({ error: "本机数据过大，请联系管理员处理" }, { status: 413, headers: corsHeaders });
     }
+    stage = "分块写入服务器数据库";
     await writeChunkedSnapshot(snapshot, updatedAt);
     return Response.json({ ok: true, updatedAt, keyCount: Object.keys(snapshot).length }, { headers: corsHeaders });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "保存服务器数据失败" },
+      {
+        error: `导入阶段“${stage}”失败：${error instanceof Error ? error.message : "保存服务器数据失败"}`,
+      },
       { status: 500, headers: corsHeaders },
     );
   }

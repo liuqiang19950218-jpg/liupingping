@@ -3,8 +3,9 @@ import type { StorageSnapshot } from "./server-state-merge";
 // Keep chunks deliberately small. The remote D1-compatible gateway applies a
 // lower bind/result ceiling than SQLite's documented 2 MB value limit, and a
 // Chinese UTF-16 code unit can occupy up to 3 UTF-8 bytes (4 for surrogate
-// pairs). 32,000 code units stay comfortably below that gateway ceiling.
-export const SNAPSHOT_CHUNK_MAX_CHARS = 32_000;
+// pairs). Keep each binding below 32 KiB as the production gateway rejects
+// larger values before SQLite executes the statement.
+export const SNAPSHOT_CHUNK_MAX_CHARS = 8_000;
 export const SNAPSHOT_CHUNK_MAX_BYTES = SNAPSHOT_CHUNK_MAX_CHARS * 4;
 
 export type SnapshotChunk = {
