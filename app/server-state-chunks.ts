@@ -1,9 +1,10 @@
 import type { StorageSnapshot } from "./server-state-merge";
 
-// D1 limits a single string/BLOB value to 2 MB. A UTF-16 code unit occupies at
-// most 4 UTF-8 bytes, so 250,000 code units keep every chunk at or below 1 MB
-// without repeatedly encoding large strings during migration.
-export const SNAPSHOT_CHUNK_MAX_CHARS = 250_000;
+// Keep chunks deliberately small. The remote D1-compatible gateway applies a
+// lower bind/result ceiling than SQLite's documented 2 MB value limit, and a
+// Chinese UTF-16 code unit can occupy up to 3 UTF-8 bytes (4 for surrogate
+// pairs). 32,000 code units stay comfortably below that gateway ceiling.
+export const SNAPSHOT_CHUNK_MAX_CHARS = 32_000;
 export const SNAPSHOT_CHUNK_MAX_BYTES = SNAPSHOT_CHUNK_MAX_CHARS * 4;
 
 export type SnapshotChunk = {

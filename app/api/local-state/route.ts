@@ -48,9 +48,10 @@ async function ensureSnapshotTable() {
 
 async function readChunkedSnapshot(manifest: SnapshotManifest): Promise<StorageSnapshot> {
   const chunks: SnapshotChunk[] = [];
-  // Read a single chunk per query so the D1 response never needs to marshal
-  // several near-limit TEXT values at once.
-  const pageSize = 1;
+  // Read a few deliberately small chunks per query. Four 32k-character
+  // values remain comfortably below the gateway response ceiling while
+  // avoiding hundreds of round trips for a complete snapshot.
+  const pageSize = 4;
   for (let offset = 0; offset < manifest.chunk_count; offset += pageSize) {
     const page = await env.DB.prepare(
       "SELECT storage_key, chunk_index, payload FROM app_state_snapshot_chunks WHERE version_id = ? ORDER BY storage_key ASC, chunk_index ASC LIMIT ? OFFSET ?",
@@ -89,29 +90,42 @@ async function writeChunkedSnapshot(snapshot: StorageSnapshot, updatedAt: string
   const versionId = crypto.randomUUID();
   const payloadBytes = new TextEncoder().encode(JSON.stringify(snapshot)).byteLength;
   const chunks = splitStorageSnapshot(snapshot);
-  const statements = chunks.map((chunk) => env.DB.prepare(
-    "INSERT INTO app_state_snapshot_chunks (version_id, storage_key, chunk_index, payload, created_at) VALUES (?, ?, ?, ?, ?)",
-  ).bind(versionId, chunk.storageKey, chunk.chunkIndex, chunk.payload, updatedAt));
 
-  // Submit one chunk per D1 batch. Each row remains well below the 2 MB
-  // SQLite/D1 value limit, and the request never combines several large
-  // payload bindings into one database call.
-  const batchSize = 1;
-  for (let offset = 0; offset < statements.length; offset += batchSize) {
-    await env.DB.batch(statements.slice(offset, offset + batchSize));
+  // Prepare and execute one small statement at a time. Do not eagerly build a
+  // large array of bound statements: some D1-compatible gateways serialize
+  // the complete binding collection before executing even a one-item batch.
+  for (const chunk of chunks) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO app_state_snapshot_chunks (version_id, storage_key, chunk_index, payload, created_at) VALUES (?, ?, ?, ?, ?)",
+      ).bind(versionId, chunk.storageKey, chunk.chunkIndex, chunk.payload, updatedAt).run();
+    } catch (error) {
+      throw new Error(
+        `服务器数据分块写入失败（${chunk.storageKey} #${chunk.chunkIndex}，${chunk.payload.length}字符）：${error instanceof Error ? error.message : "未知错误"}`,
+      );
+    }
   }
 
   // Publish only after every chunk has been persisted. Readers therefore see
   // either the previous complete version or this complete version.
-  await env.DB.prepare(
-    "INSERT INTO app_state_snapshot_manifests (id, version_id, updated_at, key_count, chunk_count, total_bytes) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET version_id = excluded.version_id, updated_at = excluded.updated_at, key_count = excluded.key_count, chunk_count = excluded.chunk_count, total_bytes = excluded.total_bytes",
-  ).bind(SNAPSHOT_ID, versionId, updatedAt, Object.keys(snapshot).length, chunks.length, payloadBytes).run();
+  try {
+    await env.DB.prepare(
+      "INSERT INTO app_state_snapshot_manifests (id, version_id, updated_at, key_count, chunk_count, total_bytes) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET version_id = excluded.version_id, updated_at = excluded.updated_at, key_count = excluded.key_count, chunk_count = excluded.chunk_count, total_bytes = excluded.total_bytes",
+    ).bind(SNAPSHOT_ID, versionId, updatedAt, Object.keys(snapshot).length, chunks.length, payloadBytes).run();
+  } catch (error) {
+    throw new Error(`服务器数据清单发布失败：${error instanceof Error ? error.message : "未知错误"}`);
+  }
 
-  // Keep the active version only. The legacy snapshot table is intentionally
-  // retained as a rollback source and is never overwritten by chunked writes.
-  await env.DB.prepare(
-    "DELETE FROM app_state_snapshot_chunks WHERE version_id <> ?",
-  ).bind(versionId).run();
+  // Keep the active version only. Cleanup is best-effort because the manifest
+  // has already been published successfully at this point. A cleanup failure
+  // must not make the client retry an otherwise completed migration.
+  try {
+    await env.DB.prepare(
+      "DELETE FROM app_state_snapshot_chunks WHERE version_id <> ?",
+    ).bind(versionId).run();
+  } catch (error) {
+    console.warn("[local-state] stale chunk cleanup failed", error);
+  }
 }
 
 export async function GET() {
