@@ -6,7 +6,6 @@ import type { StorageSnapshot } from "./server-state-merge";
 // pairs). Keep each binding below 32 KiB as the production gateway rejects
 // larger values before SQLite executes the statement.
 export const SNAPSHOT_CHUNK_MAX_CHARS = 8_000;
-export const SNAPSHOT_CHUNK_MAX_BYTES = SNAPSHOT_CHUNK_MAX_CHARS * 4;
 
 export type SnapshotChunk = {
   storageKey: string;

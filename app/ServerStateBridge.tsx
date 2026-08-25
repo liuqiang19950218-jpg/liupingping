@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ChangeEvent } from "react";
+import { splitStorageSnapshot } from "./server-state-chunks";
 
 const SYNC_MARKER = "reconciliation-server-snapshot-updated-at";
 const LEDGER_SYNC_MARKER = "reconciliation-server-ledger-updated-at";
@@ -9,6 +10,7 @@ const LEDGER_DB_NAME = "quarterly-reconciliation";
 const LEDGER_STORE_NAME = "ledger";
 const LEDGER_RECORD_KEY = "current";
 const LEDGER_CHUNK_SIZE = 5_000;
+const SNAPSHOT_UPLOAD_BATCH_SIZE = 4;
 
 type LedgerUpload = {
   keys: string[];
@@ -128,6 +130,44 @@ async function postServerJson<T>(serverOrigin: string, targetPath: string, paylo
   });
 }
 
+function createSnapshotUploadId() {
+  return `snapshot-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function uploadSnapshot(
+  serverOrigin: string,
+  snapshot: Record<string, string>,
+  mode: "merge" | "replace",
+): Promise<void> {
+  const chunks = splitStorageSnapshot(snapshot);
+  if (chunks.length === 0) return;
+
+  const uploadId = createSnapshotUploadId();
+  const totalBytes = new TextEncoder().encode(JSON.stringify(snapshot)).byteLength;
+
+  await postServerJson(serverOrigin, "/api/local-state", {
+    action: "begin",
+    uploadId,
+    mode,
+    keyCount: Object.keys(snapshot).length,
+    chunkCount: chunks.length,
+    totalBytes,
+  });
+
+  for (let index = 0; index < chunks.length; index += SNAPSHOT_UPLOAD_BATCH_SIZE) {
+    await postServerJson(serverOrigin, "/api/local-state", {
+      action: "chunk",
+      uploadId,
+      chunks: chunks.slice(index, index + SNAPSHOT_UPLOAD_BATCH_SIZE),
+    });
+  }
+
+  await postServerJson(serverOrigin, "/api/local-state", {
+    action: "commit",
+    uploadId,
+  });
+}
+
 async function uploadLedger(serverOrigin: string, ledger: LedgerUpload): Promise<void> {
   const totalChunks = Math.ceil(ledger.keys.length / LEDGER_CHUNK_SIZE);
   const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -194,7 +234,7 @@ export function ServerStateBridge() {
           return;
         }
         if (Object.keys(snapshot).length > 0) {
-          await postServerJson(serverOrigin, "/api/local-state", { snapshot, mode: "merge" });
+          await uploadSnapshot(serverOrigin, snapshot, "merge");
         }
         if (ledger?.keys.length) await uploadLedger(serverOrigin, ledger);
         window.alert(`本机数据已完整同步到服务器。往来索引：${ledger?.keys.length.toLocaleString("zh-CN") ?? 0} 条。`);
@@ -269,11 +309,8 @@ export function ServerStateBridge() {
       if (bundle.version !== 1 || !bundle.snapshot || typeof bundle.snapshot !== "object") {
         throw new Error("文件不是本系统生成的季度数据迁移包");
       }
-      await requestJson("/api/local-state", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ snapshot: bundle.snapshot, mode: "merge" }),
-      });
+      setMigrationStatus("正在分块把 Q1 合并到服务器，现有季度不会被覆盖……");
+      await uploadSnapshot(window.location.origin, bundle.snapshot, "merge");
       if (bundle.ledger?.keys?.length) {
         const serverLedger = await downloadLedger(window.location.origin);
         const mergedLedger: LedgerUpload = serverLedger
