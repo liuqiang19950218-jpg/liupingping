@@ -34,6 +34,14 @@ spec:
               value: production
             - name: PATH
               value: /node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: quarterly-recon-data-secrets
+                  key: DATABASE_URL
+                  optional: true
+            - name: POSTGRES_POOL_MAX
+              value: "5"
           volumeMounts:
             - name: wrangler-data
               mountPath: /app/.wrangler
