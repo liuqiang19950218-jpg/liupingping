@@ -1,7 +1,8 @@
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import { Client } from "pg";
 
 type PostgresDb = ReturnType<typeof drizzle>;
+type PostgresClient = Client;
 
 export type PostgresHealth = {
   configured: boolean;
@@ -13,14 +14,7 @@ export type PostgresHealth = {
   error?: string;
 };
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __quarterlyReconPgPool: Pool | undefined;
-  // eslint-disable-next-line no-var
-  var __quarterlyReconPgDb: PostgresDb | undefined;
-}
-
-const DEFAULT_POOL_MAX = 5;
+const POSTGRES_CONNECTION_TIMEOUT_MS = 5_000;
 
 export function isPostgresConfigured() {
   return Boolean(process.env.DATABASE_URL);
@@ -34,39 +28,38 @@ export function sanitizePostgresError(error: unknown) {
   );
 }
 
-export function getPostgresPool() {
-  if (!process.env.DATABASE_URL) {
+export function createPostgresClient() {
+  const connectionString = process.env.DATABASE_URL;
+
+  if (!connectionString) {
     throw new Error("DATABASE_URL is not configured");
   }
 
-  if (!globalThis.__quarterlyReconPgPool) {
-    const max = Number(process.env.POSTGRES_POOL_MAX || DEFAULT_POOL_MAX);
-
-    globalThis.__quarterlyReconPgPool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      max: Number.isFinite(max) && max > 0 ? max : DEFAULT_POOL_MAX,
-      idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 5_000,
-    });
-  }
-
-  return globalThis.__quarterlyReconPgPool;
+  return new Client({
+    connectionString,
+    connectionTimeoutMillis: POSTGRES_CONNECTION_TIMEOUT_MS,
+  });
 }
 
-export function getPostgresDb() {
-  if (!globalThis.__quarterlyReconPgDb) {
-    globalThis.__quarterlyReconPgDb = drizzle(getPostgresPool());
-  }
+// workerd cannot safely reuse pg sockets across requests, so every request
+// creates, connects, uses, and closes its own PostgreSQL client.
+export async function withPostgresClient<T>(
+  callback: (client: PostgresClient) => Promise<T>,
+) {
+  const client = createPostgresClient();
+  await client.connect();
 
-  return globalThis.__quarterlyReconPgDb;
+  try {
+    return await callback(client);
+  } finally {
+    await client.end();
+  }
 }
 
-export async function closePostgresPool() {
-  if (globalThis.__quarterlyReconPgPool) {
-    await globalThis.__quarterlyReconPgPool.end();
-    globalThis.__quarterlyReconPgPool = undefined;
-    globalThis.__quarterlyReconPgDb = undefined;
-  }
+export async function withPostgresDb<T>(
+  callback: (db: PostgresDb, client: PostgresClient) => Promise<T>,
+) {
+  return withPostgresClient((client) => callback(drizzle(client), client));
 }
 
 export async function checkPostgresHealth(): Promise<PostgresHealth> {
@@ -78,38 +71,39 @@ export async function checkPostgresHealth(): Promise<PostgresHealth> {
   }
 
   try {
-    const pool = getPostgresPool();
-    const databaseResult = await pool.query<{ current_database: string }>(
-      "select current_database()",
-    );
-    const versionResult = await pool.query<{ version: string }>(
-      "select version()",
-    );
-    const schemaResult = await pool.query<{ exists: boolean }>(
-      "select exists (select 1 from information_schema.schemata where schema_name = 'recon')",
-    );
-    const migrationTableResult = await pool.query<{ exists: boolean }>(
-      "select exists (select 1 from information_schema.tables where table_schema = 'recon' and table_name = 'schema_migrations')",
-    );
-
-    let migration: PostgresHealth["migration"] = "pending";
-
-    if (migrationTableResult.rows[0]?.exists) {
-      const migrationResult = await pool.query<{ version: string }>(
-        "select version from recon.schema_migrations where version = $1 limit 1",
-        ["001_foundation"],
+    return await withPostgresClient(async (client) => {
+      const databaseResult = await client.query<{ current_database: string }>(
+        "select current_database()",
       );
-      migration = migrationResult.rowCount ? "001_foundation" : "pending";
-    }
+      const versionResult = await client.query<{ version: string }>(
+        "select version()",
+      );
+      const schemaResult = await client.query<{ exists: boolean }>(
+        "select exists (select 1 from information_schema.schemata where schema_name = 'recon')",
+      );
+      const migrationTableResult = await client.query<{ exists: boolean }>(
+        "select exists (select 1 from information_schema.tables where table_schema = 'recon' and table_name = 'schema_migrations')",
+      );
 
-    return {
-      configured: true,
-      connected: true,
-      database: databaseResult.rows[0]?.current_database,
-      schema: schemaResult.rows[0]?.exists ? "recon" : "missing",
-      migration,
-      postgresVersion: versionResult.rows[0]?.version,
-    };
+      let migration: PostgresHealth["migration"] = "pending";
+
+      if (migrationTableResult.rows[0]?.exists) {
+        const migrationResult = await client.query<{ version: string }>(
+          "select version from recon.schema_migrations where version = $1 limit 1",
+          ["001_foundation"],
+        );
+        migration = migrationResult.rowCount ? "001_foundation" : "pending";
+      }
+
+      return {
+        configured: true,
+        connected: true,
+        database: databaseResult.rows[0]?.current_database,
+        schema: schemaResult.rows[0]?.exists ? "recon" : "missing",
+        migration,
+        postgresVersion: versionResult.rows[0]?.version,
+      };
+    });
   } catch (error) {
     return {
       configured: true,
