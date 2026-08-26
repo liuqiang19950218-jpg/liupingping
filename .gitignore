@@ -54,3 +54,4 @@ next-env.d.ts
 # local dev / migration artifacts
 .codex-local-dev*.log
 old-local-state.json
+migration-output/
