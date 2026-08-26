@@ -41,6 +41,17 @@ function validateInput(d) {
   required(sqlite?.payload?.encoding === "base64" && createHash("sha256").update(Buffer.from(sqlite.payload.content, "base64")).digest("hex") === source.sqlite, "Q2_LEGACY_SNAPSHOT_INPUT_INCOMPLETE", "SQLite snapshot content/hash mismatch", code.sourceMismatch);
   const duplicateReviews = d.review_required.filter((r) => r.code === "DUPLICATE_BUSINESS_KEY");
   required(duplicateReviews.length === 2 && duplicateReviews.every((r) => r.severity === "NON_BLOCKING_REVIEW"), "Q2_NORMALIZED_SOURCE_MISMATCH", "duplicate reviews must remain non-blocking", code.sourceMismatch);
+  // Q2 customers are quarter-independent: deterministic source keys must be
+  // distinct and collision-free; mappings distinct by account_set+region+customer_name.
+  const acctName = new Map(d.account_sets.map((a) => [a.source_key, a.name]));
+  const regionName = new Map(d.regions.map((r) => [r.source_key, r.name]));
+  required(new Set(d.customers.map((c) => c.source_key)).size === d.customers.length, "Q2_NORMALIZED_SOURCE_MISMATCH", "Q2 customer source keys must be distinct", code.sourceMismatch);
+  required(new Set(d.customers.map((c) => key(acctName.get(c.account_set_source_key), regionName.get(c.region_source_key), c.name))).size === d.customers.length, "Q2_NORMALIZED_SOURCE_MISMATCH", "Q2 customer mappings must be distinct by account_set+region+customer_name", code.sourceMismatch);
+  // Customers table UNIQUE(external_code, name): with external_code NULL,
+  // PostgreSQL treats NULLs as distinct so duplicate names cannot block the insert.
+  // If a future bundle ever sets external_code, verify (external_code, name) is unique.
+  const nonNullExternal = d.customers.filter((c) => c.external_code !== null && c.external_code !== undefined);
+  required(nonNullExternal.every((c) => !d.customers.some((o) => o !== c && o.external_code === c.external_code && o.name === c.name)), "Q2_CUSTOMER_INSERT_CONSTRAINT_BLOCKER", "non-null external_code + name pairs must be unique", code.sourceMismatch);
 }
 
 async function connect() { required(process.env.DATABASE_URL, "DATABASE_URL_REQUIRED", "required only for --validate-only or --apply", code.connection); try { const { Client } = await import("pg"); const client = new Client({ connectionString: process.env.DATABASE_URL }); await client.connect(); return client; } catch (e) { throw new ImporterError("DATABASE_CONNECTION_FAILED", e.message, code.connection); } }
@@ -69,16 +80,36 @@ async function q1Baseline(client) {
 }
 async function ensureNotApplied(client) { const r = await q(client, "SELECT 1 FROM recon.migration_manifests WHERE batch_key=$1", [batchKey]); if (r.rowCount) throw new ImporterError("MIGRATION_ALREADY_APPLIED", batchKey, code.alreadyApplied); }
 async function resolveDimensions(client, d) {
-  const [regions, accounts, mappings] = await Promise.all([q(client, "SELECT id,code,name FROM recon.regions"), q(client, "SELECT id,code,name FROM recon.account_sets"), q(client, "SELECT DISTINCT c.id,c.name,r.name region_name,a.name account_set_name FROM recon.customers c JOIN recon.regions r ON r.id=c.region_id JOIN recon.reconciliations x ON x.customer_id=c.id JOIN recon.account_sets a ON a.id=x.account_set_id")]);
+  // Q2 is quarter-independent. Only exact-name dictionary reuse is allowed for
+  // regions and account_sets (no alias guessing). Customer mappings are resolved
+  // within this quarter only and never look into Q1 reconciliation history.
+  const [regions, accounts] = await Promise.all([
+    q(client, "SELECT id,code,name FROM recon.regions"),
+    q(client, "SELECT id,code,name FROM recon.account_sets"),
+  ]);
   const exact = (rows, row, label) => { const found = rows.filter((x) => x.code === row.code && x.name === row.name); required(found.length <= 1, "Q2_DIMENSION_RESOLUTION_AMBIGUOUS", `${label} has multiple exact matches`, code.ambiguous); return found[0]?.id ?? null; };
   const regionIds = new Map(d.regions.map((r) => [r.source_key, exact(regions.rows, r, "region")]));
   const accountIds = new Map(d.account_sets.map((r) => [r.source_key, exact(accounts.rows, r, "account set")]));
-  const candidates = new Map(); for (const row of mappings.rows) { const k = key(row.account_set_name, row.region_name, row.name); const set = candidates.get(k) ?? new Set(); set.add(row.id); candidates.set(k, set); }
-  const customers = new Map(); let reused = 0, created = 0;
-  for (const row of d.customers) { const account = d.account_sets.find((x) => x.source_key === row.account_set_source_key)?.name; const region = d.regions.find((x) => x.source_key === row.region_source_key)?.name; const ids = candidates.get(key(account, region, row.name)) ?? new Set(); required(ids.size <= 1, "Q2_CUSTOMER_RESOLUTION_AMBIGUOUS", `customer mapping hash ${createHash("sha256").update(key(account, region, row.name)).digest("hex").slice(0, 24)} has ${ids.size} candidates`, code.ambiguous); const id = [...ids][0] ?? null; customers.set(row.source_key, { id, action: id ? "REUSE_EXISTING_CUSTOMER" : "CREATE_NEW_CUSTOMER" }); id ? reused++ : created++; }
-  return { regionIds, accountIds, customers, summary: { normalized_region_mappings: d.regions.length, existing_regions_reused: [...regionIds.values()].filter(Boolean).length, new_regions_to_insert: [...regionIds.values()].filter((x) => !x).length, normalized_account_set_mappings: d.account_sets.length, existing_account_sets_reused: [...accountIds.values()].filter(Boolean).length, new_account_sets_to_insert: [...accountIds.values()].filter((x) => !x).length, normalized_customer_mappings: d.customers.length, existing_customers_reused: reused, new_customers_to_insert: created, ambiguous: 0 } };
+  // Every approved Q2 customer mapping resolves to its own new customer for this
+  // quarter. No REUSE_EXISTING_CUSTOMER, no cross-quarter identity inference.
+  const customers = new Map(d.customers.map((row) => [row.source_key, { id: null, action: "CREATE_INDEPENDENT_CUSTOMER" }]));
+  return {
+    regionIds, accountIds, customers,
+    summary: {
+      normalized_region_mappings: d.regions.length,
+      existing_regions_reused: [...regionIds.values()].filter(Boolean).length,
+      new_regions_to_insert: [...regionIds.values()].filter((x) => !x).length,
+      normalized_account_set_mappings: d.account_sets.length,
+      existing_account_sets_reused: [...accountIds.values()].filter(Boolean).length,
+      new_account_sets_to_insert: [...accountIds.values()].filter((x) => !x).length,
+      normalized_customer_mappings: d.customers.length,
+      customer_mappings_independently_resolved: d.customers.length,
+      cross_quarter_customer_reuse: "DISABLED",
+      cross_quarter_customer_inference: "DISABLED",
+    },
+  };
 }
-async function targetQ2State(client) { const row = await q(client, "SELECT q.id,(SELECT count(*)::int FROM recon.reconciliations r WHERE r.quarter_id=q.id) reconciliations FROM recon.quarters q WHERE q.code='2026-Q2'"); required(row.rowCount <= 1 && (!row.rowCount || row.rows[0].reconciliations === 0), "Q2_TARGET_STATE_CONFLICT", "2026-Q2 already contains reconciliations without this manifest", code.validation); return row.rows[0]?.id ?? null; }
+async function targetQ2State(client) { const row = await q(client, "SELECT q.id,(SELECT count(*)::int FROM recon.reconciliations r WHERE r.quarter_id=q.id) reconciliations FROM recon.quarters q WHERE q.code='2026-Q2'"); required(row.rowCount <= 1 && (!row.rowCount || row.rows[0].reconciliations === 0), "Q2_PARTIAL_EXISTING_DATA_CONFLICT", "2026-Q2 already contains reconciliations without this manifest", code.validation); return row.rows[0]?.id ?? null; }
 async function validateOnly(client, d) { await verifySchema(client); await ensureNotApplied(client); await q1Baseline(client); await targetQ2State(client); const resolution = await resolveDimensions(client, d); console.log(JSON.stringify({ status: "VALIDATED_NO_WRITES", batch_key: batchKey, dimension_resolution: resolution.summary }, null, 2)); }
 async function apply(client, d) {
   await q(client, "BEGIN");
