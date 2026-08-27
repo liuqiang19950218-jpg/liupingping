@@ -262,6 +262,17 @@ export async function patchReconciliation(
     if ("solutionDate" in patch) {
       pushSet("solution_date", normalizeDate(patch.solutionDate, "解决日期"));
     }
+    if ("ownerName" in patch) {
+      // Editable business owner name. String -> trim (empty -> NULL); null -> NULL.
+      // Only owner_name is written — the original import value inside
+      // source_payload (provenance) is NEVER overwritten.
+      const v = patch.ownerName;
+      if (v !== null && typeof v !== "string") {
+        throw invalidInput("负责人姓名必须是字符串或 null");
+      }
+      const trimmed = v === null ? null : v.trim();
+      pushSet("owner_name", trimmed === "" ? null : trimmed);
+    }
 
     if (sets.length === 0) throw invalidInput("没有可更新的字段");
 
@@ -274,7 +285,7 @@ export async function patchReconciliation(
       `RETURNING id::text AS id, company_receivable::text, customer_book_amount::text, ` +
       `reconciliation_difference::text, reconciliation_status, bad_debt_amount::text, ` +
       `bad_debt_reason, adjustment_amount::text, adjustment_reason, solution, ` +
-      `to_char(solution_date, 'YYYY-MM-DD') AS solution_date`;
+      `to_char(solution_date, 'YYYY-MM-DD') AS solution_date, owner_id::text, owner_name`;
     const res = await client.query(sql, params);
     const row = res.rows[0];
     return {
@@ -290,6 +301,8 @@ export async function patchReconciliation(
       adjustmentReason: row.adjustment_reason ?? null,
       solution: row.solution ?? null,
       solutionDate: row.solution_date ?? null,
+      ownerId: row.owner_id ?? null,
+      ownerName: row.owner_name ?? null,
     };
   });
 }
@@ -331,6 +344,23 @@ function normalizeAttachmentKeys(value: unknown): string[] {
   return value as string[];
 }
 
+// Canonical difference-item resource shape, identical to the GET
+// (getDifferenceItems) shape so POST / PATCH / GET all return one shape.
+function toDifferenceItemResource(row: Row) {
+  return {
+    id: row.id as string,
+    category: row.category as string,
+    invoiceNo: (row.invoice_no as string | null) ?? null,
+    invoiceDate: (row.invoice_date as string | null) ?? null,
+    differenceAmount: (row.difference_amount as string | null) ?? null,
+    differenceDescription: (row.difference_description as string | null) ?? null,
+    verificationStatus: row.verification_status as string,
+    attachmentKeys: Array.isArray(row.attachment_keys)
+      ? (row.attachment_keys as unknown[]).filter((k) => typeof k === "string")
+      : [],
+  };
+}
+
 export async function createDifferenceItem(
   quarterCode: string,
   reconciliationId: string,
@@ -354,15 +384,16 @@ export async function createDifferenceItem(
 
     const res = await client.query(
       `INSERT INTO recon.difference_items
-         (reconciliation_id, category, invoice_no, invoice_date, difference_amount,
-          difference_description, verification_status, attachment_keys)
+        (reconciliation_id, category, invoice_no, invoice_date, difference_amount,
+         difference_description, verification_status, attachment_keys)
        VALUES ($1, $2, $3, $4, $5::numeric, $6, $7, $8::jsonb)
        RETURNING id::text, category, invoice_no,
          to_char(invoice_date, 'YYYY-MM-DD') AS invoice_date,
-         difference_amount::text, difference_description, verification_status`,
+         difference_amount::text, difference_description, verification_status,
+         attachment_keys`,
       [ref.id, category, invoiceNo, invoiceDate, amount, description, verificationStatus, JSON.stringify(attachmentKeys)],
     );
-    return { ...res.rows[0], quarter: quarterCode, reconciliationId: ref.id };
+    return toDifferenceItemResource(res.rows[0]);
   });
 }
 
@@ -425,9 +456,9 @@ export async function updateDifferenceItem(
       `UPDATE recon.difference_items SET ${sets.join(", ")} WHERE id = $${i} ` +
       `RETURNING id::text, category, invoice_no, ` +
       `to_char(invoice_date, 'YYYY-MM-DD') AS invoice_date, difference_amount::text, ` +
-      `difference_description, verification_status`;
+      `difference_description, verification_status, attachment_keys`;
     const res = await client.query(sql, params);
-    return { ...res.rows[0], quarter: quarterCode, reconciliationId };
+    return toDifferenceItemResource(res.rows[0]);
   });
 }
 

@@ -2,6 +2,7 @@
 // Phase 2A: READ ONLY. No INSERT/UPDATE/DELETE.
 // Amounts are returned as strings (numeric::text) so JS numbers never corrupt precision.
 import { withPostgresClient } from "../../../db/postgres";
+import { ApiError } from "./errors";
 
 export type QuarterSummary = {
   code: string;
@@ -23,7 +24,14 @@ export type ReconciliationRead = {
   customerBookAmount: string | null;
   reconciliationDifference: string | null;
   reconciliationStatus: string | null;
+  badDebtAmount: string | null;
+  badDebtReason: string | null;
+  adjustmentAmount: string | null;
+  adjustmentReason: string | null;
+  solution: string | null;
+  solutionDate: string | null;
   ownerId: string | null;
+  ownerName: string | null;
 };
 
 export type DifferenceItemRead = {
@@ -34,6 +42,7 @@ export type DifferenceItemRead = {
   differenceAmount: string | null;
   differenceDescription: string | null;
   verificationStatus: string;
+  attachmentKeys: string[];
 };
 
 export type FollowupEventRead = {
@@ -74,6 +83,52 @@ export function isValidUuid(value: string): boolean {
   return UUID_RE.test(value);
 }
 
+// Owner-name semantics:
+//  - editable column owner_name (added by migration 004) holds the CURRENT
+//    business owner; sales edits write ONLY this column.
+//  - source_payload->>'owner_raw_name' is the preserved import provenance and is
+//    never overwritten. When the editable column is empty, it is used as the
+//    display fallback so the page owner column does not go blank after PG cutover.
+//  - sentinel values (import artifacts / "未填写") are treated as "no owner".
+const OWNER_NAME_SENTINELS = new Set([
+  "0",
+  "—",
+  "-",
+  "未填写",
+  "未对账",
+  "null",
+  "undefined",
+]);
+
+function resolveOwnerName(editable: unknown, raw: unknown): string | null {
+  const e = typeof editable === "string" ? editable.trim() : "";
+  if (e !== "") return e;
+  const r = typeof raw === "string" ? raw.trim() : "";
+  if (r === "" || OWNER_NAME_SENTINELS.has(r)) return null;
+  return r;
+}
+
+// Migration 004 is required for the ownerName contract. If the column is missing
+// the API must fail with a recognizable server error (not a silent SQL 500) so a
+// deployment against an un-migrated database is obvious.
+async function assertOwnerNameColumn(
+  client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }> },
+): Promise<void> {
+  const res = await client.query(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'recon' AND table_name = 'reconciliations' AND column_name = 'owner_name'
+     ) AS present`,
+  );
+  if (res.rows[0]?.present !== true) {
+    throw new ApiError(
+      500,
+      "SCHEMA_004_REQUIRED",
+      "负责人字段需要先应用迁移 004_reconciliation_owner_name",
+    );
+  }
+}
+
 export async function listQuarters(): Promise<QuarterSummary[]> {
   return withPostgresClient(async (client) => {
     const result = await client.query(
@@ -102,6 +157,7 @@ export async function getQuarter(code: string): Promise<QuarterSummary | null> {
 
 export async function getReconciliations(code: string): Promise<ReconciliationRead[]> {
   return withPostgresClient(async (client) => {
+    await assertOwnerNameColumn(client);
     const result = await client.query(
       `SELECT r.id::text,
               r.source_row_key,
@@ -113,7 +169,15 @@ export async function getReconciliations(code: string): Promise<ReconciliationRe
               r.customer_book_amount::text,
               r.reconciliation_difference::text,
               r.reconciliation_status,
-              r.owner_id::text
+              r.bad_debt_amount::text,
+              r.bad_debt_reason,
+              r.adjustment_amount::text,
+              r.adjustment_reason,
+              r.solution,
+              to_char(r.solution_date, 'YYYY-MM-DD') AS solution_date,
+              r.owner_id::text,
+              r.owner_name,
+              r.source_payload->>'owner_raw_name' AS owner_raw_name
        FROM recon.reconciliations r
        JOIN recon.quarters q ON q.id = r.quarter_id
        JOIN recon.account_sets a ON a.id = r.account_set_id
@@ -134,7 +198,14 @@ export async function getReconciliations(code: string): Promise<ReconciliationRe
       customerBookAmount: row.customer_book_amount ?? null,
       reconciliationDifference: row.reconciliation_difference ?? null,
       reconciliationStatus: row.reconciliation_status ?? null,
+      badDebtAmount: row.bad_debt_amount ?? null,
+      badDebtReason: row.bad_debt_reason ?? null,
+      adjustmentAmount: row.adjustment_amount ?? null,
+      adjustmentReason: row.adjustment_reason ?? null,
+      solution: row.solution ?? null,
+      solutionDate: row.solution_date ?? null,
       ownerId: row.owner_id ?? null,
+      ownerName: resolveOwnerName(row.owner_name, row.owner_raw_name),
     }));
   });
 }
@@ -146,7 +217,8 @@ export async function getDifferenceItems(reconciliationId: string): Promise<Diff
               to_char(d.invoice_date, 'YYYY-MM-DD') AS invoice_date,
               d.difference_amount::text,
               d.difference_description,
-              d.verification_status
+              d.verification_status,
+              d.attachment_keys
        FROM recon.difference_items d
        WHERE d.reconciliation_id = $1
        ORDER BY d.created_at ASC, d.id ASC`,
@@ -160,6 +232,9 @@ export async function getDifferenceItems(reconciliationId: string): Promise<Diff
       differenceAmount: row.difference_amount ?? null,
       differenceDescription: row.difference_description ?? null,
       verificationStatus: row.verification_status,
+      attachmentKeys: Array.isArray(row.attachment_keys)
+        ? (row.attachment_keys as unknown[]).filter((k) => typeof k === "string")
+        : [],
     }));
   });
 }

@@ -1,5 +1,5 @@
 import { getQuarter, getReconciliations, isValidQuarterCode } from "../../../../../lib/server/recon/recon";
-import { sanitizePostgresError } from "../../../../../db/postgres";
+import { handleRouteError } from "../../../../../lib/server/recon/errors";
 
 export const runtime = "nodejs";
 
@@ -24,10 +24,9 @@ export async function GET(_request: Request, context: RouteContext) {
     const reconciliations = await getReconciliations(code);
     return Response.json({ quarter, reconciliations }, { headers: corsHeaders });
   } catch (error) {
-    return Response.json(
-      { error: sanitizePostgresError(error) },
-      { status: 500, headers: corsHeaders },
-    );
+    // handleRouteError surfaces typed ApiErrors (e.g. SCHEMA_004_REQUIRED) with
+    // their code + message; unknown errors become a generic sanitized 500.
+    return handleRouteError(error, corsHeaders);
   }
 }
 
