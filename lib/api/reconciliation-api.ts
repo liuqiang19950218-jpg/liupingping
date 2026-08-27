@@ -33,7 +33,12 @@ export type QuarterDifferenceItem = {
   id: string;
   reconciliationId: string;
   quarterCode: string;
-  category: "transit" | "returned" | "lost" | "instrument" | "otherInvoice" | "other";
+  // Real DB category values are returned verbatim (never renamed). The write API
+  // taxonomy is transit/returned/lost/instrument/otherInvoice/other, but legacy
+  // quarters may contain migrated values (e.g. returned_invoice, lost_invoice,
+  // equipment, other_with_invoice, other_without_invoice, transit) — so the type
+  // is `string` on purpose.
+  category: string;
   invoiceNo: string | null;
   invoiceDate: string | null;
   differenceAmount: string | null;
