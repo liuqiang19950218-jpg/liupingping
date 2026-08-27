@@ -1,92 +1,132 @@
-# SPD PostgreSQL Runtime Contract (Phase 2F.3)
+# SPD PostgreSQL Runtime Contract
 
-审计结论：**SPD_POSTGRES_DATA_GAP = YES** —— 本阶段未实现 SPD API、未改前端、未改数据库。
+审计/实现基线：`1114b27fb85a8d8e8c05b9e00ede7cce124b80b3`。
+实现分支：`feature/postgres-independent-spd-dashboard`。
+SPD 专用测试库：`quarterly_recon_spd_dashboard_test_20260827`（隔离，Q1=752 / Q2=851 / Q3=0 / 001-005 存在）。
 
-审计基线：`b4301d009affe60cc35fef6ec1e790ace4ba648e`。
-审计分支：`feature/postgres-spd-dashboard-api`（commit 见 git log）。
-测试/审计库：`quarterly_recon_runtime_import_ui_test_20260827`（隔离，Q1=752 / Q2=851 / Q3=0 / 004 存在）。
+## 【系统存在两套 SPD 数据源】（业务最终确认）
 
-## 1. SPD 数据来源
+| | SPD 数据源 A | SPD 数据源 B |
+| --- | --- | --- |
+| 用途 | 本季度对账详细情况表 | 对账看板 SPD资料已提供情况 |
+| 数据 | 跟对账函/确认函/在途证明/催款函/精准核销一起上传的 SPD 资料状态 | 单独上传的 SPD 专项 Excel（如 26年1季度SPD库存明细表.xlsx） |
+| 存储 | `recon.material_status` | `recon.spd_dashboard_rows`（独立季度数据集） |
+| 读取 API | `GET /api/quarter/[code]/material-status` | `GET /api/quarter/[code]/spd-dashboard` |
 
-- 旧前端（Q1SpecialPanels）读取 localStorage：
-  - `local-quarterly-reconciliation-spd-sheet-archive`（`spdSheetForQuarter`）
-  - 每个 quarter 一份独立 SPD sheet：headers `[序号, 账套, 区域, 客户名称, SPD确认表, SPD库存确认函, 备注]`，Q1 共 **142 行**，fileName `26年1季度SPD库存明细表.xlsx`
-- 当前 PostgreSQL 中：
-  - `recon.material_status`：SPD确认表 886 = 855 reconciliation-level + 31 quarter-level；SPD库存确认函 886 = 855 + 31
-  - `recon.legacy_snapshots`（source=localStorage, sha 7743eab2…）：**完整保留** 142 行 SPD sheet（authoritative recovery source）
-  - 迁移 bundle `/home/liupp/111/q1-postgres-test-bundle-20260826.zip` 的 `material_status.json`：含 SPD_SOURCE 来源标记（PG 表内**未存储**该标记）
+- 两套 SPD **禁止合并 / 互相覆盖 / 互相同步状态**。
+- 即使结果不同也不是 bug（业务口径不同）。
+- `material_status` 现有 Q1 = 5527，**保持不变**；本阶段未对其做任何 INSERT/UPDATE/DELETE。
 
-## 2. 旧字段 → PostgreSQL 映射（SPD_POSTGRES_FIELD_MAPPING）
+## 1. SPD 数据源 A（material_status）
 
-| Legacy SPD 字段 | PG 表 | PG 列 / JSON 路径 | Completeness | 可空 | 示例 |
-| --- | --- | --- | --- | --- | --- |
-| 序号 | —（仅 sheet 内序号） | material_status 无 | PARTIAL（仅 source_payload 有，PG 表无此列） | — | 1 |
-| 账套 | account_sets | material_status.account_set_id（仅 reconciliation-level 行有） | PARTIAL | 是（quarter-level 行 NULL） | 英科 |
-| 区域 | regions | customers.region_id → regions.name（需经 customer_id） | PARTIAL | 是（quarter-level 行无 customer_id） | 南通 |
-| 客户名称 | customers | material_status.customer_id → customers.name | PARTIAL | 是（62 条 quarter-level 行 customer_id NULL） | 常州市第一人民医院 |
-| SPD确认表 | material_status | material_type='SPD确认表', raw_value | PARTIAL（855 rec + 31 quarter；缺 7 行空值） | 是 | 是 / 否 / 已提供 |
-| SPD库存确认函 | material_status | material_type='SPD库存确认函', raw_value | PARTIAL | 是 | 是 / 否 / 已提供 |
-| 备注 | — | material_status 无备注列；仅 legacy_snapshots / bundle | **MISSING（PG 无存储）** | — | 无库存 |
+- 用途：本季度对账详细情况表。
+- 现有 Q1 material_status = 5527（其中 SPD确认表 886、SPD库存确认函 886）。
+- 本阶段不改变其业务含义、不删除/移动/重解释其中 SPD material。
+- 现有 `GET /api/quarter/[code]/material-status` 返回 `{ id, materialType, provided, rawValue, reconciliationId }`。
 
-### 完整性汇总
-- **COMPLETE**：material_type 两个取值、raw_value 的是/否/已提供/未提供 状态值（855×2 reconciliation-level）
-- **PARTIAL**：账套/区域/客户名称 —— 仅 reconciliation-level 855×2 行可关联；62 条 quarter-level 行（31 客户 ×2 类）customer_id/account_set_id 全 NULL，无法还原客户/区域/账套
-- **MISSING**：备注（36 行有值，PG 无列）；7 行空收集状态（南通 7 家，PG material_status 无 SPD_SOURCE 表示）
+## 2. SPD 数据源 B（spd_dashboard_rows）
 
-## 3. 数量核对
+- 用途：对账看板 SPD资料已提供情况。
+- 独立季度数据集，与 material_status 完全隔离。
+- Schema（migration `005_spd_dashboard_dataset.sql`，仅应用隔离测试库）：
 
-| 指标 | 旧数据 | PG 可识别 | 说明 |
-| --- | --- | --- | --- |
-| Q1 SPD sheet 行数 | 142（去重后 142） | SPD_SOURCE 业务键 135 | 7 行缺失（均空/未收集） |
-| 唯一客户数 | ~135（SPD_SOURCE 键） | 135 | 一致（去重后） |
-| 区域分布 | 常州/南通/南京/无锡/苏州/镇江/徐州/盐城/淮安/扬州/泰州/连云港 | 135 键可还原 | reconciliation-level 可行 |
-| 账套分布 | 英科/国控/万和/生一/… | 经 account_set_id 可还原 | 仅 rec-level |
-| 负责人 | SPD sheet 无独立负责人列 | —（owner 属 reconciliation） | SPD 面板不显示负责人 |
-| material type | SPD确认表 / SPD库存确认函 | 两类均 886 | 一致 |
-| 状态分布 | 是/否/空 | 是/否/已提供/未提供/未对账（855 rec + 31 ql） | 缺 7 空行 |
+```
+recon.spd_dashboard_rows
+  id uuid PK default gen_random_uuid()
+  quarter_id uuid NOT NULL -> recon.quarters(id) ON DELETE CASCADE
+  source_row_key text NOT NULL
+  source_row_number integer NULL
+  source_file_name text NULL
+  account_set_raw text NULL
+  region_raw text NULL
+  customer_name_raw text NULL
+  spd_confirmation_raw text NULL
+  spd_inventory_confirmation_raw text NULL
+  remark text NULL
+  source_payload jsonb NULL
+  reconciliation_id uuid NULL -> recon.reconciliations(id) ON DELETE SET NULL
+  created_at timestamptz NOT NULL default now()
+  updated_at timestamptz NOT NULL default now()
+```
 
-## 4. Quarter 语义 / 季度独立性
+- 索引：UNIQUE (quarter_id, source_row_key)；quarter_id；reconciliation_id。
+- **raw 字段是 source truth**：账套/区域/客户名称 保留 Excel 原始值，不因匹配失败而丢失。
+- 空状态行（SPD确认表/库存确认函为空）**必须保留并计入总数**。
 
-- Q1 SPD 仅属于 2026-Q1；Q2 material_status SPD = **0**（无继承）；Q3 不存在。
-- 跨季度复制：无（impoter 严格 quarter-scoped）。
+## 3. 提交规则（业务最终确认）
 
-## 5. Material 关系
+- `SPD确认表`：`是` = 已提交；`否` = 已提交（对方已给业务结论）；空白/NULL = 未提交。
+- `SPD库存确认函`：规则相同。
+- 两种状态**分别计算**，不合并。
+- `submitted + unsubmitted = total`；`total = 行数`。
+- `submissionRate = submitted / total`；total=0 时返回 `null`（不得 NaN/Infinity）。
+- 数据库：空白正规化为 NULL；raw 值在 source_payload 中保留。
+- 前/后空格：判断时安全 trim；raw 值本身原样保留。
 
-- SPD 数据存放在 `recon.material_status`，与对账函/确认函/催款函/在途证明/精准核销同表，靠 `material_type` 区分。
-- 现有 `GET /api/quarter/[code]/material-status` 返回 `{ id, materialType, provided, rawValue, reconciliationId }`，**不包含**客户/区域/账套，且 quarter-level 行 reconciliationId=null —— 无法支撑 SPD 面板钻取。
+## 4. Q1 历史 Backfill
 
-## 6. API Contract（本阶段：未实现）
+- 权威来源：`legacy_snapshots.localStorage` 中的 `local-quarterly-reconciliation-spd-sheet-archive`（142 行，sha 7743eab2…）。
+- 禁止用 material_status 反向推断（它已丢 7 条空状态行）。
+- Q1 `spd_dashboard_rows` = **142 行**；source_row_key 142 nonNULL / 142 distinct。
+- 7 条空状态行（南通 7 家）已完整恢复。
+- reconciliation 关联：仅 exact match（account_set.name==raw AND region AND customer）。Q1 SPD sheet 用简称
+  账套（英科/国控/万和/生一），与 reconciliation 全名（江苏英科/国药控股/苏州万和/江苏生一）无精确匹配，
+  且客户跨账套出现 —— 故全部 reconciliation_id = NULL（不模糊/别名猜测，符合规范；SPD row 仍保留）。
 
-未新增 `GET /api/quarter/[code]/spd`。原因：数据不完整（见 SPD_POSTGRES_FIELD_MAPPING），
-若现在实现会返回不完整/误导性的「SPD 面板」。需先完成 data backfill 或 schema 扩展评审。
+## 5. API Contract：GET /api/quarter/[code]/spd-dashboard
 
-## 7. Current Owner 语义
+```json
+{
+  "quarter": "2026-Q1",
+  "count": 142,
+  "summary": {
+    "spdConfirmation": { "total": 142, "submitted": 135, "unsubmitted": 7, "submissionRate": 95.1 },
+    "spdInventoryConfirmation": { "total": 142, "submitted": 135, "unsubmitted": 7, "submissionRate": 95.1 }
+  },
+  "items": [
+    {
+      "id": "…",
+      "sourceRowNumber": 1,
+      "accountSet": "英科",
+      "region": "常州",
+      "customer": "常州市第一人民医院",
+      "spdConfirmation": "是",
+      "spdInventoryConfirmation": "是",
+      "reconciliationId": null
+    }
+  ]
+}
+```
 
-- SPD 面板不展示独立负责人；若未来需要，负责人以 `reconciliations.owner_name`（GET ownerName）为准，
-  不使用 owner_raw_name 覆盖销售后续修改。
+- quarter scoped（server-side SQL `JOIN quarters WHERE code=$1`）。
+- `count` = rows.length；summary 严格按「非空=submitted」统计（是/否均计入 submitted）。
+- **不返回** remark / source_payload（数据库保存，前端不暴露）。
+- 不存在 quarter → `404 { error, code: NOT_FOUND }`；非法代码 → `400 INVALID_INPUT`。
+- SQL 固定少量（route 内 1 条 rows 查询 + getQuarter 1 条；无 per-row loop）。`NO_SQL_N_PLUS_ONE = YES`。
 
-## 8. NULL 语义
+## 6. 验证基线（spd_dashboard_rows）
 
-- 保持 NULL；SPD 空值（未收集）不得转为 0/默认业务状态/默认负责人。
-- quarter-level 行的 customer/account/region 关联缺失即 NULL —— 这正是当前数据缺口。
+| 指标 | Q1 | Q2 |
+| --- | --- | --- |
+| count | 142 | 0 |
+| SPD确认表 submitted/unsubmitted | 135 / 7 | 0 / 0 |
+| SPD库存确认函 submitted/unsubmitted | 135 / 7 | 0 / 0 |
+| 是/否/空（两字段） | 105 / 30 / 7 | — |
 
-## 9. Drilldown 字段完整性
+Legacy = SQL = API 一致。Q2 无独立 SPD 表（count=0，不继承 Q1）。
 
-SPD 钻取（CollectionDrilldownDialog）需要：`accountSet / region / customer / materialStatus / reconciliationStatus / companyReceivable / customerBookAmount / differenceAmount`。
-- reconciliation-level 855×2 行可经 reconciliation join 拿到全部金额/状态 + 客户/区域/账套 → **可支撑**
-- quarter-level 62 行无 customer_id → **无法支撑**钻取客户/区域/账套
-- 7 行空收集 → 完全缺失
+## 7. 相关 Dashboard
 
-⇒ **SPD_DATA_COMPLETE_FOR_DASHBOARD = NO**
-
-## 10. 相关 Dashboard 后端数据充分性
-
-- `PROBLEM_DASHBOARD_BACKEND_DATA_SUFFICIENT = YES`（followup quarter API + reconciliations 提供 owner/risk/stage/overdue/latestFollowUp/followStatus）
+- `PROBLEM_DASHBOARD_BACKEND_DATA_SUFFICIENT = YES`（followup quarter API + reconciliations）
 - `UNRESOLVED_FOLLOWUP_BACKEND_DATA_SUFFICIENT = YES`
+- 前端接线交新 Codex 任务：Q1SpecialPanels 的 Dashboard SPD 指标读 `/spd-dashboard`；本季度详细情况表的 SPD 状态仍读 `material_status`。
 
-## 11. 建议下一步（交用户/Codex 确认，不在本轮执行）
+## 8. 未来事项（本阶段不做）
 
-- 方案 A：把 legacy_snapshots.localStorage 中的 142 行 SPD sheet 以数据迁移方式 backfill 成带
-  customer/region/account_set 关联的季度级数据集（需要 schema 决策：material_status 加列 或 独立表）。
-- 方案 B：仅当「SPD 在业务上确为独立 quarter-level dataset」且「复用 material_status 会语义混乱」时，
-  才新建 `GET /api/quarter/[code]/spd`。当前判断：数据不足，暂不建。
+- `SPD_IMPORT_RUNTIME_REQUIRED_LATER = YES`：未来每季度单独上传 SPD 表 → 独立 Import API → spd_dashboard_rows → Dashboard。
+- `SPD_REIMPORT_POLICY_REQUIRES_CONFIRMATION = YES`：同季度重传策略（整季替换/版本化/禁止覆盖）待用户确认。
+- 穿透/明细 Drawer：以后开发，本阶段 schema 已留基础字段。
+
+## 9. 安全
+
+- DATABASE_URL server-only；错误脱敏；source_payload 不暴露前端；无密码入文档。
