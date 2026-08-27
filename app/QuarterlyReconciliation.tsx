@@ -1935,6 +1935,8 @@ export function QuarterlyReconciliation({
   const isClear =
     form.customerAmount !== "" &&
     (Math.abs(difference) < 0.01 || Math.abs(difference - total) < 0.01);
+  const persistedFollowupEventCount =
+    active === null ? 0 : apiFollowups[apiIds[active]]?.[0]?.events.length ?? 0;
 
   return (
     <>
@@ -2645,9 +2647,9 @@ export function QuarterlyReconciliation({
                 <label><input type="checkbox" checked={form.resolved} onChange={(event) => setForm({ ...form, resolved: event.target.checked })} /> 已解决</label>
                 {form.followUps.map((followup, index) => (
                   <div className="customer-save-row" key={`${followup.time}-${index}`}>
-                    <input type="date" value={followup.time} onChange={(event) => setForm({ ...form, followUps: form.followUps.map((item, itemIndex) => itemIndex === index ? { ...item, time: event.target.value } : item) })} />
-                    <input value={followup.solution} placeholder="跟进方案 / 历史" onChange={(event) => setForm({ ...form, followUps: form.followUps.map((item, itemIndex) => itemIndex === index ? { ...item, solution: event.target.value } : item) })} />
-                    <button type="button" onClick={() => setForm({ ...form, followUps: form.followUps.filter((_, itemIndex) => itemIndex !== index) })}>删除</button>
+                    <input type="date" value={followup.time} disabled={index < persistedFollowupEventCount} onChange={(event) => setForm({ ...form, followUps: form.followUps.map((item, itemIndex) => itemIndex === index ? { ...item, time: event.target.value } : item) })} />
+                    <input value={followup.solution} disabled={index < persistedFollowupEventCount} placeholder="跟进方案 / 历史" onChange={(event) => setForm({ ...form, followUps: form.followUps.map((item, itemIndex) => itemIndex === index ? { ...item, solution: event.target.value } : item) })} />
+                    <button type="button" disabled={index < persistedFollowupEventCount} onClick={() => setForm({ ...form, followUps: form.followUps.filter((_, itemIndex) => itemIndex !== index) })}>删除</button>
                   </div>
                 ))}
                 <button type="button" onClick={() => setForm({ ...form, followUps: [...form.followUps, { time: new Date().toISOString().slice(0, 10), solution: "" }] })}>＋ 新增跟进</button>
