@@ -11,7 +11,7 @@ import { ManagementCockpit } from "./ManagementCockpit";
 import { ProblemDashboard } from "./ProblemDashboard";
 import { CurrentYearLinkedSummary } from "./CurrentYearLinkedSummary";
 import { ServerStateBridge } from "./ServerStateBridge";
-import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
+import { DashboardDataProvider, useDashboardData } from "./dashboard-postgres-data";
 import "./app-shell.css";
 import "./shell-overrides.css";
 import "./problem-dashboard-header.css";
@@ -20,17 +20,9 @@ const T = { brand:"对账管理", sub:"季度对账与复核工具", history:"�
 type View = "history" | "current" | "import" | "tracker" | "cockpit" | "problem";
 
 function GlobalQuarterFilter() {
-  const [quarters, setQuarters] = useState<string[]>([]);
-  const [quarter, setQuarter] = useState("");
-  useEffect(() => {
-    const refresh = () => { setQuarters(quarterOptions()); setQuarter(selectedQuarter()); };
-    refresh();
-    window.addEventListener("reconciliation-quarter-updated", refresh);
-    window.addEventListener("reconciliation-quarter-selected", refresh);
-    return () => { window.removeEventListener("reconciliation-quarter-updated", refresh); window.removeEventListener("reconciliation-quarter-selected", refresh); };
-  }, []);
+  const { quarters, quarter, selectQuarter } = useDashboardData();
   if (!quarters.length) return null;
-  return <div className="global-quarter-filter"><label>对账季度<select value={quarter} aria-label="筛选看板季度" onChange={(event) => selectQuarter(event.target.value)}>{quarters.map((item) => <option value={item} key={item}>{item}</option>)}</select></label><span>切换后自动显示该季度数据</span></div>;
+  return <div className="global-quarter-filter"><label>对账季度<select value={quarter?.code ?? ""} aria-label="筛选看板季度" onChange={(event) => selectQuarter(event.target.value)}>{quarters.map((item) => <option value={item.code} key={item.code}>{item.label}</option>)}</select></label><span>切换后自动显示该季度数据</span></div>;
 }
 
 export default function Home() {
@@ -73,7 +65,7 @@ export default function Home() {
     return <main className="app-shell app-shell-loading" aria-busy="true"><div>正在加载本机对账数据…</div></main>;
   }
 
-  return <><ServerStateBridge /><main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
+  return <><ServerStateBridge /><DashboardDataProvider><main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
     <aside className="side-nav">
       <div className="side-brand"><i>账</i><div><strong>{T.brand}</strong><span>{T.sub}</span></div></div>
       <nav>
@@ -91,8 +83,8 @@ export default function Home() {
       <header className="work-header"><div><h1>{title}</h1><p>{hint}</p></div>{view === "problem" ? <div className="problem-header-actions"><small>{`◷ 数据更新时间：${updatedAt}`}</small><button onClick={() => window.dispatchEvent(new Event("problem-dashboard-refresh"))}>↻ 刷新数据</button><button className="primary" onClick={() => openTracker()}>进入未解决客户跟进 ›</button></div> : <div className="header-status"><span>◷ {T.local}</span><small>{`更新时间：${updatedAt}`}</small></div>}</header>
       <div className="work-content">
         {view !== "current" && view !== "import" && view !== "problem" && <GlobalQuarterFilter />}
-        {view === "history" ? <><CurrentYearLinkedSummary/><DashboardOverview selected={6}/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>} 
+        {view === "history" ? <><CurrentYearLinkedSummary/><DashboardOverview/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>}
       </div>
     </section>
-  </main></>;
+  </main></DashboardDataProvider></>;
 }

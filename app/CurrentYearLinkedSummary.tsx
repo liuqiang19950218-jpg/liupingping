@@ -1,41 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { cockpitRows } from "./cockpit-data";
-import { selectedQuarter } from "./quarter-storage";
+import { formatCents, moneyToCents, useDashboardData } from "./dashboard-postgres-data";
 
 export function CurrentYearLinkedSummary() {
-  const [, setRevision] = useState(0);
-  const [quarter, setQuarter] = useState("");
-  useEffect(() => {
-    const sync = () => { setQuarter(selectedQuarter()); setRevision((value) => value + 1); };
-    sync();
-    window.addEventListener("reconciliation-dashboard-updated", sync);
-    window.addEventListener("reconciliation-quarter-selected", sync);
-    window.addEventListener("reconciliation-quarter-updated", sync);
-    return () => { window.removeEventListener("reconciliation-dashboard-updated", sync); window.removeEventListener("reconciliation-quarter-selected", sync); window.removeEventListener("reconciliation-quarter-updated", sync); };
-  }, []);
-  const rows = [...cockpitRows].filter((row) => !quarter || row.quarter === quarter),
-    accountedRows = rows.filter((row) => row.filled),
-    clear = accountedRows.filter((row) => row.cleared).length,
-    unclear = accountedRows.length - clear,
-    pendingRows = accountedRows.filter((row) => row.followStatus === "待跟进"),
-    unresolved = pendingRows.reduce(
-      (total, row) => total + Math.abs(row.difference),
-      0,
-    ),
-    unresolvedInTenThousands = unresolved / 10000,
-    rate = accountedRows.length ? (clear / accountedRows.length) * 100 : 0;
+  const { quarter, rows, loading, error } = useDashboardData();
+  const accountedRows = rows.filter((row) => moneyToCents(row.customerBookAmount) !== null);
+  const clear = accountedRows.filter((row) => row.reconciliationStatus === "对清").length;
+  const unclear = accountedRows.length - clear;
+  const unresolved = accountedRows
+    .filter((row) => row.reconciliationStatus !== "对清")
+    .reduce((total, row) => {
+      const amount = moneyToCents(row.reconciliationDifference);
+      return total + (amount === null ? 0n : amount < 0n ? -amount : amount);
+    }, 0n);
+  const rate = accountedRows.length ? (clear / accountedRows.length) * 100 : 0;
+  if (loading) return <section className="current-year-linked-summary" aria-busy="true"><span>正在读取 PostgreSQL 季度数据…</span></section>;
+  if (error) return <section className="current-year-linked-summary dashboard-data-error" role="alert">季度看板数据读取失败：{error}</section>;
   return (
     <section className="current-year-linked-summary">
       <div>
-        <p>本季度对账详细情况 · 手动更新</p>
-        <h2>本年度数据概览</h2>
+        <p>{quarter?.label ?? "当前季度"} PostgreSQL 数据</p>
+        <h2>本季度数据概览</h2>
         <span>
-          本次同步共读取 {rows.length}{" "}
+          共读取 {rows.length}{" "}
           条原始明细；客户数按每一行统计、不做客户去重，已排除客户账面金额为空的未对账记录。已对清{" "}
-          {clear} 家，未对清 {unclear} 家；未解决差额仅汇总待解决清单的{" "}
-          {pendingRows.length} 家客户。
+          {clear} 家，未对清 {unclear} 家。
         </span>
       </div>
       <div>
@@ -48,9 +37,9 @@ export function CurrentYearLinkedSummary() {
       </div>
       <div>
         <b>
-          {unresolvedInTenThousands.toLocaleString("zh-CN", { maximumFractionDigits: 1 })}
+          {formatCents(unresolved / 10000n, 1)}
         </b>
-        <small>待解决差额（万元）</small>
+        <small>未对清差额（万元）</small>
       </div>
     </section>
   );

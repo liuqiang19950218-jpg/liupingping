@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { cockpitRows, latestQuarterlyCockpitRows, type CockpitRow } from "./cockpit-data";
-import { selectedQuarter, sheetForQuarter } from "./quarter-storage";
+import { useState } from "react";
+import { formatCents, moneyToCents, useDashboardData } from "./dashboard-postgres-data";
+import type { Reconciliation } from "../lib/api/reconciliation-api";
 import "./dashboard-overview.css";
 import "./dashboard-overview-overrides.css";
 
@@ -11,64 +11,46 @@ type RegionAnalysis = {
   total: number;
   clear: number;
   unclear: number;
-  unreconciledReceivable: number;
+  unreconciledReceivable: bigint;
   rate: number;
-  pendingAmount: number;
+  pendingAmount: bigint;
 };
 type Analysis = {
   quarter: string;
   rate: number;
   clear: number;
   unclear: number;
-  unreconciledReceivable: number;
+  unreconciledReceivable: bigint;
   exception: string;
   regions: RegionAnalysis[];
 };
 type DetailTemplate = { headers: string[]; rows: unknown[][] };
 
-const normalizeHeader = (value: unknown) => String(value ?? "").replace(/\s/g, "");
 const displayCell = (value: unknown) => {
   const text = String(value ?? "").trim();
   return text || "\u2014";
 };
 
-function unreconciledDetailTemplate(
-  quarter: string,
-  fallbackRows: CockpitRow[],
-): DetailTemplate {
-  const sheet = sheetForQuarter(quarter);
-  if (sheet?.headers?.length) {
-    const headers = sheet.headers.map((header) => String(header ?? ""));
-    const statusIndex = headers.findIndex((header) =>
-      normalizeHeader(header).includes("\u662f\u5426\u5bf9\u6e05"),
-    );
-    if (statusIndex >= 0)
-      return {
-        headers,
-        rows: sheet.rows.filter(
-          (row) => String(row[statusIndex] ?? "").trim() === "\u672a\u5bf9\u6e05",
-        ),
-      };
-  }
+function unreconciledDetailTemplate(rows: Reconciliation[]): DetailTemplate {
   return {
     headers: [
       "\u8d26\u5957", "\u533a\u57df", "\u5ba2\u6237\u540d\u79f0", "\u5bf9\u8d26\u8d1f\u8d23\u4eba",
       "\u516c\u53f8\u5e94\u6536", "\u5ba2\u6237\u8d26\u9762\u91d1\u989d", "\u5bf9\u8d26\u5dee\u989d", "\u662f\u5426\u5bf9\u6e05",
     ],
-    rows: fallbackRows.filter((row) => row.filled && !row.cleared).map((row) => [
-      row.accountSet, row.region, row.customer, row.owner, row.companyReceivable,
-      row.customerBook, row.difference, "\u672a\u5bf9\u6e05",
+    rows: rows.filter((row) => moneyToCents(row.customerBookAmount) !== null && row.reconciliationStatus !== "对清").map((row) => [
+      row.accountSet, row.region, row.customer, row.ownerName, row.companyReceivable,
+      row.customerBookAmount, row.reconciliationDifference, row.reconciliationStatus ?? "未填写",
     ]),
   };
 }
 
-function analyze(rows: CockpitRow[]): Analysis {
-  const accounted = rows.filter((row) => row.filled);
-  const clear = accounted.filter((row) => row.cleared).length;
+function analyze(rows: Reconciliation[], quarter: string): Analysis {
+  const accounted = rows.filter((row) => moneyToCents(row.customerBookAmount) !== null);
+  const clear = accounted.filter((row) => row.reconciliationStatus === "对清").length;
   const unclear = accounted.length - clear;
   const unreconciledReceivable = accounted
-    .filter((row) => !row.cleared)
-    .reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0);
+    .filter((row) => row.reconciliationStatus !== "对清")
+    .reduce((sum, row) => { const value = moneyToCents(row.companyReceivable) ?? 0n; return sum + (value < 0n ? -value : value); }, 0n);
   const map = new Map<string, RegionAnalysis>();
   accounted.forEach((row) => {
     const region = row.region || "未填写区域";
@@ -77,17 +59,19 @@ function analyze(rows: CockpitRow[]): Analysis {
       total: 0,
       clear: 0,
       unclear: 0,
-      unreconciledReceivable: 0,
+      unreconciledReceivable: 0n,
       rate: 0,
-      pendingAmount: 0,
+      pendingAmount: 0n,
     };
     current.total += 1;
-    if (row.cleared) current.clear += 1;
+    if (row.reconciliationStatus === "对清") current.clear += 1;
     else current.unclear += 1;
     // 核心异常中的待解决差额，统一按未对清客户的公司应收金额统计。
-    if (!row.cleared) {
-      current.pendingAmount += Math.abs(row.companyReceivable);
-      current.unreconciledReceivable += Math.abs(row.companyReceivable);
+    if (row.reconciliationStatus !== "对清") {
+      const value = moneyToCents(row.companyReceivable) ?? 0n;
+      const absolute = value < 0n ? -value : value;
+      current.pendingAmount += absolute;
+      current.unreconciledReceivable += absolute;
     }
     map.set(region, current);
   });
@@ -96,12 +80,12 @@ function analyze(rows: CockpitRow[]): Analysis {
       ...region,
       rate: region.total ? (region.clear / region.total) * 100 : 0,
     }))
-    .sort((a, b) => b.unclear - a.unclear || b.pendingAmount - a.pendingAmount);
+    .sort((a, b) => b.unclear - a.unclear || (a.pendingAmount === b.pendingAmount ? 0 : a.pendingAmount > b.pendingAmount ? -1 : 1));
   const exception = unclear
-    ? `当前未对清 ${unclear} 家，未对清客户我方应收总额 ${unreconciledReceivable.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}。`
+    ? `当前未对清 ${unclear} 家，未对清客户我方应收总额 ${formatCents(unreconciledReceivable)}。`
     : "当前已填写账面金额的客户均已对清。";
   return {
-    quarter: rows[0]?.quarter || "当前季度",
+    quarter,
     rate: accounted.length ? (clear / accounted.length) * 100 : 0,
     clear,
     unclear,
@@ -111,32 +95,13 @@ function analyze(rows: CockpitRow[]): Analysis {
   };
 }
 
-export function DashboardOverview({
-  selected: _selected,
-}: {
-  selected: number;
-}) {
-  const [, setRevision] = useState(0);
-  const [quarter, setQuarter] = useState("");
+export function DashboardOverview() {
+  const { quarter, rows, loading, error } = useDashboardData();
   const [drawer, setDrawer] = useState<"exception" | null>(null);
-  useEffect(() => {
-    const sync = () => setRevision((value) => value + 1);
-    const refresh = () => { setQuarter(selectedQuarter()); sync(); };
-    refresh();
-    window.addEventListener("reconciliation-dashboard-updated", refresh);
-    window.addEventListener("reconciliation-quarter-selected", refresh);
-    window.addEventListener("reconciliation-quarter-updated", refresh);
-    return () => { window.removeEventListener("reconciliation-dashboard-updated", refresh); window.removeEventListener("reconciliation-quarter-selected", refresh); window.removeEventListener("reconciliation-quarter-updated", refresh); };
-  }, []);
-  const liveRows = latestQuarterlyCockpitRows();
-  const scopedRows = (liveRows.length ? liveRows : cockpitRows).filter(
-    (row) => !quarter || row.quarter === quarter,
-  );
-  const summary = analyze(scopedRows);
-  const unreconciledDetails = unreconciledDetailTemplate(
-    quarter || summary.quarter,
-    scopedRows,
-  );
+  const summary = analyze(rows, quarter?.label ?? "当前季度");
+  const unreconciledDetails = unreconciledDetailTemplate(rows);
+  if (loading) return <section className="dashboard-overview" aria-busy="true">正在读取 PostgreSQL 季度数据…</section>;
+  if (error) return <section className="dashboard-overview dashboard-data-error" role="alert">季度看板数据读取失败：{error}</section>;
   return (
     <>
       <section className="dashboard-overview" aria-label="季度核心结论">
