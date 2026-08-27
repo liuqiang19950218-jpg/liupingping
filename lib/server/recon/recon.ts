@@ -468,3 +468,91 @@ export async function getFollowupsByQuarter(code: string): Promise<QuarterFollow
     });
   });
 }
+
+// ---------------------------------------------------------------------------
+// Independent quarterly SPD dashboard dataset (Phase 2F.4)
+// ---------------------------------------------------------------------------
+// This is SPD SOURCE B — the separately-uploaded SPD 专项 Excel, stored in
+// recon.spd_dashboard_rows. It is COMPLETELY independent from recon.material_status
+// (SPD SOURCE A, used by 本季度对账详细情况表). The two are never merged/synced.
+//
+// Row semantics (business-confirmed):
+//  - Every source row is preserved (including empty-status rows).
+//  - "是" and "否" both count as submitted; only blank/NULL counts as unsubmitted.
+//  - Raw 账套/区域/客户名称 are source truth; unmatched rows keep
+//    reconciliation_id NULL but still exist.
+//  - remark is stored but not used for statistics this phase.
+//  - source_payload is kept server-side and never exposed wholesale to the frontend.
+
+export type SpdDashboardRowRead = {
+  id: string;
+  sourceRowNumber: number | null;
+  accountSet: string | null;
+  region: string | null;
+  customer: string | null;
+  spdConfirmation: string | null;
+  spdInventoryConfirmation: string | null;
+  reconciliationId: string | null;
+};
+
+export type SpdDashboardSummary = {
+  total: number;
+  submitted: number;
+  unsubmitted: number;
+  submissionRate: number | null;
+};
+
+export type SpdDashboardRead = {
+  quarter: string;
+  count: number;
+  summary: {
+    spdConfirmation: SpdDashboardSummary;
+    spdInventoryConfirmation: SpdDashboardSummary;
+  };
+  items: SpdDashboardRowRead[];
+};
+
+function spdSummary(total: number, values: Array<string | null>): SpdDashboardSummary {
+  const submitted = values.filter((v) => v !== null && v.trim() !== "").length;
+  const unsubmitted = total - submitted;
+  const submissionRate = total > 0 ? Number(((submitted / total) * 100).toFixed(1)) : null;
+  return { total, submitted, unsubmitted, submissionRate };
+}
+
+// Exported for unit tests (pure function — no DB).
+export const computeSpdSummary = spdSummary;
+
+export async function getSpdDashboardByQuarter(code: string): Promise<SpdDashboardRead> {
+  return withPostgresClient(async (client) => {
+    const result = await client.query(
+      `SELECT s.id::text, s.source_row_number, s.account_set_raw,
+              s.region_raw, s.customer_name_raw,
+              s.spd_confirmation_raw, s.spd_inventory_confirmation_raw,
+              s.reconciliation_id::text
+       FROM recon.spd_dashboard_rows s
+       JOIN recon.quarters q ON q.id = s.quarter_id
+       WHERE q.code = $1
+       ORDER BY s.source_row_number ASC, s.id ASC`,
+      [code],
+    );
+    const items: SpdDashboardRowRead[] = result.rows.map((row) => ({
+      id: row.id,
+      sourceRowNumber: row.source_row_number ?? null,
+      accountSet: row.account_set_raw ?? null,
+      region: row.region_raw ?? null,
+      customer: row.customer_name_raw ?? null,
+      spdConfirmation: row.spd_confirmation_raw ?? null,
+      spdInventoryConfirmation: row.spd_inventory_confirmation_raw ?? null,
+      reconciliationId: row.reconciliation_id ?? null,
+    }));
+    return {
+      quarter: code,
+      count: items.length,
+      summary: {
+        spdConfirmation: spdSummary(items.length, items.map((i) => i.spdConfirmation)),
+        spdInventoryConfirmation: spdSummary(items.length, items.map((i) => i.spdInventoryConfirmation)),
+      },
+      items,
+    };
+  });
+}

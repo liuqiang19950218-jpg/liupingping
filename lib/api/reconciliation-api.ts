@@ -68,6 +68,34 @@ export type QuarterFollowupItem = {
   events: QuarterFollowupEvent[];
   latestEvent: QuarterFollowupEvent | null;
 };
+// Independent quarterly SPD dashboard dataset (SPD SOURCE B, recon.spd_dashboard_rows).
+// This is the separately-uploaded SPD 专项 Excel — NOT recon.material_status
+// (SPD SOURCE A). "是"/"否" both count as submitted; blank/NULL = unsubmitted.
+export type SpdDashboardSummary = {
+  total: number;
+  submitted: number;
+  unsubmitted: number;
+  submissionRate: number | null;
+};
+export type SpdDashboardRow = {
+  id: string;
+  sourceRowNumber: number | null;
+  accountSet: string | null;
+  region: string | null;
+  customer: string | null;
+  spdConfirmation: string | null;
+  spdInventoryConfirmation: string | null;
+  reconciliationId: string | null;
+};
+export type SpdDashboardData = {
+  quarter: string;
+  count: number;
+  summary: {
+    spdConfirmation: SpdDashboardSummary;
+    spdInventoryConfirmation: SpdDashboardSummary;
+  };
+  items: SpdDashboardRow[];
+};
 
 export class ReconciliationApiError extends Error {
   constructor(public readonly code: string, message: string) { super(message); }
@@ -96,6 +124,7 @@ export const reconciliationApi = {
   getMaterialStatus: (quarter: string, id?: string, signal?: AbortSignal) => request<{ material: MaterialStatus[] }>(id ? `${base(quarter, id)}/material-status` : `/api/quarter/${encodeURIComponent(quarter)}/material-status`, {}, signal),
   listQuarterDifferenceItems: (quarter: string, signal?: AbortSignal) => request<{ quarter: string; count: number; items: QuarterDifferenceItem[] }>(`/api/quarter/${encodeURIComponent(quarter)}/difference-items`, {}, signal),
   listQuarterFollowups: (quarter: string, signal?: AbortSignal) => request<{ quarter: string; count: number; eventCount: number; items: QuarterFollowupItem[] }>(`/api/quarter/${encodeURIComponent(quarter)}/followups`, {}, signal),
+  getSpdDashboard: (quarter: string, signal?: AbortSignal) => request<SpdDashboardData>(`/api/quarter/${encodeURIComponent(quarter)}/spd-dashboard`, {}, signal),
   upsertMaterialStatus: (quarter: string, body: Omit<MaterialStatus, "id">, id?: string) => request(id ? `${base(quarter, id)}/material-status` : `/api/quarter/${encodeURIComponent(quarter)}/material-status`, { method: id ? "POST" : "PUT", body: JSON.stringify(body) }),
   updateMaterialStatus: (quarter: string, materialId: string, body: Partial<MaterialStatus>, id?: string) => request(id ? `${base(quarter, id)}/material-status/${encodeURIComponent(materialId)}` : `/api/quarter/${encodeURIComponent(quarter)}/material-status/${encodeURIComponent(materialId)}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteMaterialStatus: (quarter: string, materialId: string, id?: string) => request(id ? `${base(quarter, id)}/material-status/${encodeURIComponent(materialId)}` : `/api/quarter/${encodeURIComponent(quarter)}/material-status/${encodeURIComponent(materialId)}`, { method: "DELETE" }),
