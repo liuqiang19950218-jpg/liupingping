@@ -170,6 +170,7 @@ const T = {
 };
 const STORAGE_KEY = "local-quarterly-reconciliation";
 const TABLE_VIEW_KEY = "local-quarterly-reconciliation-table-view";
+const PG_SELECTED_QUARTER_KEY = "postgres-quarterly-reconciliation-selected-quarter";
 const SPD_CONFIRMATION_HEADER = "SPD\u786e\u8ba4\u8868";
 const LEGACY_SPD_CONFIRMATION_HEADER = "SPD\u786e\u8ba4\u51fd";
 const MATERIAL_HEADERS = [
@@ -255,6 +256,10 @@ const formFromFollowups = (base: DetailForm, followups: Followup[]): DetailForm 
     solution: event.content ?? "",
   }))),
 });
+const toPostgresQuarterCode = (quarter: string) => {
+  const match = quarter.trim().match(/^(\d{4})\s*Q([1-4])$/i);
+  return match ? `${match[1]}-Q${match[2]}` : null;
+};
 const num = (value: unknown) => {
   const n = Number(String(value ?? "").replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
@@ -699,6 +704,8 @@ export function QuarterlyReconciliation({
   const [saving, setSaving] = useState(false);
   const mutationSequence = useRef<Map<string, number>>(new Map());
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [importingQuarter, setImportingQuarter] = useState(false);
+  const [importedQuarter, setImportedQuarter] = useState("");
   const apiRequest = useRef<AbortController | null>(null);
   const setFilterColumn = (column: number | null) => {
     rawSetFilterColumn(null);
@@ -830,7 +837,12 @@ export function QuarterlyReconciliation({
       try {
         const { quarters } = await reconciliationApi.listQuarters(controller.signal);
         const options = quarters.map((item) => item.code);
-        const quarter = options.includes(activeQuarter) ? activeQuarter : options[0] ?? "";
+        const preferredQuarter = localStorage.getItem(PG_SELECTED_QUARTER_KEY) ?? "";
+        const quarter = options.includes(activeQuarter)
+          ? activeQuarter
+          : options.includes(preferredQuarter)
+            ? preferredQuarter
+            : options[0] ?? "";
         if (!quarter) throw new Error("当前没有可用的 PostgreSQL 对账季度。");
         const [{ reconciliations }, { material }] = await Promise.all([
           reconciliationApi.list(quarter, controller.signal),
@@ -1126,6 +1138,7 @@ export function QuarterlyReconciliation({
   };
   const changeQuarter = (quarter: string) => {
     if (mode !== "import") {
+      localStorage.setItem(PG_SELECTED_QUARTER_KEY, quarter);
       setActiveQuarter(quarter);
       setRegion(T.all);
       setPage(1);
@@ -1282,8 +1295,11 @@ export function QuarterlyReconciliation({
 
   async function importFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || importingQuarter) return;
+    let serverImportedQuarter = "";
     try {
+      setImportingQuarter(true);
+      setMessage("正在解析 Excel…");
       const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const all = XLSX.utils.sheet_to_json<unknown[]>(
         wb.Sheets[wb.SheetNames[0]],
@@ -1297,37 +1313,54 @@ export function QuarterlyReconciliation({
         throw new Error(
           "\u6ca1\u6709\u8bfb\u53d6\u5230\u53ef\u7528\u7684\u8868\u5934\u6216\u6570\u636e\u3002",
         );
-      saveSheet({ headers, rows, fileName: file.name, details: {} }, true);
+      const quarter = toPostgresQuarterCode(quarterOf(file.name, headers, rows));
+      if (!quarter)
+        throw new Error("无法从对账时间点或季度信息识别导入季度，未提交数据库。");
+      setMessage("正在写入数据库…");
+      const result = await reconciliationApi.importQuarter(quarter, {
+        sourceFileName: file.name,
+        headers,
+        rows,
+      });
+      serverImportedQuarter = result.quarter;
+      const { quarters } = await reconciliationApi.listQuarters();
+      if (!quarters.some((item) => item.code === result.quarter))
+        throw new Error("导入已返回成功，但刷新季度列表未找到该季度，请刷新后核验。");
       recordImport({
         fileName: file.name,
         importedAt: new Date().toISOString(),
         dataType: "reconciliation",
-        description: "本季度对账表数据。",
-        recordCount: rows.length,
-        targetStore: "local-quarterly-reconciliation-archive",
-        quarter: quarterOf(file.name, headers, rows),
+        description: "PostgreSQL 季度对账表导入（仅本机兼容记录）。",
+        recordCount: result.importedRows,
+        targetStore: "PostgreSQL import_batches（本机兼容记录）",
+        quarter: result.quarter,
         status: "success",
-        stats: { inserted: rows.length },
+        stats: { inserted: result.importedRows },
       });
+      localStorage.setItem(PG_SELECTED_QUARTER_KEY, result.quarter);
+      selectQuarter(result.quarter);
+      setImportedQuarter(result.quarter);
       setRegion(T.all);
-      setMessage(`\u5df2\u5bfc\u5165 ${rows.length} \u6761\u8bb0\u5f55\u3002`);
+      setMessage(`导入成功：${result.quarter} 共 ${result.importedRows} 条，正在显示 PostgreSQL 最新数据。`);
+      window.dispatchEvent(new Event("reconciliation-open-postgres-quarter"));
     } catch (error) {
-      recordImport({
-        fileName: file.name,
-        importedAt: new Date().toISOString(),
-        dataType: "reconciliation",
-        description: error instanceof Error ? error.message : "对账表导入失败。",
-        targetStore: "local-quarterly-reconciliation-archive",
-        status: "failed",
-        stats: { errors: 1 },
-      });
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      const errorMessage = error instanceof Error ? error.message : "";
       setMessage(
-        error instanceof Error
-          ? error.message
-          : "\u5bfc\u5165\u5931\u8d25\u3002",
+        serverImportedQuarter
+          ? `导入已成功写入 PostgreSQL（${serverImportedQuarter}），但刷新季度列表失败：${errorMessage || "请刷新页面核验。"}`
+          : code === "QUARTER_HAS_EXISTING_DATA" || errorMessage.includes("QUARTER_HAS_EXISTING_DATA")
+          ? "该季度已经存在业务数据。为防止覆盖销售已填写的对账数据，当前不允许直接重新导入。"
+          : code === "IMPORT_ALREADY_EXISTS" || errorMessage.includes("IMPORT_ALREADY_EXISTS")
+            ? "该文件/数据已经导入，请勿重复导入。"
+            : error instanceof Error
+              ? `导入失败：${error.message}`
+              : "导入失败。",
       );
+    } finally {
+      setImportingQuarter(false);
+      event.target.value = "";
     }
-    event.target.value = "";
   }
   async function importMaterials(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -1958,8 +1991,8 @@ export function QuarterlyReconciliation({
           {mode === "import" ? (
             <div className="toolbar-actions upload-actions">
               <label className="file-button">
-                {T.import}
-                <input type="file" accept=".xlsx,.xls" onChange={importFile} />
+                {importingQuarter ? "正在导入…" : T.import}
+                <input type="file" accept=".xlsx,.xls" disabled={importingQuarter} onChange={importFile} />
               </label>
               <label className="file-button ledger-upload">
                 {uploadingLedger ? T.loading : T.uploadLedger}
@@ -2105,9 +2138,11 @@ export function QuarterlyReconciliation({
         {mode === "import" ? (
           <>
             <div className="import-status">
-              <strong>{sheet ? "本年度对账表已导入" : T.needImport}</strong>
+              <strong>{importedQuarter ? "季度对账表已导入 PostgreSQL" : sheet ? "本年度对账表已导入" : T.needImport}</strong>
               <span>
-                {sheet
+                {importedQuarter
+                  ? `${importedQuarter} 已由 PostgreSQL 导入；页面将显示服务器最新数据。`
+                  : sheet
                   ? `${sheet.fileName}，共 ${sheet.rows.length} 条记录。数据已保存在本机，可返回“本季度对账详细情况”继续填写。`
                   : "请先上传对账季度表，再按需要上传或替换本年往来明细。"}
               </span>

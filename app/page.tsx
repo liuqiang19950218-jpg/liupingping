@@ -58,7 +58,11 @@ export default function Home() {
   useEffect(() => {
     const openCurrentDetail = () => setView("current");
     window.addEventListener("reconciliation-open-current-detail", openCurrentDetail);
-    return () => window.removeEventListener("reconciliation-open-current-detail", openCurrentDetail);
+    window.addEventListener("reconciliation-open-postgres-quarter", openCurrentDetail);
+    return () => {
+      window.removeEventListener("reconciliation-open-current-detail", openCurrentDetail);
+      window.removeEventListener("reconciliation-open-postgres-quarter", openCurrentDetail);
+    };
   }, []);
 
   useEffect(() => {

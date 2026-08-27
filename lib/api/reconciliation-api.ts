@@ -19,6 +19,13 @@ export type Quarter = { code: string; year: number; quarter: number; cutoffDate:
 export type Followup = { id: string; followStatus: string; processStage: string | null; riskLevel: string; expectedCompleteAt: string | null; nextFollowUpAt: string | null; latestFollowUpAt: string | null; closedAt: string | null; events: FollowupEvent[] };
 export type FollowupEvent = { id: string; eventType: string; content: string | null; occurredAt: string };
 export type MaterialStatus = { id: string; materialType: string; provided: boolean | null; rawValue: string | null; reconciliationId: string | null };
+export type QuarterImportResult = {
+  quarter: string;
+  status: "IMPORTED";
+  importedRows: number;
+  sourceSha256: string;
+  batchKey: string;
+};
 
 export class ReconciliationApiError extends Error {
   constructor(public readonly code: string, message: string) { super(message); }
@@ -33,6 +40,7 @@ const base = (quarter: string, id?: string) => `/api/quarter/${encodeURIComponen
 export const reconciliationApi = {
   listQuarters: (signal?: AbortSignal) => request<{ quarters: Quarter[] }>("/api/quarters", {}, signal),
   list: (quarter: string, signal?: AbortSignal) => request<{ quarter: string; reconciliations: Reconciliation[] }>(base(quarter), {}, signal),
+  importQuarter: (quarter: string, body: { sourceFileName: string; headers: string[]; rows: unknown[][] }) => request<QuarterImportResult>(`/api/quarter/${encodeURIComponent(quarter)}/import`, { method: "POST", body: JSON.stringify(body) }),
   patch: (quarter: string, id: string, body: Partial<Pick<Reconciliation, "customerBookAmount" | "reconciliationStatus" | "badDebtAmount" | "badDebtReason" | "adjustmentAmount" | "adjustmentReason" | "solution" | "solutionDate" | "ownerName">>) => request<{ quarter: string; reconciliation: Reconciliation }>(base(quarter, id), { method: "PATCH", body: JSON.stringify(body) }),
   listDifferenceItems: (quarter: string, id: string, signal?: AbortSignal) => request<{ items: DifferenceItem[] }>(`${base(quarter, id)}/difference-items`, {}, signal),
   createDifferenceItem: (quarter: string, id: string, body: Omit<DifferenceItem, "id">) => request<{ item: DifferenceItem }>(`${base(quarter, id)}/difference-items`, { method: "POST", body: JSON.stringify(body) }),
