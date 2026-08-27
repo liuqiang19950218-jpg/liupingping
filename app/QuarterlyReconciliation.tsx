@@ -23,6 +23,13 @@ import {
 } from "./quarter-storage";
 import { ImportDashboard } from "./ImportDashboard";
 import { recordImport } from "./import-history";
+import {
+  reconciliationApi,
+  type DifferenceItem,
+  type Followup,
+  type MaterialStatus,
+  type Reconciliation,
+} from "../lib/api/reconciliation-api";
 import "./reconciliation.css";
 
 type InvoiceEntry = {
@@ -202,6 +209,51 @@ const empty = (): DetailForm => ({
   resolutionTime: "",
   resolved: false,
   followUps: [],
+});
+const API_HEADERS = [
+  "序号", "账套", T.region, RESPONSIBLE_HEADER, T.customer, T.company,
+  T.customerBook, T.difference, T.transit, T.returned, T.lost, T.instrument,
+  T.other, T.note, T.badDebt, T.adjustment, T.cleared, "解决方案", "解决时间",
+  ...MATERIAL_HEADERS,
+];
+const apiSheet = (quarter: string, reconciliations: Reconciliation[], material: MaterialStatus[] = []): LocalSheet => ({
+  headers: API_HEADERS,
+  fileName: `${quarter}-PostgreSQL`,
+  rows: reconciliations.map((row, i) => {
+    const byType = new Map(material.filter((item) => item.reconciliationId === row.id).map((item) => [item.materialType, item.rawValue ?? (item.provided ? "已提供" : "")]));
+    return [
+    i + 1, row.accountSet ?? "", row.region ?? "", row.ownerName ?? "", row.customer ?? "",
+    row.companyReceivable ?? "", row.customerBookAmount ?? "", row.reconciliationDifference ?? "",
+    "", "", "", "", "", "", row.badDebtAmount ?? "", row.adjustmentAmount ?? "",
+    // The server owns this nullable status. Do not manufacture "未对账" for NULL.
+    row.reconciliationStatus ?? "", row.solution ?? "", row.solutionDate ?? "",
+    ...MATERIAL_HEADERS.map((header) => byType.get(header) ?? ""),
+  ];
+  }),
+  details: Object.fromEntries(reconciliations.map((row, i) => [String(i), {
+    ...empty(), companyAmount: row.companyReceivable ?? "", customerAmount: row.customerBookAmount ?? "",
+    responsible: row.ownerName ?? "", badDebt: row.badDebtAmount ?? "", badDebtReason: row.badDebtReason ?? "",
+    adjustment: row.adjustmentAmount ?? "", adjustmentReason: row.adjustmentReason ?? "",
+    resolutionSolution: row.solution ?? "", resolutionTime: row.solutionDate ?? "",
+  }])),
+});
+const formFromDifferenceItems = (base: DetailForm, items: DifferenceItem[]): DetailForm => {
+  const next = { ...base };
+  (['transit', 'returned', 'lost', 'instrument', 'otherInvoice'] as DifferenceType[]).forEach((category) => {
+    next[category] = items.filter((item) => item.category === category).map((item) => ({ date: item.invoiceDate ?? "", invoice: item.invoiceNo ?? "", amount: item.differenceAmount ?? "", note: item.differenceDescription ?? "" })) as InvoiceEntry[];
+    if (!next[category].length) next[category] = [blankInvoice()];
+  });
+  next.other = items.filter((item) => item.category === 'other').map((item) => ({ amount: item.differenceAmount ?? "", note: item.differenceDescription ?? "", image: item.attachmentKeys.join(",") }));
+  if (!next.other.length) next.other = [blankOther()];
+  return next;
+};
+const formFromFollowups = (base: DetailForm, followups: Followup[]): DetailForm => ({
+  ...base,
+  resolved: followups.some((item) => item.followStatus === "closed"),
+  followUps: followups.flatMap((item) => item.events.map((event) => ({
+    time: event.occurredAt.slice(0, 10),
+    solution: event.content ?? "",
+  }))),
 });
 const num = (value: unknown) => {
   const n = Number(String(value ?? "").replace(/,/g, ""));
@@ -450,8 +502,9 @@ const backfillClearedStatus = (source: LocalSheet) => {
         sumInvoiceEntries(detail.otherInvoice) +
         sum(detail.other)
       : 0;
+    // NULL/empty is authoritative: do not backfill it to “未对账”.
     const status = !filled
-      ? T.unreconciled
+      ? row[clearedAt]
       : Math.abs(difference) < 0.01 || Math.abs(difference - total) < 0.01
         ? T.clear
         : T.uncleared;
@@ -640,6 +693,13 @@ export function QuarterlyReconciliation({
   const [viewReady, setViewReady] = useState(false);
   const [activeQuarter, setActiveQuarter] = useState("");
   const [archivedQuarters, setArchivedQuarters] = useState<string[]>([]);
+  const [apiIds, setApiIds] = useState<string[]>([]);
+  const [apiDifferenceItems, setApiDifferenceItems] = useState<Record<string, DifferenceItem[]>>({});
+  const [apiFollowups, setApiFollowups] = useState<Record<string, Followup[]>>({});
+  const [saving, setSaving] = useState(false);
+  const mutationSequence = useRef<Map<string, number>>(new Map());
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const apiRequest = useRef<AbortController | null>(null);
   const setFilterColumn = (column: number | null) => {
     rawSetFilterColumn(null);
     if (column !== null)
@@ -704,6 +764,10 @@ export function QuarterlyReconciliation({
   };
 
   useEffect(() => {
+    if (mode !== "import") {
+      setViewReady(true);
+      return;
+    }
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) setSheet(JSON.parse(saved));
@@ -728,8 +792,9 @@ export function QuarterlyReconciliation({
     } finally {
       setViewReady(true);
     }
-  }, []);
+  }, [mode]);
   useEffect(() => {
+    if (mode !== "import") return;
     ensureArchiveFromActive();
     const refreshArchive = () => {
       const quarter = selectedQuarter();
@@ -755,7 +820,40 @@ export function QuarterlyReconciliation({
         refreshOptions,
       );
     };
-  }, []);
+  }, [mode]);
+  useEffect(() => {
+    if (mode === "import") return;
+    const controller = new AbortController();
+    apiRequest.current?.abort();
+    apiRequest.current = controller;
+    const load = async () => {
+      try {
+        const { quarters } = await reconciliationApi.listQuarters(controller.signal);
+        const options = quarters.map((item) => item.code);
+        const quarter = options.includes(activeQuarter) ? activeQuarter : options[0] ?? "";
+        if (!quarter) throw new Error("当前没有可用的 PostgreSQL 对账季度。");
+        const [{ reconciliations }, { material }] = await Promise.all([
+          reconciliationApi.list(quarter, controller.signal),
+          reconciliationApi.getMaterialStatus(quarter),
+        ]);
+        if (controller.signal.aborted) return;
+        setArchivedQuarters(options);
+        setActiveQuarter(quarter);
+        setApiIds(reconciliations.map((item) => item.id));
+        setApiDifferenceItems({});
+        setSheet(apiSheet(quarter, reconciliations, material));
+        setMessage("");
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setApiIds([]);
+        setApiDifferenceItems({});
+        setSheet(null); // Never retain old business data after an API failure.
+        setMessage(error instanceof Error ? `PostgreSQL 对账数据加载失败：${error.message}` : "PostgreSQL 对账数据加载失败。");
+      }
+    };
+    void load();
+    return () => controller.abort();
+  }, [mode, activeQuarter, refreshNonce]);
   useEffect(() => {
     const applyDetailTarget = () => {
       try {
@@ -781,11 +879,11 @@ export function QuarterlyReconciliation({
     return () => window.removeEventListener("reconciliation-open-current-detail", applyDetailTarget);
   }, []);
   useEffect(() => {
-    if (!sheet || !viewReady) return;
+    if (mode !== "import" || !sheet || !viewReady) return;
     const quarter = writeArchivedSheet(sheet);
     setActiveQuarter(quarter);
     setArchivedQuarters(quarterOptions());
-  }, [sheet, viewReady]);
+  }, [sheet, viewReady, mode]);
   useEffect(() => {
     let alive = true;
     fetch("/ledger_keys.json")
@@ -1027,6 +1125,12 @@ export function QuarterlyReconciliation({
     }
   };
   const changeQuarter = (quarter: string) => {
+    if (mode !== "import") {
+      setActiveQuarter(quarter);
+      setRegion(T.all);
+      setPage(1);
+      return;
+    }
     const archived = sheetForQuarter(quarter);
     if (!archived) return;
     selectQuarter(quarter);
@@ -1042,6 +1146,7 @@ export function QuarterlyReconciliation({
   const updateResponsible = (value: string) => {
     const nextForm = { ...form, responsible: value };
     setForm(nextForm);
+    if (mode !== "import") return;
     if (!sheet || active === null || responsibleIndex < 0) return;
     const rows = sheet.rows.map((row) => [...row]);
     rows[active][responsibleIndex] = value;
@@ -1145,6 +1250,10 @@ export function QuarterlyReconciliation({
     );
   };
   const refreshTable = () => {
+    if (mode !== "import") {
+      setRefreshNonce((value) => value + 1);
+      return;
+    }
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved)
@@ -1598,12 +1707,12 @@ export function QuarterlyReconciliation({
         : `\u5df2\u64a4\u56de ${quarter} \u5bf9\u8d26\u660e\u7ec6\u3002`,
     );
   }
-  function open(id: number) {
+  async function open(id: number) {
     if (!sheet) return;
     const row = sheet.rows[id];
     const old = sheet.details?.[String(id)];
     const value = (name: string) => String(row[index(name)] ?? "");
-    setForm(
+    const base =
       old
         ? {
             ...empty(),
@@ -1625,11 +1734,27 @@ export function QuarterlyReconciliation({
             // 发票明细。发票类明细必须由销售填写真实发票号后才参与核验。
             badDebt: value(T.badDebt),
             adjustment: value(T.adjustment),
-          },
-    );
+          };
+    setForm(base);
     setActive(id);
+    if (mode !== "import") {
+      const reconciliationId = apiIds[id];
+      if (!reconciliationId || !activeQuarter) return;
+      try {
+        const [{ items }, { followups }] = await Promise.all([
+          reconciliationApi.listDifferenceItems(activeQuarter, reconciliationId),
+          reconciliationApi.getFollowups(activeQuarter, reconciliationId),
+        ]);
+        setApiDifferenceItems((current) => ({ ...current, [reconciliationId]: items }));
+        setApiFollowups((current) => ({ ...current, [reconciliationId]: followups }));
+        setForm(formFromFollowups(formFromDifferenceItems(base, items), followups));
+      } catch (error) {
+        setActive(null);
+        setMessage(error instanceof Error ? `差额明细加载失败：${error.message}` : "差额明细加载失败。");
+      }
+    }
   }
-  function commit() {
+  async function commit() {
     if (!sheet || active === null) return;
     const needsCheck = [
       ...form.transit,
@@ -1658,6 +1783,85 @@ export function QuarterlyReconciliation({
       window.alert(
         "存在未通过往来明细核验的发票，不能保存。请确认日期、发票号和金额。",
       );
+      return;
+    }
+    if (mode !== "import") {
+      const reconciliationId = apiIds[active];
+      if (!reconciliationId || !activeQuarter) return;
+      if (saving) return;
+      const mutationKey = `reconciliation:${reconciliationId}`;
+      const sequence = (mutationSequence.current.get(mutationKey) ?? 0) + 1;
+      mutationSequence.current.set(mutationKey, sequence);
+      const desired = (['transit', 'returned', 'lost', 'instrument', 'otherInvoice', 'other'] as DifferenceType[]).flatMap((category) => {
+        const entries = category === 'other' ? form.other : form[category] as InvoiceEntry[];
+        return entries.filter((entry) => category === 'other'
+          ? num(entry.amount) !== 0 || entry.note.trim() || Boolean((entry as OtherEntry).image)
+          : hasInvoiceNumber(entry as InvoiceEntry)).map((entry) => ({
+            category, invoiceNo: category === 'other' ? null : (entry as InvoiceEntry).invoice || null,
+            invoiceDate: category === 'other' ? null : (entry as InvoiceEntry).date || null,
+            differenceAmount: entry.amount || null, differenceDescription: entry.note || null,
+            verificationStatus: category === 'other' ? 'not_applicable' as const : 'matched' as const,
+            // This UI only round-trips approved attachment keys. It never uploads or reads binary data.
+            attachmentKeys: category === 'other' ? String((entry as OtherEntry).image ?? '').split(',').map((key) => key.trim()).filter((key) => key && !key.startsWith('data:')) : [],
+          }));
+      });
+      try {
+        setSaving(true);
+        setMessage("正在保存到 PostgreSQL…");
+        await reconciliationApi.patch(activeQuarter, reconciliationId, {
+          customerBookAmount: form.customerAmount.trim() || null, ownerName: form.responsible.trim() || null,
+          badDebtAmount: form.badDebt.trim() || null, badDebtReason: form.badDebtReason.trim() || null,
+          adjustmentAmount: form.adjustment.trim() || null, adjustmentReason: form.adjustmentReason.trim() || null,
+          solution: form.resolutionSolution.trim() || null, solutionDate: form.resolutionTime.trim() || null,
+        });
+        const categoryOrder: DifferenceType[] = ['transit', 'returned', 'lost', 'instrument', 'otherInvoice', 'other'];
+        const current = [...(apiDifferenceItems[reconciliationId] ?? [])].sort(
+          (left, right) => categoryOrder.indexOf(left.category) - categoryOrder.indexOf(right.category),
+        );
+        for (let i = 0; i < Math.max(current.length, desired.length); i += 1) {
+          if (current[i] && desired[i]) await reconciliationApi.patchDifferenceItem(activeQuarter, reconciliationId, current[i].id, desired[i]);
+          else if (current[i]) await reconciliationApi.deleteDifferenceItem(activeQuarter, reconciliationId, current[i].id);
+          else if (desired[i]) await reconciliationApi.createDifferenceItem(activeQuarter, reconciliationId, desired[i]);
+        }
+        const followup = apiFollowups[reconciliationId]?.[0];
+        const desiredEvents = form.followUps.filter((item) => item.time.trim() || item.solution.trim());
+        if (!followup && desiredEvents.length) {
+          const [first, ...remaining] = desiredEvents;
+          await reconciliationApi.createFollowup(activeQuarter, reconciliationId, {
+            followStatus: form.resolved ? "closed" : "pending",
+            event: { eventType: "followup", content: first.solution || null, occurredAt: `${first.time || new Date().toISOString().slice(0, 10)}T00:00:00.000Z` },
+          });
+          for (const event of remaining) await reconciliationApi.createFollowupEvent(activeQuarter, reconciliationId, {
+            eventType: "followup", content: event.solution || null, occurredAt: `${event.time || new Date().toISOString().slice(0, 10)}T00:00:00.000Z`,
+          });
+        } else if (followup && !desiredEvents.length) {
+          await reconciliationApi.deleteFollowup(activeQuarter, reconciliationId);
+        } else if (followup) {
+          await reconciliationApi.updateFollowup(activeQuarter, reconciliationId, { followStatus: form.resolved ? "closed" : "pending" });
+          const existingEventCount = followup.events.length;
+          for (const event of desiredEvents.slice(existingEventCount)) await reconciliationApi.createFollowupEvent(activeQuarter, reconciliationId, {
+            eventType: "followup", content: event.solution || null, occurredAt: `${event.time || new Date().toISOString().slice(0, 10)}T00:00:00.000Z`,
+          });
+        }
+        // Re-read confirmed server state; do not retain an optimistic local copy.
+        const [{ reconciliations }, { items }, { material }] = await Promise.all([
+          reconciliationApi.list(activeQuarter), reconciliationApi.listDifferenceItems(activeQuarter, reconciliationId), reconciliationApi.getMaterialStatus(activeQuarter),
+        ]);
+        if (mutationSequence.current.get(mutationKey) === sequence) {
+          setSheet(apiSheet(activeQuarter, reconciliations, material));
+          setApiIds(reconciliations.map((item) => item.id));
+          setApiDifferenceItems((currentItems) => ({ ...currentItems, [reconciliationId]: items }));
+          const { followups } = await reconciliationApi.getFollowups(activeQuarter, reconciliationId);
+          setApiFollowups((currentItems) => ({ ...currentItems, [reconciliationId]: followups }));
+          setMessage("已保存到 PostgreSQL。显示内容已按服务端确认结果刷新。");
+          stopSolutionRecording();
+          setActive(null);
+        }
+      } catch (error) {
+        if (mutationSequence.current.get(mutationKey) === sequence) setMessage(error instanceof Error ? `保存失败：${error.message}。未使用本地数据回退。` : "保存失败；未使用本地数据回退。");
+      } finally {
+        if (mutationSequence.current.get(mutationKey) === sequence) setSaving(false);
+      }
       return;
     }
     const company = num(form.companyAmount);
@@ -2345,8 +2549,9 @@ export function QuarterlyReconciliation({
                 <button
                   className="save-button top-save-button"
                   onClick={commit}
+                  disabled={saving}
                 >
-                  {T.save}
+                  {saving ? "保存中…" : T.save}
                 </button>
               </div>
             </div>
@@ -2435,6 +2640,18 @@ export function QuarterlyReconciliation({
                   )}
                 </div>
               </div>
+              <section className="difference-summary-list" aria-label="跟进记录">
+                <div className="difference-summary-heading"><b>跟进记录</b><small>保存后同步至 PostgreSQL</small></div>
+                <label><input type="checkbox" checked={form.resolved} onChange={(event) => setForm({ ...form, resolved: event.target.checked })} /> 已解决</label>
+                {form.followUps.map((followup, index) => (
+                  <div className="customer-save-row" key={`${followup.time}-${index}`}>
+                    <input type="date" value={followup.time} onChange={(event) => setForm({ ...form, followUps: form.followUps.map((item, itemIndex) => itemIndex === index ? { ...item, time: event.target.value } : item) })} />
+                    <input value={followup.solution} placeholder="跟进方案 / 历史" onChange={(event) => setForm({ ...form, followUps: form.followUps.map((item, itemIndex) => itemIndex === index ? { ...item, solution: event.target.value } : item) })} />
+                    <button type="button" onClick={() => setForm({ ...form, followUps: form.followUps.filter((_, itemIndex) => itemIndex !== index) })}>删除</button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => setForm({ ...form, followUps: [...form.followUps, { time: new Date().toISOString().slice(0, 10), solution: "" }] })}>＋ 新增跟进</button>
+              </section>
             </div>
           </section>
           {activeDifferenceType && (
@@ -2951,7 +3168,7 @@ function DifferenceDetailDrawer({
                   const result = verification(entry as InvoiceEntry);
                   return <td>{result && <span className={`drawer-verification ${result.kind}`}>{result.label}</span>}</td>;
                 })()}
-                {!meta.invoice && <td className="drawer-attachment"><label>上传图片<input type="file" accept="image/*" onChange={(event) => { addImage(index, event.target.files?.[0]); event.target.value = ""; }} /></label>{(entry as OtherEntry).image && <button type="button" onClick={() => onPreview((entry as OtherEntry).image!)}>查看</button>}</td>}
+                {!meta.invoice && <td className="drawer-attachment"><input value={(entry as OtherEntry).image ?? ""} onChange={(event) => setEntries(entries.map((current, currentIndex) => currentIndex === index ? { ...current, image: event.target.value } : current) as OtherEntry[])} placeholder="附件 key（逗号分隔）" /><small>仅保存附件 key；本阶段不上传或读取文件。</small></td>}
                 <td className="drawer-row-actions"><button type="button" onClick={() => copy(index)}>复制</button><button type="button" onClick={() => remove(index)}>删除</button></td>
               </tr>
             ))}
@@ -3062,7 +3279,7 @@ const extractInvoiceNumbers = (text: string) =>
     .map((line) => line.replace(/\D/g, ""))
     .filter((digits) => digits.length >= 7);
 
-const OCR_INVOICE_ENDPOINT = "http://192.168.51.116:8000/ocr/recognize";
+const OCR_INVOICE_ENDPOINT = "/api/ocr/recognize";
 
 function collectOcrText(value: unknown): string[] {
   if (typeof value === "string" || typeof value === "number") return [String(value)];
