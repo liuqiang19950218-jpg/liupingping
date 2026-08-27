@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { selectedQuarter, sheetForQuarter, spdSheetForQuarter } from "./quarter-storage";
+import { useDashboardData } from "./dashboard-postgres-data";
+import type { MaterialStatus, Reconciliation, SpdDashboardData } from "../lib/api/reconciliation-api";
 import "./q1-special-panels.css";
 import "./q1-special-panels-layout-overrides.css";
 import "./q1-special-drilldown.css";
@@ -69,6 +70,23 @@ const MATERIALS: readonly MaterialDefinition[] = [
   { name: "\u5728\u9014\u8bc1\u660e", aliases: ["\u5728\u9014\u8bc1\u660e"], kind: "transit" },
   { name: "\u7cbe\u51c6\u6838\u9500", aliases: ["\u7cbe\u51c6\u6838\u9500"], kind: "writeoff" },
 ];
+
+const PG_HEADERS = ["账套", "区域", "客户名称", "公司应收", "客户账面金额", "对账差额", "是否对清", "差额原因备注", ...MATERIALS.map((item) => item.name)];
+const materialValue = (material: MaterialStatus | undefined) => material?.rawValue ?? (material?.provided ? "已提供" : "");
+function pgSheet(rows: Reconciliation[], materialStatus: MaterialStatus[]): SavedSheet {
+  const materialsByReconciliation = materialStatus.reduce((map, item) => {
+    if (!item.reconciliationId) return map;
+    const entries = map.get(item.reconciliationId) ?? new Map<string, MaterialStatus>();
+    entries.set(item.materialType, item); map.set(item.reconciliationId, entries); return map;
+  }, new Map<string, Map<string, MaterialStatus>>());
+  return { headers: PG_HEADERS, rows: rows.map((row) => {
+    const materials = materialsByReconciliation.get(row.id);
+    return [row.accountSet ?? "", row.region ?? "", row.customer ?? "", row.companyReceivable ?? "", row.customerBookAmount ?? "", row.reconciliationDifference ?? "", row.reconciliationStatus ?? "", "", ...MATERIALS.map((definition) => materialValue(materials?.get(definition.name) ?? [...(materials?.values() ?? [])].find((item) => definition.aliases.includes(item.materialType))))];
+  }) };
+}
+function pgSpdSheet(data: SpdDashboardData | null): SavedSheet {
+  return { headers: ["账套", "区域", "客户名称", "SPD确认表", "SPD库存确认函"], rows: (data?.items ?? []).map((item) => [item.accountSet ?? "", item.region ?? "", item.customer ?? "", item.spdConfirmation ?? "", item.spdInventoryConfirmation ?? ""]) };
+}
 
 const normalize = (value: unknown) => String(value ?? "").replace(/\s/g, "");
 const cell = (row: unknown[], headers: string[], header: string) => {
@@ -203,6 +221,19 @@ function specialData(sheet?: SavedSheet, spdSheet?: SavedSheet) {
     note: cell(row, headers, "\u5dee\u989d\u539f\u56e0\u5907\u6ce8"),
   }));
   return { collection, replyRates, lost, unaccounted };
+}
+
+function withSpdSummary(data: ReturnType<typeof specialData>, spdDashboard: SpdDashboardData | null) {
+  if (!spdDashboard) return data;
+  const summaryFor = (kind: MaterialKind) => kind === "spd" ? spdDashboard.summary.spdConfirmation : spdDashboard.summary.spdInventoryConfirmation;
+  return {
+    ...data,
+    collection: data.collection.map((item) => {
+      if (item.kind !== "spd" && item.kind !== "stock") return item;
+      const summary = summaryFor(item.kind);
+      return { ...item, completed: summary.submitted, total: summary.total, rate: summary.submissionRate ?? 0, followRegions: [] };
+    }),
+  };
 }
 
 const displayValue = (value: string) => value.trim() || "—";
@@ -388,29 +419,26 @@ function FollowAdviceCard({ collection, replyRates }: { collection: CollectionRo
 }
 
 export function Q1SpecialPanels() {
-  const [quarter, setQuarter] = useState("");
-  const [sheet, setSheet] = useState<SavedSheet>();
-  const [spdSheet, setSpdSheet] = useState<SavedSheet>();
+  const { quarter: selected, rows, materialStatus, spdDashboard, loading, error } = useDashboardData();
   const [tab, setTab] = useState<"collection" | "unaccounted">("collection");
   const [drillSelection, setDrillSelection] = useState<CollectionDrillSelection | null>(null);
-  useEffect(() => {
-    const sync = () => { const nextQuarter = selectedQuarter(); setQuarter(nextQuarter); setSheet(sheetForQuarter(nextQuarter) as SavedSheet | undefined); setSpdSheet(spdSheetForQuarter(nextQuarter) as SavedSheet | undefined); };
-    sync();
-    window.addEventListener("reconciliation-quarter-selected", sync); window.addEventListener("reconciliation-quarter-updated", sync); window.addEventListener("reconciliation-updated", sync); window.addEventListener("reconciliation-spd-sheet-updated", sync);
-    return () => { window.removeEventListener("reconciliation-quarter-selected", sync); window.removeEventListener("reconciliation-quarter-updated", sync); window.removeEventListener("reconciliation-updated", sync); window.removeEventListener("reconciliation-spd-sheet-updated", sync); };
-  }, []);
-  const data = useMemo(() => specialData(sheet, spdSheet), [sheet, spdSheet]);
+  const quarter = selected?.label ?? "";
+  const sheet = useMemo(() => pgSheet(rows, materialStatus), [rows, materialStatus]);
+  const spdSheet = useMemo(() => pgSpdSheet(spdDashboard), [spdDashboard]);
+  const data = useMemo(() => withSpdSummary(specialData(sheet, spdSheet), spdDashboard), [sheet, spdSheet, spdDashboard]);
   const drilldown = useMemo(
     () => drillSelection ? buildCollectionDrilldown(drillSelection, sheet, spdSheet) : null,
     [drillSelection, sheet, spdSheet],
   );
   if (!quarter) return null;
+  if (error) return <section className="q1-special"><p className="collection-empty">无法读取本季度资料看板：{error}</p></section>;
+  if (loading) return <section className="q1-special"><p className="collection-empty">正在读取本季度资料看板…</p></section>;
   return <section className="q1-special">
     <div className="special-head"><div><p>{quarter} {S.specialInfo}</p><h2>{S.pageTitle}</h2></div><div className="special-tabs" role="tablist" aria-label={S.pageTitle}>
       <button role="tab" aria-selected={tab === "collection"} className={tab === "collection" ? "active" : ""} onClick={() => setTab("collection")}>{S.collection}</button>
       <button role="tab" aria-selected={tab === "unaccounted"} className={tab === "unaccounted" ? "active" : ""} onClick={() => setTab("unaccounted")}>{S.unaccounted}</button>
     </div></div>
-    {tab === "collection" ? <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} onDrilldown={(material) => setDrillSelection({ type: "material", material })} /><ReplyRateCard rows={data.replyRates} onDrilldown={(region) => setDrillSelection({ type: "reply", region })} /><FollowAdviceCard collection={data.collection} replyRates={data.replyRates} /></div>
+    {tab === "collection" ? <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} onDrilldown={(material) => { if (material.kind !== "spd" && material.kind !== "stock") setDrillSelection({ type: "material", material }); }} /><ReplyRateCard rows={data.replyRates} onDrilldown={(region) => setDrillSelection({ type: "reply", region })} /><FollowAdviceCard collection={data.collection} replyRates={data.replyRates} /></div>
       : <div className="special-legacy-panel"><VerticalScrollList label={S.unaccounted}><table><thead><tr><th>{S.region}</th><th>{S.customer}</th><th>{S.note}</th></tr></thead><tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td>{item.note || "—"}</td></tr>) : <tr><td colSpan={3}>{S.unaccountedEmpty}</td></tr>}</tbody></table></VerticalScrollList></div>}
     {drilldown && <CollectionDrilldownDialog data={drilldown} onClose={() => setDrillSelection(null)} />}
   </section>;

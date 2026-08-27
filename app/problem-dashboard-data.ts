@@ -49,6 +49,10 @@ export function filterProblemItems(filters: ProblemFilters) {
   return filterItems(issuesForQuarter(filters.quarter), filters);
 }
 
+export function filterProblemItemList(source: ReconciliationIssue[], filters: ProblemFilters) {
+  return filterItems(source, filters);
+}
+
 export function filterAllProblemItems(filters: ProblemFilters) {
   return filterItems(allIssuesForQuarter(filters.quarter), filters);
 }

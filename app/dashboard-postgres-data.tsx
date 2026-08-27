@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { reconciliationApi, type MaterialStatus, type Quarter, type QuarterDifferenceItem, type QuarterFollowupItem, type Reconciliation } from "../lib/api/reconciliation-api";
+import { reconciliationApi, type MaterialStatus, type Quarter, type QuarterDifferenceItem, type QuarterFollowupItem, type Reconciliation, type SpdDashboardData } from "../lib/api/reconciliation-api";
 
 const SELECTED_QUARTER_KEY = "postgres-quarterly-reconciliation-selected-quarter";
 
@@ -16,6 +16,7 @@ export type DashboardData = {
   followups: QuarterFollowupItem[];
   followupsByReconciliation: Map<string, QuarterFollowupItem[]>;
   materialStatus: MaterialStatus[];
+  spdDashboard: SpdDashboardData | null;
   loading: boolean;
   error: string | null;
   selectQuarter: (code: string) => void;
@@ -51,6 +52,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   const [differenceItems, setDifferenceItems] = useState<QuarterDifferenceItem[]>([]);
   const [followups, setFollowups] = useState<QuarterFollowupItem[]>([]);
   const [materialStatus, setMaterialStatus] = useState<MaterialStatus[]>([]);
+  const [spdDashboard, setSpdDashboard] = useState<SpdDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
@@ -77,7 +79,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   }, [revision]);
 
   useEffect(() => {
-    if (!quarterCode) { setRows([]); setDifferenceItems([]); setFollowups([]); setMaterialStatus([]); return; }
+    if (!quarterCode) { setRows([]); setDifferenceItems([]); setFollowups([]); setMaterialStatus([]); setSpdDashboard(null); return; }
     const controller = new AbortController();
     setLoading(true);
     setError(null);
@@ -86,17 +88,19 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       reconciliationApi.listQuarterDifferenceItems(quarterCode, controller.signal),
       reconciliationApi.listQuarterFollowups(quarterCode, controller.signal),
       reconciliationApi.getMaterialStatus(quarterCode, undefined, controller.signal),
+      reconciliationApi.getSpdDashboard(quarterCode, controller.signal),
     ])
-      .then(([reconciliationResult, differenceResult, followupResult, materialResult]) => {
+      .then(([reconciliationResult, differenceResult, followupResult, materialResult, spdResult]) => {
         if (controller.signal.aborted) return;
         setRows(reconciliationResult.reconciliations);
         setDifferenceItems(differenceResult.items);
         setFollowups(followupResult.items);
         setMaterialStatus(materialResult.material);
+        setSpdDashboard(spdResult);
       })
       .catch((caught: unknown) => {
         if (!controller.signal.aborted) {
-          setRows([]); setDifferenceItems([]); setFollowups([]); setMaterialStatus([]);
+          setRows([]); setDifferenceItems([]); setFollowups([]); setMaterialStatus([]); setSpdDashboard(null);
           setError(caught instanceof Error ? caught.message : "无法读取本季度看板数据");
         }
       })
@@ -120,6 +124,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     followups,
     followupsByReconciliation: group(followups),
     materialStatus,
+    spdDashboard,
     loading,
     error,
     selectQuarter: (code) => {
@@ -128,7 +133,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     },
     refresh: () => setRevision((current) => current + 1),
   });
-  }, [quarters, quarterCode, rows, differenceItems, followups, materialStatus, loading, error]);
+  }, [quarters, quarterCode, rows, differenceItems, followups, materialStatus, spdDashboard, loading, error]);
 
   return <DashboardDataContext.Provider value={value}>{children}</DashboardDataContext.Provider>;
 }

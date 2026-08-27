@@ -1,12 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  selectQuarter,
-  selectedQuarter,
-  sheetForQuarter,
-  writeArchivedSheet,
-} from "./quarter-storage";
+import { reconciliationApi, type QuarterFollowupItem, type Reconciliation } from "../lib/api/reconciliation-api";
+import { useDashboardData } from "./dashboard-postgres-data";
 import "./unresolved-followup.css";
 
 type FollowUp = { time: string; solution: string };
@@ -50,7 +46,8 @@ const TABLE_FILTER_COLUMNS = [
 ] as const;
 type TableFilterKey = (typeof TABLE_FILTER_COLUMNS)[number]["key"];
 type Item = {
-  id: number;
+  id: string;
+  reconciliationId: string;
   quarter: string;
   accountSet: string;
   region: string;
@@ -176,69 +173,11 @@ const tableFilterValue = (item: Item, key: TableFilterKey) => {
       return stageOf(item);
   }
 };
-function toItems(source?: Sheet): Item[] {
-  if (!source?.headers?.length) return [];
-  const match = `${source.fileName} ${source.headers.join(" ")}`.match(
-    /(\d{2,4})\s*年?\s*([1-4])\s*季度/,
-  );
-  const quarter = match
-    ? `${match[1].length === 2 ? `20${match[1]}` : match[1]} Q${match[2]}`
-    : selectedQuarter() || "未识别季度";
-  return source.rows
-    .map((row, id) => {
-      const detail = source.details?.[String(id)] ?? {};
-      // 待解决清单只认可“本季度对账详细情况”填写弹层保存的值。
-      // 不能回退读取导入 Excel 行内可能遗留的解决方案/解决时间，
-      // 否则未在当前系统填写解决时间的客户会被误带入待解决清单。
-      const firstSolution = String(detail.resolutionSolution ?? "").trim();
-      const firstTime = String(detail.resolutionTime ?? "").trim();
-      const followUps = Array.isArray(detail.followUps)
-        ? detail.followUps
-            .filter((entry): entry is FollowUp =>
-              Boolean(entry && typeof entry.solution === "string"),
-            )
-            .map((entry) => ({
-              time: String(entry.time ?? ""),
-              solution: String(entry.solution ?? ""),
-            }))
-        : [];
-      return {
-        id,
-        quarter,
-        accountSet: value(row, source.headers, ["账套"]),
-        region: value(row, source.headers, ["区域"]) || "未填写区域",
-        customer: value(row, source.headers, ["客户名称"]),
-        owner: value(row, source.headers, ["对账负责人"]),
-        amount: amountOf(value(row, source.headers, ["对账差额"])),
-        firstTime,
-        expectedDate: value(row, source.headers, ["预计完成日期", "预计完成时间", "预计完成"]) || firstTime,
-        firstSolution,
-        followUps,
-        financeAttention: detail.financeAttention,
-        processStage: detail.processStage,
-        // 是否进入已解决档案只由人工归档状态决定，不能再把
-        // “填写了解决方案但未填写解决时间”的记录误判为已解决。
-        resolved: detail.resolved === true && detail.reopened !== true,
-      };
-    })
-    // 待解决清单沿用原有业务口径：只有已填写解决时间的客户才进入
-    // 未解决客户跟进；未填写解决时间的记录不在待解决清单中展示。
-    .filter((item) => item.customer && item.firstTime.trim());
-}
-
-function saveDetail(id: number, changes: Partial<Detail>) {
-  const quarter = selectedQuarter();
-  const sheet = sheetForQuarter(quarter) as Sheet | undefined;
-  if (!sheet) return;
-  const next: Sheet = {
-    ...sheet,
-    details: {
-      ...(sheet.details ?? {}),
-      [String(id)]: { ...(sheet.details?.[String(id)] ?? {}), ...changes },
-    },
-  };
-  writeArchivedSheet(next);
-  window.dispatchEvent(new Event("reconciliation-updated"));
+function toItems(quarter: string, rows: Map<string, Reconciliation>, followups: QuarterFollowupItem[]): Item[] {
+  return followups.map((followup) => {
+    const row = rows.get(followup.reconciliationId);
+    return { id: followup.id, reconciliationId: followup.reconciliationId, quarter, accountSet: row?.accountSet ?? "", region: row?.region ?? "未填写区域", customer: row?.customer ?? "", owner: row?.ownerName ?? "", amount: amountOf(row?.reconciliationDifference), firstTime: followup.expectedCompleteAt ?? "", expectedDate: followup.expectedCompleteAt ?? "", firstSolution: row?.solution ?? "", followUps: followup.events.map((event) => ({ time: event.occurredAt, solution: event.content ?? "" })), processStage: followup.processStage && followup.processStage !== "已关闭" ? followup.processStage as Exclude<ProcessStage, "已关闭"> : undefined, resolved: Boolean(followup.closedAt) || followup.followStatus === "closed" || followup.followStatus === "已解决" };
+  });
 }
 
 function Badge({
@@ -341,7 +280,8 @@ function AgingCylinderChart({
 }
 
 export function UnresolvedFollowupDashboard() {
-  const [items, setItems] = useState<Item[]>([]);
+  const { quarter, reconciliationById, followups, refresh, loading, error } = useDashboardData();
+  const items = useMemo(() => toItems(quarter?.label ?? "", reconciliationById, followups), [quarter, reconciliationById, followups]);
   const [region, setRegion] = useState(ALL);
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
@@ -363,14 +303,8 @@ export function UnresolvedFollowupDashboard() {
   const [message, setMessage] = useState("");
   const overdueCardsRef = useRef<HTMLDivElement>(null);
   const scrollOverdueCards = (direction: number) => overdueCardsRef.current?.scrollBy({ left: direction * Math.max(260, overdueCardsRef.current.clientWidth * 0.72), behavior: "smooth" });
-  const sync = () =>
-    setItems(toItems(sheetForQuarter(selectedQuarter()) as Sheet | undefined));
   useEffect(() => {
-    sync();
     const initialFilter = Object.fromEntries(new URLSearchParams(window.location.search));
-    if (initialFilter.quarter && initialFilter.quarter !== selectedQuarter()) {
-      selectQuarter(initialFilter.quarter);
-    }
     if (initialFilter.region) setRegion(initialFilter.region);
     if (initialFilter.owner || initialFilter.customer) setQuery(initialFilter.owner || initialFilter.customer || "");
     if (initialFilter.filter === "finance" || initialFilter.filter === "leader") setFinance("需财务复核");
@@ -385,7 +319,6 @@ export function UnresolvedFollowupDashboard() {
     const applyDashboardFilter = (event: Event) => {
       const filter = (event as CustomEvent<Record<string, string>>).detail;
       if (!filter) return;
-      if (filter.quarter && filter.quarter !== selectedQuarter()) selectQuarter(filter.quarter);
       if (filter.region) setRegion(filter.region);
       if (filter.owner || filter.customer) setQuery(filter.owner || filter.customer || "");
       if (filter.filter === "finance" || filter.filter === "leader") setFinance("需财务复核");
@@ -405,14 +338,8 @@ export function UnresolvedFollowupDashboard() {
       } else setDashboardMetricFilter("");
       setTab("pending");
     };
-    window.addEventListener("reconciliation-updated", sync);
-    window.addEventListener("reconciliation-quarter-selected", sync);
-    window.addEventListener("reconciliation-quarter-updated", sync);
     window.addEventListener("reconciliation-followup-filter", applyDashboardFilter);
     return () => {
-      window.removeEventListener("reconciliation-updated", sync);
-      window.removeEventListener("reconciliation-quarter-selected", sync);
-      window.removeEventListener("reconciliation-quarter-updated", sync);
       window.removeEventListener("reconciliation-followup-filter", applyDashboardFilter);
     };
   }, []);
@@ -564,41 +491,39 @@ export function UnresolvedFollowupDashboard() {
         ? columns.filter((item) => item !== column)
         : [...columns, column],
     );
-  const submitFollowUp = () => {
+  const submitFollowUp = async () => {
     if (!editing || !followSolution.trim()) {
       setMessage("请填写本次跟进解决方案。");
       return;
     }
-    saveDetail(editing.id, {
-      followUps: [
-        ...editing.followUps,
-        { time: followTime, solution: followSolution.trim() },
-      ],
-      resolved: false,
-      reopened: true,
-    });
+    if (!quarter) return;
+    await reconciliationApi.createFollowupEvent(quarter.code, editing.reconciliationId, { eventType: "follow_up", content: followSolution.trim(), occurredAt: followTime || new Date().toISOString() });
+    refresh();
     setEditing(null);
     setFollowTime("");
     setFollowSolution("");
     setMessage("已保存跟进记录，首次解决方案与首次时间保持不变。");
   };
-  const resolve = (item: Item) => {
-    saveDetail(item.id, { resolved: true, reopened: false });
+  const resolve = async (item: Item) => {
+    if (!quarter) return;
+    await reconciliationApi.updateFollowup(quarter.code, item.reconciliationId, { followStatus: "closed", closedAt: new Date().toISOString() });
+    refresh();
     setMessage("已转入已解决档案。");
   };
-  const restore = (item: Item) => {
-    saveDetail(item.id, { resolved: false, reopened: true });
+  const restore = async (item: Item) => {
+    if (!quarter) return;
+    await reconciliationApi.updateFollowup(quarter.code, item.reconciliationId, { followStatus: "pending", closedAt: null });
+    refresh();
     setMessage("已撤销解决状态，客户已回到待解决清单。");
   };
-  const updateFinanceAttention = (item: Item, financeAttention: Finance) => {
-    saveDetail(item.id, { financeAttention });
-    setMessage(`已将${item.customer}设置为${financeAttention}。`);
-  };
-  const updateProcessStage = (
+  const updateFinanceAttention = (_item: Item, _financeAttention: Finance) => setMessage("财务关注字段当前未由季度 followup API 提供。");
+  const updateProcessStage = async (
     item: Item,
     nextStage: Exclude<ProcessStage, "已关闭">,
   ) => {
-    saveDetail(item.id, { processStage: nextStage });
+    if (!quarter) return;
+    await reconciliationApi.updateFollowup(quarter.code, item.reconciliationId, { processStage: nextStage });
+    refresh();
     setMessage(`已将${item.customer}设置为${nextStage}。`);
   };
   const exportRows = () => {
@@ -641,7 +566,7 @@ export function UnresolvedFollowupDashboard() {
     link.href = URL.createObjectURL(
       new Blob([`\ufeff${content}`], { type: "text/csv;charset=utf-8" }),
     );
-    link.download = `${selectedQuarter() || "季度"}-未解决客户跟进.csv`;
+    link.download = `${quarter?.label || "季度"}-未解决客户跟进.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
   };
@@ -690,7 +615,7 @@ export function UnresolvedFollowupDashboard() {
     link.href = URL.createObjectURL(
       new Blob([`\ufeff${content}`], { type: "text/csv;charset=utf-8" }),
     );
-    link.download = `${selectedQuarter() || "\u5bf9\u8d26\u5b63\u5ea6"}-${exportName}.csv`;
+    link.download = `${quarter?.label || "\u5bf9\u8d26\u5b63\u5ea6"}-${exportName}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
     setMessage(`\u5df2\u5bfc\u51fa${exportName}\uff08${exportItems.length}\u6761\uff09\u3002`);
