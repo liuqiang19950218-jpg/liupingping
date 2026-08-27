@@ -26,6 +26,43 @@ export type QuarterImportResult = {
   sourceSha256: string;
   batchKey: string;
 };
+// Quarter-scoped dashboard aggregate reads (Phase 2F.1). Each item carries
+// reconciliationId for Map-join with the shared reconciliation dataset; amounts
+// are NUMERIC-as-string; NULL stays NULL.
+export type QuarterDifferenceItem = {
+  id: string;
+  reconciliationId: string;
+  quarterCode: string;
+  category: "transit" | "returned" | "lost" | "instrument" | "otherInvoice" | "other";
+  invoiceNo: string | null;
+  invoiceDate: string | null;
+  differenceAmount: string | null;
+  differenceDescription: string | null;
+  verificationStatus: "not_applicable" | "pending" | "matched" | "mismatched";
+  attachmentKeys: string[];
+};
+export type QuarterFollowupEvent = {
+  id: string;
+  eventType: string;
+  content: string | null;
+  occurredAt: string;
+};
+export type QuarterFollowupItem = {
+  id: string;
+  reconciliationId: string;
+  quarterCode: string;
+  followStatus: string;
+  processStage: string | null;
+  riskLevel: string;
+  expectedCompleteAt: string | null;
+  nextFollowUpAt: string | null;
+  latestFollowUpAt: string | null;
+  closedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  events: QuarterFollowupEvent[];
+  latestEvent: QuarterFollowupEvent | null;
+};
 
 export class ReconciliationApiError extends Error {
   constructor(public readonly code: string, message: string) { super(message); }
@@ -52,6 +89,8 @@ export const reconciliationApi = {
   deleteFollowup: (quarter: string, id: string) => request(`${base(quarter, id)}/followups`, { method: "DELETE" }),
   createFollowupEvent: (quarter: string, id: string, body: Omit<FollowupEvent, "id">) => request(`${base(quarter, id)}/followups/events`, { method: "POST", body: JSON.stringify(body) }),
   getMaterialStatus: (quarter: string, id?: string) => request<{ material: MaterialStatus[] }>(id ? `${base(quarter, id)}/material-status` : `/api/quarter/${encodeURIComponent(quarter)}/material-status`),
+  listQuarterDifferenceItems: (quarter: string, signal?: AbortSignal) => request<{ quarter: string; count: number; items: QuarterDifferenceItem[] }>(`/api/quarter/${encodeURIComponent(quarter)}/difference-items`, {}, signal),
+  listQuarterFollowups: (quarter: string, signal?: AbortSignal) => request<{ quarter: string; count: number; eventCount: number; items: QuarterFollowupItem[] }>(`/api/quarter/${encodeURIComponent(quarter)}/followups`, {}, signal),
   upsertMaterialStatus: (quarter: string, body: Omit<MaterialStatus, "id">, id?: string) => request(id ? `${base(quarter, id)}/material-status` : `/api/quarter/${encodeURIComponent(quarter)}/material-status`, { method: id ? "POST" : "PUT", body: JSON.stringify(body) }),
   updateMaterialStatus: (quarter: string, materialId: string, body: Partial<MaterialStatus>, id?: string) => request(id ? `${base(quarter, id)}/material-status/${encodeURIComponent(materialId)}` : `/api/quarter/${encodeURIComponent(quarter)}/material-status/${encodeURIComponent(materialId)}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteMaterialStatus: (quarter: string, materialId: string, id?: string) => request(id ? `${base(quarter, id)}/material-status/${encodeURIComponent(materialId)}` : `/api/quarter/${encodeURIComponent(quarter)}/material-status/${encodeURIComponent(materialId)}`, { method: "DELETE" }),

@@ -320,3 +320,151 @@ export async function getMaterialStatusByQuarter(code: string): Promise<Material
     }));
   });
 }
+
+// ---------------------------------------------------------------------------
+// Quarter-scoped dashboard aggregate reads (Phase 2F.1)
+// ---------------------------------------------------------------------------
+// These are the ONLY quarter-level bulk reads for Dashboard charts. They return
+// every difference item / followup (+ its events) for ONE quarter with a single
+// (or a small, fixed) number of SQL statements — never a per-reconciliation loop.
+//
+// Join contract: each item carries `reconciliationId`; the Dashboard already has
+// the shared `GET /api/quarter/[code]/reconciliations` dataset keyed by id, so it
+// can Map-join for customer / region / accountSet / owner / reconciliationStatus
+// without any extra HTTP. Amounts stay NUMERIC-as-string ("1234.56"); NULL stays
+// NULL (never coerced to 0). invoiceDate is the real date or null.
+
+export type QuarterDifferenceItemRead = {
+  id: string;
+  reconciliationId: string;
+  quarterCode: string;
+  category: string;
+  invoiceNo: string | null;
+  invoiceDate: string | null;
+  differenceAmount: string | null;
+  differenceDescription: string | null;
+  verificationStatus: string;
+  attachmentKeys: string[];
+};
+
+export type QuarterFollowupEventRead = {
+  id: string;
+  eventType: string;
+  content: string | null;
+  occurredAt: string;
+};
+
+export type QuarterFollowupItemRead = {
+  id: string;
+  reconciliationId: string;
+  quarterCode: string;
+  followStatus: string;
+  processStage: string | null;
+  riskLevel: string;
+  expectedCompleteAt: string | null;
+  nextFollowUpAt: string | null;
+  latestFollowUpAt: string | null;
+  closedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  events: QuarterFollowupEventRead[];
+  latestEvent: QuarterFollowupEventRead | null;
+};
+
+export async function getDifferenceItemsByQuarter(code: string): Promise<QuarterDifferenceItemRead[]> {
+  return withPostgresClient(async (client) => {
+    const result = await client.query(
+      `SELECT d.id::text, d.category, d.invoice_no,
+              to_char(d.invoice_date, 'YYYY-MM-DD') AS invoice_date,
+              d.difference_amount::text,
+              d.difference_description,
+              d.verification_status,
+              d.attachment_keys,
+              r.id::text AS reconciliation_id,
+              q.code AS quarter_code
+       FROM recon.difference_items d
+       JOIN recon.reconciliations r ON r.id = d.reconciliation_id
+       JOIN recon.quarters q ON q.id = r.quarter_id
+       WHERE q.code = $1
+       ORDER BY d.created_at ASC, d.id ASC`,
+      [code],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      reconciliationId: row.reconciliation_id,
+      quarterCode: row.quarter_code,
+      category: row.category,
+      invoiceNo: row.invoice_no ?? null,
+      invoiceDate: row.invoice_date ?? null,
+      differenceAmount: row.difference_amount ?? null,
+      differenceDescription: row.difference_description ?? null,
+      verificationStatus: row.verification_status,
+      attachmentKeys: Array.isArray(row.attachment_keys)
+        ? (row.attachment_keys as unknown[]).filter((k) => typeof k === "string")
+        : [],
+    }));
+  });
+}
+
+export async function getFollowupsByQuarter(code: string): Promise<QuarterFollowupItemRead[]> {
+  return withPostgresClient(async (client) => {
+    const items = await client.query(
+      `SELECT f.id::text, r.id::text AS reconciliation_id,
+              f.follow_status, f.process_stage, f.risk_level,
+              f.expected_complete_at::text, f.next_follow_up_at::text,
+              f.latest_follow_up_at::text, f.closed_at::text,
+              f.created_at::text, f.updated_at::text,
+              q.code AS quarter_code
+       FROM recon.followup_items f
+       JOIN recon.reconciliations r ON r.id = f.reconciliation_id
+       JOIN recon.quarters q ON q.id = r.quarter_id
+       WHERE q.code = $1
+       ORDER BY f.created_at ASC, f.id ASC`,
+      [code],
+    );
+    if (items.rows.length === 0) return [];
+    const itemIds = items.rows.map((row) => row.id as string);
+    // Batch-load ALL events for this quarter's followup items in ONE query
+    // (never a per-item event GET — that would be N+1).
+    const events = await client.query(
+      `SELECT e.id::text, e.followup_item_id::text, e.event_type, e.content,
+              e.occurred_at::text
+       FROM recon.followup_events e
+       WHERE e.followup_item_id = ANY($1::uuid[])
+       ORDER BY e.occurred_at ASC, e.id ASC`,
+      [itemIds],
+    );
+    const eventsByItem = new Map<string, QuarterFollowupEventRead[]>();
+    for (const row of events.rows) {
+      const itemId = row.followup_item_id as string;
+      const list = eventsByItem.get(itemId) ?? [];
+      list.push({
+        id: row.id,
+        eventType: row.event_type,
+        content: row.content ?? null,
+        occurredAt: row.occurred_at,
+      });
+      eventsByItem.set(itemId, list);
+    }
+    return items.rows.map((row) => {
+      const eventsList = eventsByItem.get(row.id as string) ?? [];
+      const latest = eventsList.length > 0 ? eventsList[eventsList.length - 1] : null;
+      return {
+        id: row.id,
+        reconciliationId: row.reconciliation_id,
+        quarterCode: row.quarter_code,
+        followStatus: row.follow_status,
+        processStage: row.process_stage ?? null,
+        riskLevel: row.risk_level,
+        expectedCompleteAt: row.expected_complete_at ?? null,
+        nextFollowUpAt: row.next_follow_up_at ?? null,
+        latestFollowUpAt: row.latest_follow_up_at ?? null,
+        closedAt: row.closed_at ?? null,
+        createdAt: row.created_at ?? null,
+        updatedAt: row.updated_at ?? null,
+        events: eventsList,
+        latestEvent: latest,
+      };
+    });
+  });
+}
