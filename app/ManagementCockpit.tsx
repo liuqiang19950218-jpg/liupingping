@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { CockpitRow, cockpitRows, latestQuarterlyCockpitRows, updateDashboardSnapshot } from "./cockpit-data";
-import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
+import { type CockpitRow } from "./cockpit-data";
+import { moneyToCents, useDashboardData } from "./dashboard-postgres-data";
 import { CockpitTrendChart } from "./CockpitTrendChart";
 import { DifferenceStructureChart } from "./DifferenceStructureChart";
 import {
@@ -11,7 +11,6 @@ import {
   DifferenceAgingAnalysisCard,
   DifferenceAgingDetail,
 } from "./DifferenceAgingAnalysis";
-import { issuesForQuarter } from "./reconciliation-insights";
 import "./management-cockpit.css";
 import "./management-cockpit-refined.css";
 type Props = {
@@ -124,6 +123,20 @@ const getRisks = (r: CockpitRow) =>
     r.duplicateInvoice && "存在重复发票",
   ].filter(Boolean) as string[];
 export function ManagementCockpit({ activeTab, onTabChange }: Props) {
+  const dashboard = useDashboardData();
+  const dashboardRows = useMemo<CockpitRow[]>(() => dashboard.rows.map((row) => {
+    const differences = dashboard.differencesByReconciliation.get(row.id) ?? [];
+    const amount = (category: string) => differences.filter((item) => item.category === category).reduce((sum, item) => sum + Number(moneyToCents(item.differenceAmount) ?? 0n) / 100, 0);
+    const followup = dashboard.followupsByReconciliation.get(row.id)?.[0];
+    const filled = moneyToCents(row.customerBookAmount) !== null;
+    return {
+      id: row.id, quarter: row.quarterCode, region: row.region ?? "未填写", accountSet: row.accountSet ?? "未填写账套", owner: row.ownerName ?? "未填写", customer: row.customer ?? "未填写客户名称",
+      companyReceivable: Number(moneyToCents(row.companyReceivable) ?? 0n) / 100, customerBook: Number(moneyToCents(row.customerBookAmount) ?? 0n) / 100, difference: Number(moneyToCents(row.reconciliationDifference) ?? 0n) / 100,
+      transit: amount("transit"), returned: amount("returned") + amount("returned_invoice"), lost: amount("lost") + amount("lost_invoice"), instrument: amount("instrument") + amount("equipment"), otherInvoice: amount("otherInvoice") + amount("other_with_invoice"), otherNoInvoice: amount("other") + amount("other_without_invoice"),
+      badDebt: Number(moneyToCents(row.badDebtAmount) ?? 0n) / 100, adjustment: Number(moneyToCents(row.adjustmentAmount) ?? 0n) / 100, badDebtReason: row.badDebtReason ?? "", adjustmentReason: row.adjustmentReason ?? "", filled, cleared: row.reconciliationStatus === "对清", cause: row.solution ?? "", followStatus: followup?.followStatus ?? "", solution: row.solution ?? "", expectedDate: followup?.expectedCompleteAt ?? "—", actualDate: followup?.closedAt ?? undefined, updatedAt: followup?.updatedAt ?? "—", latestFollowUpAt: followup?.latestEvent?.occurredAt ?? followup?.latestFollowUpAt ?? undefined, processStage: followup?.processStage ?? undefined,
+      differenceInvoices: differences.map((item) => ({ category: item.category, invoice: item.invoiceNo ?? "", date: item.invoiceDate ?? "", amount: Number(moneyToCents(item.differenceAmount) ?? 0n) / 100, note: item.differenceDescription ?? undefined })),
+    };
+  }), [dashboard.rows, dashboard.differencesByReconciliation, dashboard.followupsByReconciliation]);
   const [f, setF] = useState<Filters>({
       quarter: "2026 Q2",
       region: "全部",
@@ -140,10 +153,11 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     [range, setRange] = useState(4);
   const [availableQuarters, setAvailableQuarters] = useState<string[]>([]);
   const [dataVersion, setDataVersion] = useState(0);
+  useEffect(() => { if (dashboard.quarter) setF((value) => ({ ...value, quarter: dashboard.quarter!.code })); }, [dashboard.quarter]);
   useEffect(() => {
     const syncQuarter = () => {
-      setAvailableQuarters(quarterOptions());
-      setF((value) => ({ ...value, quarter: selectedQuarter() || value.quarter }));
+      setAvailableQuarters(dashboard.quarters.map((item) => item.code));
+      setF((value) => ({ ...value, quarter: dashboard.quarter?.code || value.quarter }));
       setDataVersion((value) => value + 1);
     };
     syncQuarter();
@@ -151,12 +165,12 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     window.addEventListener("reconciliation-quarter-updated", syncQuarter);
     window.addEventListener("reconciliation-dashboard-updated", syncQuarter);
     return () => { window.removeEventListener("reconciliation-quarter-selected", syncQuarter); window.removeEventListener("reconciliation-quarter-updated", syncQuarter); window.removeEventListener("reconciliation-dashboard-updated", syncQuarter); };
-  }, []);
+  }, [dashboard.quarters, dashboard.quarter]);
   // The cockpit only reports customers that have been reconciled.  A blank
   // customer-book amount is "未对账"; even a customer-book amount of 0 is valid.
   const sourceQuarterRows = useMemo(
-    () => cockpitRows.filter((row) => row.quarter === f.quarter),
-    [f.quarter, dataVersion],
+    () => dashboardRows.filter((row) => row.quarter === f.quarter),
+    [f.quarter, dashboardRows],
   );
   const quarterRows = useMemo(
     () =>
@@ -207,7 +221,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   // fields, including columns added after an older dashboard snapshot.
   const categoryRows = useMemo(
     () =>
-      latestQuarterlyCockpitRows().filter(
+      dashboardRows.filter(
         (row) =>
           row.quarter === f.quarter &&
           row.filled &&
@@ -219,17 +233,15 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
           (f.follow === "全部" || row.followStatus === f.follow),
       ),
-    [f, dataVersion],
+    [f, dashboardRows],
   );
   // 应对账总额固定取本季度对账明细：只排除未对账客户，不继承驾驶舱其余筛选条件。
   const reconciliationTotalRows = useMemo(() => {
-    const latestRows = latestQuarterlyCockpitRows();
-    const source = latestRows.length ? latestRows : cockpitRows;
-    return source.filter((row) => row.quarter === f.quarter && row.filled);
-  }, [f.quarter, dataVersion]);
+    return dashboardRows.filter((row) => row.quarter === f.quarter && row.filled);
+  }, [f.quarter, dashboardRows]);
   const pendingFollowUpRows = useMemo(
     () =>
-      issuesForQuarter(f.quarter).filter(
+      dashboardRows.filter(isPendingFollowUp).filter(
         (row) =>
           (f.region === "全部" || row.region === f.region) &&
           (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
@@ -238,7 +250,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           (f.cleared === "全部" || (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
           (f.follow === "全部" || row.followStatus === f.follow),
       ),
-    [f],
+    [f, dashboardRows],
   );
   const m = useMemo(() => {
     const currentDetailRows = categoryRows.length ? categoryRows : rows;
@@ -336,7 +348,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     .slice(0, 5);
   // D 区直接使用“未解决客户跟进”的待解决清单口径，不再额外按风险等级过滤。
   // 因此 Top10 与执行页的待解决客户一致，并以未解决金额从高到低排序。
-  const highRiskUnresolvedCustomers = issuesForQuarter(f.quarter)
+  const highRiskUnresolvedCustomers = dashboardRows.filter(isPendingFollowUp)
     .filter(
       (row) =>
         (f.region === "全部" || row.region === f.region) &&
@@ -350,11 +362,11 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   const priority = [...rows]
       .filter(isPendingFollowUp)
       .sort((a, b) => score(b) - score(a) || b.difference - a.difference),
-    trend = quarterOptions()
+    trend = dashboard.quarters.map((item) => item.code)
       .slice()
       .sort((a, b) => a.localeCompare(b))
       .map((quarter) => {
-        const reconciled = cockpitRows.filter(
+        const reconciled = dashboardRows.filter(
           (row) =>
             row.quarter === quarter &&
             row.filled &&
@@ -385,7 +397,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     compare = trend.length > 1 ? trend.at(-1)!.rate - trend.at(-2)!.rate : 0;
   const change = (key: keyof Filters, value: string) => {
       if (key === "quarter") {
-        selectQuarter(value);
+        dashboard.selectQuarter(value);
         setF((current) => ({
           ...current,
           quarter: value,
@@ -398,11 +410,11 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       setF((current) => ({ ...current, [key]: value }));
     },
     refreshData = () => {
-      updateDashboardSnapshot();
-      setAvailableQuarters(quarterOptions());
+      dashboard.refresh();
+      setAvailableQuarters(dashboard.quarters.map((item) => item.code));
       setF((current) => ({
         ...current,
-        quarter: selectedQuarter() || current.quarter,
+        quarter: dashboard.quarter?.code || current.quarter,
       }));
       setDataVersion((current) => current + 1);
     },
@@ -410,7 +422,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       setModal({ title, rows: list });
   const openAgingReconciliation = (detail: DifferenceAgingDetail) => {
     localStorage.setItem("reconciliation-detail-target", JSON.stringify(detail));
-    selectQuarter(detail.quarter);
+    dashboard.selectQuarter(detail.quarter);
     window.dispatchEvent(new CustomEvent("reconciliation-open-current-detail", { detail }));
     setAgingBucket(null);
   };
@@ -551,7 +563,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           <button
             onClick={() =>
               setF({
-                quarter: selectedQuarter() || f.quarter,
+                quarter: dashboard.quarter?.code || f.quarter,
                 region: "全部",
                 accountSet: "全部",
                 owner: "全部",

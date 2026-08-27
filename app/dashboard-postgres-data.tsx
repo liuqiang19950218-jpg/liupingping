@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { reconciliationApi, type Quarter, type Reconciliation } from "../lib/api/reconciliation-api";
+import { reconciliationApi, type MaterialStatus, type Quarter, type QuarterDifferenceItem, type QuarterFollowupItem, type Reconciliation } from "../lib/api/reconciliation-api";
 
 const SELECTED_QUARTER_KEY = "postgres-quarterly-reconciliation-selected-quarter";
 
@@ -10,6 +10,12 @@ export type DashboardData = {
   quarters: DashboardQuarter[];
   quarter: DashboardQuarter | null;
   rows: Reconciliation[];
+  reconciliationById: Map<string, Reconciliation>;
+  differenceItems: QuarterDifferenceItem[];
+  differencesByReconciliation: Map<string, QuarterDifferenceItem[]>;
+  followups: QuarterFollowupItem[];
+  followupsByReconciliation: Map<string, QuarterFollowupItem[]>;
+  materialStatus: MaterialStatus[];
   loading: boolean;
   error: string | null;
   selectQuarter: (code: string) => void;
@@ -42,6 +48,9 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   const [quarters, setQuarters] = useState<DashboardQuarter[]>([]);
   const [quarterCode, setQuarterCode] = useState("");
   const [rows, setRows] = useState<Reconciliation[]>([]);
+  const [differenceItems, setDifferenceItems] = useState<QuarterDifferenceItem[]>([]);
+  const [followups, setFollowups] = useState<QuarterFollowupItem[]>([]);
+  const [materialStatus, setMaterialStatus] = useState<MaterialStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
@@ -68,23 +77,49 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   }, [revision]);
 
   useEffect(() => {
-    if (!quarterCode) { setRows([]); return; }
+    if (!quarterCode) { setRows([]); setDifferenceItems([]); setFollowups([]); setMaterialStatus([]); return; }
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    reconciliationApi.list(quarterCode, controller.signal)
-      .then(({ reconciliations }) => { if (!controller.signal.aborted) setRows(reconciliations); })
+    Promise.all([
+      reconciliationApi.list(quarterCode, controller.signal),
+      reconciliationApi.listQuarterDifferenceItems(quarterCode, controller.signal),
+      reconciliationApi.listQuarterFollowups(quarterCode, controller.signal),
+      reconciliationApi.getMaterialStatus(quarterCode, undefined, controller.signal),
+    ])
+      .then(([reconciliationResult, differenceResult, followupResult, materialResult]) => {
+        if (controller.signal.aborted) return;
+        setRows(reconciliationResult.reconciliations);
+        setDifferenceItems(differenceResult.items);
+        setFollowups(followupResult.items);
+        setMaterialStatus(materialResult.material);
+      })
       .catch((caught: unknown) => {
-        if (!controller.signal.aborted) { setRows([]); setError(caught instanceof Error ? caught.message : "无法读取本季度对账数据"); }
+        if (!controller.signal.aborted) {
+          setRows([]); setDifferenceItems([]); setFollowups([]); setMaterialStatus([]);
+          setError(caught instanceof Error ? caught.message : "无法读取本季度看板数据");
+        }
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [quarterCode, revision]);
 
-  const value = useMemo<DashboardData>(() => ({
+  const value = useMemo<DashboardData>(() => {
+    const reconciliationById = new Map(rows.map((item) => [item.id, item]));
+    const group = <T extends { reconciliationId: string }>(items: T[]) => items.reduce((result, item) => {
+      const list = result.get(item.reconciliationId) ?? [];
+      list.push(item); result.set(item.reconciliationId, list); return result;
+    }, new Map<string, T[]>());
+    return ({
     quarters,
     quarter: quarters.find((item) => item.code === quarterCode) ?? null,
     rows,
+    reconciliationById,
+    differenceItems,
+    differencesByReconciliation: group(differenceItems),
+    followups,
+    followupsByReconciliation: group(followups),
+    materialStatus,
     loading,
     error,
     selectQuarter: (code) => {
@@ -92,7 +127,8 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       setQuarterCode(code);
     },
     refresh: () => setRevision((current) => current + 1),
-  }), [quarters, quarterCode, rows, loading, error]);
+  });
+  }, [quarters, quarterCode, rows, differenceItems, followups, materialStatus, loading, error]);
 
   return <DashboardDataContext.Provider value={value}>{children}</DashboardDataContext.Provider>;
 }

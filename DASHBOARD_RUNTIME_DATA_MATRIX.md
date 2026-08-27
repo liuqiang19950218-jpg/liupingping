@@ -7,11 +7,11 @@
 | `CurrentYearLinkedSummary` | 客户数、对清率、未对清差额 | `cockpitRows` → `local-quarterly-reconciliation(-archive)` | 区域、客户账面金额、状态、差额 | 无 | 当前季度 | 已迁移为 `GET reconciliations` |
 | `DashboardOverview` | 账实相符率、核心异常、未对清明细 Drawer | `cockpitRows` / `sheetForQuarter` | 账套、区域、客户、负责人、公司应收、客户账面、差额、状态 | 无 | 当前季度 | 已迁移为 `GET reconciliations` |
 | `ReconciliationHistoryDashboard` | 趋势柱线图、区域对清表 | `latestQuarterlyCockpitRows`、历史硬编码趋势 | 区域、客户账面金额、状态 | 无 | 多季度 | 已迁移：`GET /api/quarters` + 每季度一次 `GET reconciliations` |
-| `ManagementCockpit` | KPI、区域排名、差额结构、账龄、风险、趋势、钻取 | `cockpitRows`、`latestQuarterlyCockpitRows`、`reconciliation-insights` | 基础 KPI 可用；分类/发票/跟进字段不足 | difference_items、followup | 当前 + 多季度 | 部分字段可算；完整现有 UI 需聚合 API，未迁移以避免 N+1 |
-| `DifferenceAgingAnalysis` / `DifferenceStructureChart` | 差额分类、发票账龄、明细 Drawer | `CockpitRow.differenceInvoices`，来自本地 detail | 无法由 reconciliation 返回 | difference_items | 当前季度 | 阻断：需季度级 difference-items |
+| `ManagementCockpit` | KPI、区域排名、差额结构、账龄、风险、趋势、钻取 | shared DashboardDataProvider | reconciliation + difference/followup Map join | difference_items、followup | 当前 + 多季度 | 当前季度已迁移为 4 个 quarter-level PG 请求；不使用逐 reconciliation 请求 |
+| `DifferenceAgingAnalysis` / `DifferenceStructureChart` | 差额分类、发票账龄、明细 Drawer | ManagementCockpit PG ViewModel | reconciliation Map join + difference-items | difference_items | 当前季度 | 已由 ManagementCockpit 的 shared differenceItems 派生；无逐行 HTTP |
 | `ProblemDashboard` | 问题阶段、责任人、风险、超期、关闭数 | `reconciliation-insights` + `resolved-followup-archive` | 负责人、差额、解决方案可用；阶段/最新跟进/关闭不足 | followup | 当前季度 | 阻断：需季度级 followup 聚合 |
 | `UnresolvedFollowupDashboard` | 待解决清单、跟进编辑、账龄与区域图 | `sheetForQuarter` / `writeArchivedSheet` | 基础客户字段可用；完整跟进事件不足 | followup | 当前季度 | 阻断：需季度级 followup 聚合；现有写入不可改为逐条读取 |
-| `Q1ActionPanel` / `Q1SpecialPanels` | Q1 专项、SPD、回款/资料 Drilldown | `sheetForQuarter`、`spdSheetForQuarter` | 不完整 | material + 独立 SPD 数据 | 当前季度 | 不属于 reconciliation-only，保留旧实现；需单独 API 设计 |
+| `Q1ActionPanel` / `Q1SpecialPanels` | Q1 专项、SPD、回款/资料 Drilldown | ActionPanel: shared PG rows；SpecialPanels: `sheetForQuarter`、`spdSheetForQuarter` | ActionPanel 已可用；SpecialPanels 不完整 | material + 独立 SPD 数据 | 当前季度 | Q1ActionPanel 已迁 PG；Q1SpecialPanels 仍需独立 SPD API，`ADDITIONAL_DASHBOARD_API_REQUIRED` |
 | `ImportDashboard` | 本机导入历史 | `import-history` | 不适用 | import history | 跨季度 | 任务明确 deferred：`IMPORT_HISTORY_UI_REQUIRED_LATER = YES` |
 
 ## API 与请求评估
