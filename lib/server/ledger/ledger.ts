@@ -237,6 +237,18 @@ function headerIndex(headers: unknown[], names: string[]): number {
   });
 }
 
+// Resolve the effective header row + the rows that follow it.
+//
+// Two input contracts are accepted (both are produced by real callers):
+//   Format A (current browser, readLedgerSourceFiles):
+//     { headers: ["发票号", "开票日期", "本期应收", ...], rows: [[...data...], ...] }
+//     -> use file.headers directly; every file.rows entry is a data row.
+//   Format B (legacy harness / inline payload):
+//     { headers: [], rows: [[可能说明行], ["发票号", ...], [...data...]] }
+//     -> scan the first 5 rows of file.rows for a recognized header row.
+// Priority: a valid separated `headers` array wins; otherwise fall back to the
+// in-rows scan. This keeps the browser contract clean (headers + data rows)
+// while preserving backward compatibility with the old inline-header shape.
 export function parseLedgerSourceFile(file: LedgerSourceFile): {
   keys: string[];
   rows: { invoice: string; date8: string; amountCents: string; key: string }[];
@@ -244,6 +256,43 @@ export function parseLedgerSourceFile(file: LedgerSourceFile): {
   headerRowFound: boolean;
 } {
   const all = file.rows;
+  const separatedHeaders = Array.isArray(file.headers)
+    ? file.headers.map((header) => String(header ?? "").replace(/\s/g, ""))
+    : [];
+
+  // Format A: separated headers array that actually recognizes ALL THREE of the
+  // invoice/date/amount fields. If any field is missing we fall through to the
+  // in-rows scan (the separated array may be a malformed/partial caller value
+  // while the real header row lives in rows[0..5]).
+  if (
+    separatedHeaders.length > 0 &&
+    separatedHeaders.some((header) =>
+      INVOICE_ALIASES.some((alias) => header.includes(alias)),
+    )
+  ) {
+    const invoiceAt = headerIndex(separatedHeaders, INVOICE_ALIASES);
+    const dateAt = headerIndex(separatedHeaders, DATE_ALIASES);
+    const amountAt = headerIndex(separatedHeaders, AMOUNT_ALIASES);
+    if (invoiceAt >= 0 && dateAt >= 0 && amountAt >= 0) {
+      const rows: { invoice: string; date8: string; amountCents: string; key: string }[] = [];
+      const seen = new Set<string>();
+      for (const row of all) {
+        const invoice = normalizeInvoice(row[invoiceAt]);
+        const date8 = normalizeDateToYyyymmdd(row[dateAt]);
+        const amount = toNumber(row[amountAt]);
+        if (!invoice || date8.length !== 8) continue;
+        const amountCents = amount.toFixed(2);
+        const key = canonicalVerificationKey(invoice, date8, amount);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        rows.push({ invoice, date8, amountCents, key });
+      }
+      return { keys: [...seen], rows, qualified: seen.size, headerRowFound: true };
+    }
+    // Partial/invalid separated headers -> fall through to Format B scan.
+  }
+
+  // Format B (fallback): scan the first 5 rows of file.rows for a header row.
   const headerRow = all
     .slice(0, 5)
     .find((row) => headerIndex(row, INVOICE_ALIASES) >= 0);

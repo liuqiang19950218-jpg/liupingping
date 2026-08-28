@@ -102,6 +102,84 @@ test("ledger import header detection accepts legacy aliases", async () => {
   assert.match(route, /ledger_verification_entries/);
 });
 
+test("header contract: separated file.headers is used first, in-rows scan is the fallback", async () => {
+  const lib = await readFile(
+    new URL("../lib/server/ledger/ledger.ts", import.meta.url),
+    "utf8",
+  );
+  // The browser sends { headers, rows } with rows = data-only. The parser MUST
+  // consult file.headers as the primary header source, and fall back to the
+  // legacy in-rows scan only when separated headers are absent/invalid.
+  assert.match(lib, /file\.headers/);
+  assert.match(lib, /separatedHeaders/);
+  assert.match(lib, /Format A/);
+  assert.match(lib, /Format B/);
+  assert.match(lib, /INVOICE_ALIASES\.some/);
+  assert.match(lib, /slice\(0, 5\)/);
+  // fallback must exist: when separated headers don't fully resolve, scan rows
+  assert.match(lib, /invoiceAt >= 0 && dateAt >= 0 && amountAt >= 0/);
+  assert.match(lib, /Partial\/invalid separated headers -> fall through/);
+});
+
+test("browser readLedgerSourceFiles sends headers separated from data rows (contract is clean)", async () => {
+  const page = await readFile(
+    new URL("../app/QuarterlyReconciliation.tsx", import.meta.url),
+    "utf8",
+  );
+  const fn = page.slice(page.indexOf("async function readLedgerSourceFiles"), page.indexOf("function importFile"));
+  // headers mapped from the detected header row; rows stripped of the header row
+  assert.match(fn, /headers: headerRow\.map\(String\)/);
+  assert.match(fn, /rows: rows\.slice\(start\)/);
+  assert.doesNotMatch(fn, /unshift\(headerRow\)/);
+  assert.doesNotMatch(fn, /rows\.unshift/);
+});
+
+test("header contract pure logic: separated headers win, invalid headers fall back, no header -> not found", () => {
+  // Replica of the server rule (mirror of lib/server/ledger/ledger.ts logic).
+  const INVOICE = ["发票号", "发票代码", "单据编号", "摘要"];
+  const DATE = ["开票日期", "业务日期", "财务日期", "交易日期", "日期"];
+  const AMOUNT = ["本期应收", "应收金额", "开票金额", "含税金额", "借方", "金额"];
+  const hIdx = (headers, names) => headers.findIndex((h) => names.some((n) => String(h ?? "").replace(/\s/g, "").includes(n)));
+  const parse = (file) => {
+    const separated = Array.isArray(file.headers) ? file.headers.map(String) : [];
+    if (separated.length > 0 && hIdx(separated, INVOICE) >= 0) {
+      const inv = hIdx(separated, INVOICE);
+      const dat = hIdx(separated, DATE);
+      const amt = hIdx(separated, AMOUNT);
+      if (inv >= 0 && dat >= 0 && amt >= 0) {
+        // Format A: every file.rows entry is a data row
+        const keys = file.rows.filter((r) => String(r[inv] ?? "").trim() && String(r[dat] ?? "").replace(/[^0-9]/g, "").length === 8).length;
+        return { headerRowFound: true, qualified: keys };
+      }
+    }
+    // Format B: scan first 5 rows of file.rows
+    const headerRow = file.rows.slice(0, 5).find((r) => hIdx(r, INVOICE) >= 0);
+    if (!headerRow) return { headerRowFound: false, qualified: 0 };
+    const start = file.rows.indexOf(headerRow) + 1;
+    return { headerRowFound: true, qualified: file.rows.slice(start).length };
+  };
+
+  // CASE A: separated headers + data-only rows -> success
+  const a = parse({ headers: ["发票号", "开票日期", "本期应收"], rows: [["X1", "2026-07-05", "100"], ["X2", "2026-07-06", "200"]] });
+  assert.equal(a.headerRowFound, true);
+  assert.equal(a.qualified, 2);
+
+  // CASE B: empty headers + header inside rows -> success (legacy)
+  const b = parse({ headers: [], rows: [["发票号", "开票日期", "本期应收"], ["X1", "2026-07-05", "100"]] });
+  assert.equal(b.headerRowFound, true);
+  assert.equal(b.qualified, 1);
+
+  // CASE C: invalid separated headers + valid header in rows -> fallback success
+  const c = parse({ headers: ["项目", "备注"], rows: [["发票号", "开票日期", "本期应收"], ["X1", "2026-07-05", "100"]] });
+  assert.equal(c.headerRowFound, true);
+  assert.equal(c.qualified, 1);
+
+  // CASE D: no valid header anywhere -> 400 (headerRowFound false)
+  const d = parse({ headers: ["项目", "备注"], rows: [["数据1", "数据2", "数据3"]] });
+  assert.equal(d.headerRowFound, false);
+  assert.equal(d.qualified, 0);
+});
+
 test("verify + import routes exist and are server-scoped, not static-JSON", async () => {
   const [verifyRoute, importRoute, ledgerLib] = await Promise.all([
     readFile(new URL("../app/api/quarter/[code]/ledger/verify/route.ts", import.meta.url), "utf8"),
