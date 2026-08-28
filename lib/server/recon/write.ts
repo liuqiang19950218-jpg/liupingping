@@ -17,6 +17,7 @@ import {
   withPostgresTransaction,
 } from "../../../db/postgres";
 import { invalidInput, notFound, conflict } from "./errors";
+import { verifyLedgerInvoice } from "../ledger/ledger";
 
 const AMOUNT_RE = /^-?\d+(\.\d{1,2})?$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -36,6 +37,26 @@ export const VERIFICATION_STATUSES = [
   "matched",
   "mismatched",
 ] as const;
+
+// Categories that carry an invoice and MUST be verified against the company
+// ledger. Mirrors the legacy UI (`invoice: true`): transit/returned/lost/
+// instrument/otherInvoice in the NEW write taxonomy, PLUS the migrated legacy
+// category values verbatim (returned_invoice/lost_invoice/equipment/
+// other_with_invoice) which the DB stores as-is for migrated quarters.
+// `other` and `other_without_invoice` are 无发票 -> not_applicable.
+export const LEDGER_VERIFICATION_CATEGORIES = new Set<string>([
+  // new write taxonomy
+  "transit",
+  "returned",
+  "lost",
+  "instrument",
+  "otherInvoice",
+  // migrated legacy taxonomy (verbatim values in recon.difference_items)
+  "returned_invoice",
+  "lost_invoice",
+  "equipment",
+  "other_with_invoice",
+]);
 
 type Row = Record<string, unknown>;
 
@@ -147,10 +168,11 @@ async function resolveDifferenceItemInQuarter(
   client: { query: (sql: string, params?: unknown[]) => Promise<{ rowCount: number | null; rows: Row[] }> },
   quarterCode: string,
   itemId: string,
-): Promise<{ id: string; reconciliationId: string; invoiceNo: string | null; invoiceDate: string | null }> {
+): Promise<{ id: string; reconciliationId: string; invoiceNo: string | null; invoiceDate: string | null; category: string; differenceAmount: string | null }> {
   const res = await client.query(
     `SELECT d.id, d.reconciliation_id::text, d.invoice_no,
             to_char(d.invoice_date, 'YYYY-MM-DD') AS invoice_date,
+            d.category, d.difference_amount::text AS difference_amount,
             q.code AS quarter_code
      FROM recon.difference_items d
      JOIN recon.reconciliations r ON r.id = d.reconciliation_id
@@ -166,6 +188,8 @@ async function resolveDifferenceItemInQuarter(
     reconciliationId: row.reconciliation_id as string,
     invoiceNo: (row.invoice_no as string | null) ?? null,
     invoiceDate: (row.invoice_date as string | null) ?? null,
+    category: row.category as string,
+    differenceAmount: (row.difference_amount as string | null) ?? null,
   };
 }
 
@@ -333,6 +357,49 @@ function normalizeVerificationStatus(value: unknown): string {
   return value;
 }
 
+// Server-authoritative ledger verification enforcement (Phase 2G.1).
+// The client may send a verificationStatus, but it is NEVER trusted as the
+// final decision for invoice categories. The server queries the PostgreSQL
+// ledger dataset (active HISTORICAL_BASE UNION current quarter snapshot) and
+// decides matched / not_found itself. A required verification that does not
+// match is REJECTED (409) so a forged "matched" cannot be persisted.
+async function enforceLedgerVerification(
+  client: { query: (sql: string, params?: unknown[]) => Promise<{ rowCount: number | null; rows: Row[] }> },
+  quarterCode: string,
+  category: string,
+  invoiceNo: string | null,
+  invoiceDate: string | null,
+  amount: string | null,
+): Promise<{ verificationStatus: string; matchedDatasetType: string | null; matchedDatasetId: string | null }> {
+  // 无发票类别 (other) is not applicable.
+  if (!LEDGER_VERIFICATION_CATEGORIES.has(category)) {
+    return { verificationStatus: "not_applicable", matchedDatasetType: null, matchedDatasetId: null };
+  }
+  // Blank invoice rows in an invoice category have no ledger requirement.
+  if (!invoiceNo) {
+    return { verificationStatus: "not_applicable", matchedDatasetType: null, matchedDatasetId: null };
+  }
+  // An invoice number present but no date/amount cannot be verified.
+  if (!invoiceDate || !amount) {
+    throw invalidInput("发票类差额必须提供发票日期和金额用于往来核验");
+  }
+  const result = await verifyLedgerInvoice(client, quarterCode, {
+    invoiceNo,
+    invoiceDate,
+    amount,
+  });
+  if (!result.matched) {
+    throw conflict(
+      `发票 ${invoiceNo}（${invoiceDate}，${amount}）未在公司往来底账中找到（LEDGER_INVOICE_NOT_FOUND）`,
+    );
+  }
+  return {
+    verificationStatus: "matched",
+    matchedDatasetType: result.matchedDatasetType,
+    matchedDatasetId: result.matchedDatasetId,
+  };
+}
+
 function normalizeAttachmentKeys(value: unknown): string[] {
   if (value === undefined || value === null) return [];
   if (
@@ -379,7 +446,17 @@ export async function createDifferenceItem(
     }
     const amount = requiredAmount(input.differenceAmount, "差额金额");
     const description = normalizeString(input.differenceDescription, "差额说明");
-    const verificationStatus = normalizeVerificationStatus(input.verificationStatus);
+    // Server-authoritative: the client's verificationStatus is NOT trusted for
+    // invoice categories; the server verifies against the PG ledger and decides.
+    const enforced = await enforceLedgerVerification(
+      client,
+      quarterCode,
+      category,
+      invoiceNo,
+      invoiceDate,
+      amount,
+    );
+    const verificationStatus = enforced.verificationStatus;
     const attachmentKeys = normalizeAttachmentKeys(input.attachmentKeys);
 
     const res = await client.query(
@@ -419,9 +496,13 @@ export async function updateDifferenceItem(
 
     let nextInvoiceNo = item.invoiceNo;
     let nextInvoiceDate = item.invoiceDate;
+    let nextCategory = item.category;
+    let nextAmount = item.differenceAmount;
+    let verificationFieldsChanged = false;
     if ("invoiceNo" in input) {
       nextInvoiceNo = normalizeString(input.invoiceNo, "发票号");
       pushSet("invoice_no", nextInvoiceNo);
+      verificationFieldsChanged = true;
     }
     if ("invoiceDate" in input) {
       nextInvoiceDate =
@@ -429,18 +510,39 @@ export async function updateDifferenceItem(
           ? null
           : normalizeDate(input.invoiceDate, "发票日期");
       pushSet("invoice_date", nextInvoiceDate);
+      verificationFieldsChanged = true;
     }
     if (nextInvoiceDate && !nextInvoiceNo) {
       throw invalidInput("提供发票日期时必须同时提供发票号");
     }
-    if ("category" in input) pushSet("category", normalizeCategory(input.category));
+    if ("category" in input) {
+      nextCategory = normalizeCategory(input.category);
+      pushSet("category", nextCategory);
+      verificationFieldsChanged = true;
+    }
     if ("differenceAmount" in input) {
-      pushSet("difference_amount", requiredAmount(input.differenceAmount, "差额金额"));
+      nextAmount = requiredAmount(input.differenceAmount, "差额金额");
+      pushSet("difference_amount", nextAmount);
+      verificationFieldsChanged = true;
     }
     if ("differenceDescription" in input) {
       pushSet("difference_description", normalizeString(input.differenceDescription, "差额说明"));
     }
-    if ("verificationStatus" in input) {
+    // Server-authoritative verification: when any verification-relevant field
+    // changed (category/invoiceNo/invoiceDate/amount), re-verify against the PG
+    // ledger and override verification_status. A client-supplied
+    // verificationStatus is NEVER trusted for invoice categories.
+    if (verificationFieldsChanged) {
+      const enforced = await enforceLedgerVerification(
+        client,
+        quarterCode,
+        nextCategory,
+        nextInvoiceNo,
+        nextInvoiceDate,
+        nextAmount,
+      );
+      pushSet("verification_status", enforced.verificationStatus);
+    } else if ("verificationStatus" in input) {
       pushSet("verification_status", normalizeVerificationStatus(input.verificationStatus));
     }
     if ("attachmentKeys" in input) {

@@ -26,6 +26,33 @@ export type QuarterImportResult = {
   sourceSha256: string;
   batchKey: string;
 };
+// PostgreSQL ledger verification runtime (Phase 2G.1).
+export type LedgerVerificationResult = {
+  matched: boolean;
+  status: "matched" | "not_found";
+  matchedDatasetType: "HISTORICAL_BASE" | "CURRENT_YEAR_QUARTER" | null;
+  matchedDatasetId: string | null;
+  invoiceNo: string;
+  invoiceDate: string | null;
+  invoiceAmount: string | null;
+  matchCount: number;
+};
+export type QuarterLedgerImportResult = {
+  quarter: string;
+  status: "IMPORTED";
+  datasetId: string;
+  datasetType: "CURRENT_YEAR_QUARTER";
+  version: number;
+  sourceFiles: string[];
+  sourceSha256: string;
+  insertedRows: number;
+  distinctInvoices: number;
+};
+export type LedgerSourceFileInput = {
+  sourceFileName: string;
+  headers: string[];
+  rows: unknown[][];
+};
 // Quarter-scoped dashboard aggregate reads (Phase 2F.1). Each item carries
 // reconciliationId for Map-join with the shared reconciliation dataset; amounts
 // are NUMERIC-as-string; NULL stays NULL.
@@ -125,6 +152,8 @@ export const reconciliationApi = {
   listQuarterDifferenceItems: (quarter: string, signal?: AbortSignal) => request<{ quarter: string; count: number; items: QuarterDifferenceItem[] }>(`/api/quarter/${encodeURIComponent(quarter)}/difference-items`, {}, signal),
   listQuarterFollowups: (quarter: string, signal?: AbortSignal) => request<{ quarter: string; count: number; eventCount: number; items: QuarterFollowupItem[] }>(`/api/quarter/${encodeURIComponent(quarter)}/followups`, {}, signal),
   getSpdDashboard: (quarter: string, signal?: AbortSignal) => request<SpdDashboardData>(`/api/quarter/${encodeURIComponent(quarter)}/spd-dashboard`, {}, signal),
+  verifyLedgerInvoice: (quarter: string, body: { invoiceNo?: string; invoiceDate?: string; amount?: string }, signal?: AbortSignal) => request<LedgerVerificationResult>(`/api/quarter/${encodeURIComponent(quarter)}/ledger/verify`, { method: "POST", body: JSON.stringify(body) }, signal),
+  importQuarterLedger: (quarter: string, body: { sourceFiles: LedgerSourceFileInput[] }) => request<QuarterLedgerImportResult>(`/api/quarter/${encodeURIComponent(quarter)}/ledger/import`, { method: "POST", body: JSON.stringify(body) }),
   upsertMaterialStatus: (quarter: string, body: Omit<MaterialStatus, "id">, id?: string) => request(id ? `${base(quarter, id)}/material-status` : `/api/quarter/${encodeURIComponent(quarter)}/material-status`, { method: id ? "POST" : "PUT", body: JSON.stringify(body) }),
   updateMaterialStatus: (quarter: string, materialId: string, body: Partial<MaterialStatus>, id?: string) => request(id ? `${base(quarter, id)}/material-status/${encodeURIComponent(materialId)}` : `/api/quarter/${encodeURIComponent(quarter)}/material-status/${encodeURIComponent(materialId)}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteMaterialStatus: (quarter: string, materialId: string, id?: string) => request(id ? `${base(quarter, id)}/material-status/${encodeURIComponent(materialId)}` : `/api/quarter/${encodeURIComponent(quarter)}/material-status/${encodeURIComponent(materialId)}`, { method: "DELETE" }),
