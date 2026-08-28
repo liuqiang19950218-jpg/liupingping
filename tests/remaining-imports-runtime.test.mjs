@@ -205,7 +205,7 @@ test("RECVBL-13 NULL customerBook -> difference stays NULL (never 0, never 未�
 
 test("RECVBL-13b server recompute SQL: NULL book -> NULL difference", async () => {
   const lib = await readFile(new URL("../lib/server/recon/receivables-import.ts", import.meta.url), "utf8");
-  assert.match(lib, /CASE WHEN customer_book_amount IS NULL\n\s+THEN NULL/);
+  assert.match(lib, /CASE WHEN customer_book_amount IS NULL\r?\n\s+THEN NULL/);
   assert.match(lib, /ELSE \$2::numeric - customer_book_amount END/);
   assert.doesNotMatch(lib, /reconciliation_difference = 0/);
 });
@@ -339,4 +339,31 @@ test("AUDIT-24 four entry types all produce PG import_batches audit metadata", a
   }
   // Historical import is global: quarter_id NULL.
   assert.match(hist, /VALUES \(NULL, \$1, \$2, \$3/);
+});
+
+// --- FRONTEND CUTOVER ------------------------------------------------------
+test("FRONTEND-27 remaining imports use their PostgreSQL client methods and retain no legacy business write", async () => {
+  const page = await readFile(new URL("../app/QuarterlyReconciliation.tsx", import.meta.url), "utf8");
+  for (const method of [
+    "importMaterials(quarter, { sourceFileName: file.name, headers: sourceHeaders, rows: sourceRows })",
+    "importSpdDashboard(quarter, { sourceFileName: file.name, headers, rows })",
+    "importCompanyReceivables(quarter, { sourceFileName: file.name, headers: sourceHeaders, rows: sourceRows })",
+    "replaceHistoricalLedger({ sourceFiles })",
+  ]) assert.match(page, new RegExp(method.replace(/[{}()[\].?+*^$|\\]/g, "\\$&")));
+  const material = page.slice(page.indexOf("async function importMaterials"), page.indexOf("async function importCompanyReceivables"));
+  const company = page.slice(page.indexOf("async function importCompanyReceivables"), page.indexOf("async function importSpdSheet"));
+  const spd = page.slice(page.indexOf("async function importSpdSheet"), page.indexOf("async function importCurrentLedger"));
+  assert.doesNotMatch(material, /saveSheet\(|writeArchivedSheet\(/);
+  assert.doesNotMatch(company, /saveSheet\(|writeArchivedSheet\(/);
+  assert.doesNotMatch(spd, /writeSpdSheetForQuarter\(/);
+});
+
+test("FRONTEND-28 historical replacement is multi-file and explicitly confirmed before API submission", async () => {
+  const page = await readFile(new URL("../app/QuarterlyReconciliation.tsx", import.meta.url), "utf8");
+  const historical = page.slice(page.indexOf("async function importHistoricalLedger"), page.indexOf("async function commit"));
+  assert.match(historical, /readLedgerSourceFiles\(files\)/);
+  assert.match(historical, /window\.confirm\("替换后，新历史往来底库将成为当前核验版本；旧版本会保留，不会删除。是否继续？"\)/);
+  assert.match(historical, /replaceHistoricalLedger\(\{ sourceFiles \}\)/);
+  assert.match(page, /onChange=\{importHistoricalLedger\}/);
+  assert.match(page, /multiple/);
 });

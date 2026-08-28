@@ -18,7 +18,6 @@ import {
   selectedQuarter,
   sheetForQuarter,
   removeArchivedSheet,
-  writeSpdSheetForQuarter,
   writeArchivedSheet,
 } from "./quarter-storage";
 import { ImportDashboard } from "./ImportDashboard";
@@ -644,6 +643,10 @@ export function QuarterlyReconciliation({
   const [currentLedgerInfo, setCurrentLedgerInfo] =
     useState<LedgerUpload | null>(null);
   const [uploadingLedger, setUploadingLedger] = useState(false);
+  const [importingMaterials, setImportingMaterials] = useState(false);
+  const [importingSpd, setImportingSpd] = useState(false);
+  const [importingCompanyReceivables, setImportingCompanyReceivables] = useState(false);
+  const [replacingHistoricalLedger, setReplacingHistoricalLedger] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [columnFilters, setColumnFilters] = useState<Record<number, string>>(
     {},
@@ -672,6 +675,25 @@ export function QuarterlyReconciliation({
   const [importingQuarter, setImportingQuarter] = useState(false);
   const [importedQuarter, setImportedQuarter] = useState("");
   const apiRequest = useRef<AbortController | null>(null);
+  const currentPostgresQuarter = () => {
+    const quarter = toPostgresQuarterCode(activeQuarter);
+    return quarter && postgresQuarters.includes(quarter) ? quarter : null;
+  };
+  const refreshPostgresImportState = async (quarter: string, includeMaterial = false) => {
+    const [reconciliationResult, materialResult] = await Promise.all([
+      reconciliationApi.list(quarter),
+      includeMaterial ? reconciliationApi.getMaterialStatus(quarter) : Promise.resolve(null),
+    ]);
+    // The legacy import view persists every sheet change to its archive.  These
+    // business imports must only refresh PostgreSQL-backed state, never seed it.
+    if (mode !== "import") {
+      setSheet(apiSheet(quarter, reconciliationResult.reconciliations, materialResult?.material ?? []));
+      setApiIds(reconciliationResult.reconciliations.map((item) => item.id));
+      setApiDifferenceItems({});
+      setRefreshNonce((current) => current + 1);
+    }
+    window.dispatchEvent(new Event("reconciliation-dashboard-updated"));
+  };
   const setFilterColumn = (column: number | null) => {
     rawSetFilterColumn(null);
     if (column !== null)
@@ -1311,14 +1333,15 @@ export function QuarterlyReconciliation({
   async function importMaterials(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!sheet) {
-      setMessage(
-        "\u8bf7\u5148\u4e0a\u4f20\u5bf9\u8d26\u5b63\u5ea6\u8868\uff0c\u518d\u5bfc\u5165\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868\u3002",
-      );
+    const quarter = currentPostgresQuarter();
+    if (!quarter) {
+      setMessage("当前没有有效的 PostgreSQL 季度，无法导入资料提供情况表。");
       event.target.value = "";
       return;
     }
+    setImportingMaterials(true);
     try {
+      setMessage("正在解析 Excel…");
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const all = XLSX.utils.sheet_to_json<unknown[]>(
         workbook.Sheets[workbook.SheetNames[0]],
@@ -1330,82 +1353,23 @@ export function QuarterlyReconciliation({
         .filter((row) =>
           row.some((value) => String(value ?? "").trim() !== ""),
         );
-      const sourceAccount = headerIndex(sourceHeaders, ["\u8d26\u5957"]),
-        sourceRegion = headerIndex(sourceHeaders, [T.region]),
-        sourceCustomer = headerIndex(sourceHeaders, [T.customer]);
-      if (sourceAccount < 0 || sourceRegion < 0 || sourceCustomer < 0)
-        throw new Error(
-          "\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868\u5fc5\u987b\u5305\u542b\u8d26\u5957\u3001\u533a\u57df\u3001\u5ba2\u6237\u540d\u79f0\u5217\u3002",
-        );
-      const headers = [...sheet.headers];
-      MATERIAL_HEADERS.forEach((header) => {
-        if (!headers.includes(header)) headers.push(header);
-      });
-      const prepared = placeMaterialHeaders({
-        ...sheet,
-        headers,
-        rows: sheet.rows.map((row) => [...row]),
-      });
-      const accountAt = headerIndex(prepared.headers, ["\u8d26\u5957"]),
-        targetRegion = headerIndex(prepared.headers, [T.region]),
-        targetCustomer = headerIndex(prepared.headers, [T.customer]);
-      if (accountAt < 0 || targetRegion < 0 || targetCustomer < 0)
-        throw new Error(
-          "\u672c\u5e74\u5ea6\u5bf9\u8d26\u8868\u5fc5\u987b\u5305\u542b\u8d26\u5957\u3001\u533a\u57df\u3001\u5ba2\u6237\u540d\u79f0\u5217\u3002",
-        );
-      const key = (account: unknown, area: unknown, customer: unknown) =>
-        [account, area, customer]
-          .map((value) =>
-            String(value ?? "")
-              .replace(/\s/g, "")
-              .trim(),
-          )
-          .join("|");
-      const sourceByKey = new Map<string, unknown[]>();
-      sourceRows.forEach((row) => {
-        const matchKey = key(
-          row[sourceAccount],
-          row[sourceRegion],
-          row[sourceCustomer],
-        );
-        if (matchKey !== "||") sourceByKey.set(matchKey, row);
-      });
-      const sourceMaterials = MATERIAL_HEADERS.map((header) =>
-        headerIndex(sourceHeaders, materialImportAliases(header)),
-      );
-      const targetMaterials = MATERIAL_HEADERS.map((header) =>
-        prepared.headers.indexOf(header),
-      );
-      let matched = 0;
-      const rows = prepared.rows.map((row) => {
-        const source = sourceByKey.get(
-          key(row[accountAt], row[targetRegion], row[targetCustomer]),
-        );
-        if (!source) return row;
-        matched += 1;
-        const next = [...row];
-        sourceMaterials.forEach((sourceAt, index) => {
-          if (sourceAt >= 0 && String(source[sourceAt] ?? "").trim() !== "")
-            next[targetMaterials[index]] = source[sourceAt];
-        });
-        return next;
-      });
-      saveSheet({ ...prepared, rows });
+      if (!sourceHeaders.length || !sourceRows.length) throw new Error("资料提供情况表未读取到可用的表头或数据。");
+      setMessage("正在写入数据库…");
+      const result = await reconciliationApi.importMaterials(quarter, { sourceFileName: file.name, headers: sourceHeaders, rows: sourceRows });
+      await refreshPostgresImportState(quarter, true);
       recordImport({
         fileName: file.name,
         importedAt: new Date().toISOString(),
         dataType: "materials",
         description: "客户资料提供状态数据。",
-        recordCount: matched,
-        targetStore: "local-quarterly-reconciliation-archive（按客户更新）",
-        quarter: activeQuarter || selectedQuarter(),
-        status: matched === sourceRows.length ? "success" : "partial",
-        stats: { updated: matched, skipped: Math.max(0, sourceRows.length - matched) },
+        recordCount: result.writtenMaterialCells,
+        targetStore: "PostgreSQL · recon.material_status",
+        quarter,
+        status: result.status === "PARTIAL" ? "partial" : "success",
+        stats: { updated: result.matchedRows, skipped: result.unmatchedRows },
       });
       setMessage(
-        "\u5df2\u5bfc\u5165\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868\uff1a\u5339\u914d " +
-          matched +
-          " \u6761\u5ba2\u6237\u8bb0\u5f55\u3002",
+        `资料提供情况已导入：匹配 ${result.matchedRows} 条，未匹配 ${result.unmatchedRows} 条。`,
       );
     } catch (error) {
       recordImport({
@@ -1414,8 +1378,8 @@ export function QuarterlyReconciliation({
         dataType: "materials",
         description:
           error instanceof Error ? error.message : "资料提供情况表导入失败。",
-        targetStore: "local-quarterly-reconciliation-archive（按客户更新）",
-        quarter: activeQuarter || selectedQuarter(),
+        targetStore: "PostgreSQL · materials/import",
+        quarter,
         status: "failed",
         stats: { errors: 1 },
       });
@@ -1425,6 +1389,7 @@ export function QuarterlyReconciliation({
           : "\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868\u5bfc\u5165\u5931\u8d25\u3002",
       );
     }
+    finally { setImportingMaterials(false); }
     event.target.value = "";
   }
   async function importCompanyReceivables(
@@ -1432,14 +1397,15 @@ export function QuarterlyReconciliation({
   ) {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!sheet) {
-      setMessage(
-        "\u8bf7\u5148\u4e0a\u4f20\u5bf9\u8d26\u5b63\u5ea6\u8868\uff0c\u518d\u4e0a\u4f20\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\u3002",
-      );
+    const quarter = currentPostgresQuarter();
+    if (!quarter) {
+      setMessage("当前没有有效的 PostgreSQL 季度，无法上传公司应收更新表。");
       event.target.value = "";
       return;
     }
+    setImportingCompanyReceivables(true);
     try {
+      setMessage("正在解析 Excel…");
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const all = XLSX.utils.sheet_to_json<unknown[]>(
         workbook.Sheets[workbook.SheetNames[0]],
@@ -1451,73 +1417,23 @@ export function QuarterlyReconciliation({
         .filter((row) =>
           row.some((value) => String(value ?? "").trim() !== ""),
         );
-      const sourceAccount = headerIndex(sourceHeaders, ["\u8d26\u5957"]);
-      const sourceRegion = headerIndex(sourceHeaders, [T.region]);
-      const sourceCustomer = headerIndex(sourceHeaders, [T.customer]);
-      const sourceCompany = headerIndex(
-        sourceHeaders,
-        companyReceivableImportAliases,
-      );
-      if (
-        sourceAccount < 0 ||
-        sourceRegion < 0 ||
-        sourceCustomer < 0 ||
-        sourceCompany < 0
-      )
-        throw new Error(
-          "\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\u5fc5\u987b\u5305\u542b\u8d26\u5957\u3001\u533a\u57df\u3001\u5ba2\u6237\u540d\u79f0\u548c\u516c\u53f8\u5e94\u6536\u5217\u3002",
-        );
-      const accountAt = headerIndex(sheet.headers, ["\u8d26\u5957"]);
-      const regionAt = headerIndex(sheet.headers, [T.region]);
-      const customerAt = headerIndex(sheet.headers, [T.customer]);
-      const companyAt = headerIndex(sheet.headers, companyReceivableImportAliases);
-      if (accountAt < 0 || regionAt < 0 || customerAt < 0 || companyAt < 0)
-        throw new Error(
-          "\u672c\u5b63\u5ea6\u5bf9\u8d26\u8be6\u60c5\u5fc5\u987b\u5305\u542b\u8d26\u5957\u3001\u533a\u57df\u3001\u5ba2\u6237\u540d\u79f0\u548c\u516c\u53f8\u5e94\u6536\u5217\u3002",
-        );
-      const key = (account: unknown, area: unknown, customer: unknown) =>
-        [account, area, customer]
-          .map((value) => String(value ?? "").replace(/\s/g, "").trim())
-          .join("|");
-      const sourceByKey = new Map<string, unknown[]>();
-      sourceRows.forEach((row) => {
-        const matchKey = key(
-          row[sourceAccount],
-          row[sourceRegion],
-          row[sourceCustomer],
-        );
-        if (matchKey !== "||") sourceByKey.set(matchKey, row);
-      });
-      let matched = 0;
-      let updated = 0;
-      const rows = sheet.rows.map((row) => {
-        const source = sourceByKey.get(
-          key(row[accountAt], row[regionAt], row[customerAt]),
-        );
-        if (!source) return row;
-        matched += 1;
-        const next = [...row];
-        const sourceValue = source[sourceCompany];
-        if (String(sourceValue ?? "").trim() !== "") {
-          next[companyAt] = sourceValue;
-          updated += 1;
-        }
-        return next;
-      });
-      saveSheet({ ...sheet, rows });
+      if (!sourceHeaders.length || !sourceRows.length) throw new Error("公司应收更新表未读取到可用的表头或数据。");
+      setMessage("正在写入数据库…");
+      const result = await reconciliationApi.importCompanyReceivables(quarter, { sourceFileName: file.name, headers: sourceHeaders, rows: sourceRows });
+      await refreshPostgresImportState(quarter, true);
       recordImport({
         fileName: file.name,
         importedAt: new Date().toISOString(),
         dataType: "companyReceivable",
         description: "公司应收更新数据。",
-        recordCount: updated,
-        targetStore: "local-quarterly-reconciliation-archive（公司应收字段）",
-        quarter: activeQuarter || selectedQuarter(),
-        status: updated === sourceRows.length ? "success" : "partial",
-        stats: { updated, skipped: Math.max(0, sourceRows.length - updated) },
+        recordCount: result.updatedRows,
+        targetStore: "PostgreSQL · recon.reconciliations.company_receivable",
+        quarter,
+        status: result.status === "PARTIAL" ? "partial" : "success",
+        stats: { updated: result.updatedRows, skipped: result.unmatchedRows + result.ambiguousRows },
       });
       setMessage(
-        `\u5df2\u4e0a\u4f20\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\uff1a\u5339\u914d ${matched} \u6761\uff0c\u4ec5\u66f4\u65b0\u5176\u4e2d ${updated} \u6761\u7684\u516c\u53f8\u5e94\u6536\u3002`,
+        `公司应收更新完成：匹配 ${result.matchedRows} 条，更新 ${result.updatedRows} 条，未匹配 ${result.unmatchedRows} 条${result.ambiguousRows ? `；有 ${result.ambiguousRows} 行匹配到多个客户记录，系统未自动更新，请人工核对。` : "。"}`,
       );
     } catch (error) {
       recordImport({
@@ -1525,8 +1441,8 @@ export function QuarterlyReconciliation({
         importedAt: new Date().toISOString(),
         dataType: "companyReceivable",
         description: error instanceof Error ? error.message : "公司应收更新表上传失败。",
-        targetStore: "local-quarterly-reconciliation-archive（公司应收字段）",
-        quarter: activeQuarter || selectedQuarter(),
+        targetStore: "PostgreSQL · company-receivables/import",
+        quarter,
         status: "failed",
         stats: { errors: 1 },
       });
@@ -1536,18 +1452,21 @@ export function QuarterlyReconciliation({
           : "\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\u4e0a\u4f20\u5931\u8d25\u3002",
       );
     }
+    finally { setImportingCompanyReceivables(false); }
     event.target.value = "";
   }
   async function importSpdSheet(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const quarter = activeQuarter || selectedQuarter();
+    const quarter = currentPostgresQuarter();
     if (!quarter) {
-      setMessage("\u8bf7\u5148\u4e0a\u4f20\u5bf9\u8d26\u5b63\u5ea6\u8868\uff0c\u786e\u5b9a\u5f53\u524d\u5bf9\u8d26\u5b63\u5ea6\u540e\u518d\u5bfc\u5165SPD\u8868\u3002");
+      setMessage("当前没有有效的 PostgreSQL 季度，无法导入 SPD 表。");
       event.target.value = "";
       return;
     }
+    setImportingSpd(true);
     try {
+      setMessage("正在解析 Excel…");
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const all = XLSX.utils.sheet_to_json<unknown[]>(
         workbook.Sheets[workbook.SheetNames[0]],
@@ -1566,27 +1485,30 @@ export function QuarterlyReconciliation({
         throw new Error(
           "SPD\u8868\u5fc5\u987b\u81f3\u5c11\u5305\u542bSPD\u786e\u8ba4\u8868\u6216SPD\u5e93\u5b58\u786e\u8ba4\u51fd\u5217\u3002",
         );
-      writeSpdSheetForQuarter(quarter, { headers, rows, fileName: file.name });
+      setMessage("正在写入数据库…");
+      const result = await reconciliationApi.importSpdDashboard(quarter, { sourceFileName: file.name, headers, rows });
+      await reconciliationApi.getSpdDashboard(quarter);
+      window.dispatchEvent(new Event("reconciliation-dashboard-updated"));
       recordImport({
         fileName: file.name,
         importedAt: new Date().toISOString(),
         dataType: "spd",
         description: "SPD 确认表和 SPD 库存确认函数据。",
-        recordCount: rows.length,
-        targetStore: "local-quarterly-reconciliation-spd-sheet-archive",
+        recordCount: result.replacedRows,
+        targetStore: "PostgreSQL · recon.spd_dashboard_rows",
         quarter,
         status: "success",
-        stats: { inserted: rows.length },
+        stats: { inserted: result.replacedRows },
       });
-      setMessage(`\u5df2\u5bfc\u5165SPD\u8868\uff1a${rows.length}\u6761\u8bb0\u5f55\u3002\u4ec5\u7528\u4e8e\u5bf9\u8d26\u770b\u677f\u7684SPD\u786e\u8ba4\u8868\u548cSPD\u5e93\u5b58\u786e\u8ba4\u51fd\u7edf\u8ba1\u3002`);
+      setMessage(`SPD 表已替换：${result.replacedRows} 条记录，已刷新看板数据。`);
     } catch (error) {
       recordImport({
         fileName: file.name,
         importedAt: new Date().toISOString(),
         dataType: "spd",
         description: error instanceof Error ? error.message : "SPD表导入失败。",
-        targetStore: "local-quarterly-reconciliation-spd-sheet-archive",
-        quarter: activeQuarter || selectedQuarter(),
+        targetStore: "PostgreSQL · spd-dashboard/import",
+        quarter,
         status: "failed",
         stats: { errors: 1 },
       });
@@ -1594,6 +1516,7 @@ export function QuarterlyReconciliation({
         error instanceof Error ? error.message : "SPD\u8868\u5bfc\u5165\u5931\u8d25\u3002",
       );
     }
+    finally { setImportingSpd(false); }
     event.target.value = "";
   }
   async function importCurrentLedger(event: ChangeEvent<HTMLInputElement>) {
@@ -1728,6 +1651,40 @@ export function QuarterlyReconciliation({
         setActive(null);
         setMessage(error instanceof Error ? `差额明细加载失败：${error.message}` : "差额明细加载失败。");
       }
+    }
+  }
+  async function importHistoricalLedger(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) return;
+    if (!window.confirm("替换后，新历史往来底库将成为当前核验版本；旧版本会保留，不会删除。是否继续？")) {
+      event.target.value = "";
+      return;
+    }
+    setReplacingHistoricalLedger(true);
+    try {
+      setMessage("正在解析 Excel…");
+      const sourceFiles = await readLedgerSourceFiles(files);
+      if (!sourceFiles.length) throw new Error("没有从文件中读取到可导入的历史往来数据。");
+      setMessage("正在替换历史往来底库…");
+      const result = await reconciliationApi.replaceHistoricalLedger({ sourceFiles });
+      recordImport({
+        fileName: result.sourceFiles.join("、"), importedAt: new Date().toISOString(), dataType: "historicalLedger",
+        description: "历史往来底库 PostgreSQL 版本替换（本机兼容记录）。", recordCount: result.insertedRows,
+        targetStore: "PostgreSQL · recon.ledger_datasets / ledger_verification_entries", quarter: "",
+        status: "success", stats: { inserted: result.insertedRows },
+      });
+      setMessage(`历史往来底库已更新为 V${result.version}，共导入 ${result.insertedRows} 条核验记录。`);
+    } catch (error) {
+      const code = error instanceof ReconciliationApiError ? error.code : "";
+      const description = code === "IMPORT_ALREADY_EXISTS" ? "该文件已导入，无需重复上传。" : error instanceof Error ? error.message : "历史往来底库替换失败。";
+      recordImport({
+        fileName: files.map((file) => file.name).join("、"), importedAt: new Date().toISOString(), dataType: "historicalLedger",
+        description, recordCount: 0, targetStore: "PostgreSQL · ledger/historical/import", quarter: "", status: "failed", stats: { errors: 1 },
+      });
+      setMessage(description);
+    } finally {
+      setReplacingHistoricalLedger(false);
+      event.target.value = "";
     }
   }
   async function commit() {
@@ -1926,27 +1883,40 @@ export function QuarterlyReconciliation({
                 />
               </label>
               <label className="file-button materials-upload">
-                {T.uploadMaterials}
+                {importingMaterials ? T.loading : T.uploadMaterials}
                 <input
                   type="file"
                   accept=".xlsx,.xls"
+                  disabled={importingMaterials}
                   onChange={importMaterials}
                 />
               </label>
               <label className="file-button materials-upload">
-                {T.uploadSpdSheet}
+                {importingSpd ? T.loading : T.uploadSpdSheet}
                 <input
                   type="file"
                   accept=".xlsx,.xls"
+                  disabled={importingSpd}
                   onChange={importSpdSheet}
                 />
               </label>
               <label className="file-button company-receivable-upload">
-                {T.uploadCompanyReceivable}
+                {importingCompanyReceivables ? T.loading : T.uploadCompanyReceivable}
                 <input
                   type="file"
                   accept=".xlsx,.xls"
+                  disabled={importingCompanyReceivables}
                   onChange={importCompanyReceivables}
+                />
+              </label>
+              <label className="file-button ledger-upload">
+                {replacingHistoricalLedger ? "正在替换历史往来底库…" : "替换历史往来底库"}
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  multiple
+                  disabled={replacingHistoricalLedger}
+                  onChange={importHistoricalLedger}
                 />
               </label>
               {sheet && (
