@@ -137,7 +137,7 @@ test("difference enforcement: client verificationStatus is never trusted", async
 test("PostgreSQL frontend ledger path posts quarter-scoped import and on-demand verify", async () => {
   const page = await readFile(new URL("../app/QuarterlyReconciliation.tsx", import.meta.url), "utf8");
   assert.match(page, /readLedgerSourceFiles/);
-  assert.match(page, /importQuarterLedger\(activeQuarter, \{ sourceFiles \}\)/);
+  assert.match(page, /importQuarterLedger\(quarterCode, \{ sourceFiles \}\)/);
   assert.match(page, /verifyLedgerInvoice\(quarter, \{ invoiceNo: entry\.invoice, invoiceDate: entry\.date, amount: entry\.amount \}/);
   assert.match(page, /LEDGER_QUARTER_DATA_ALREADY_EXISTS/);
   assert.match(page, /setTimeout\(.*400/s);
@@ -147,4 +147,17 @@ test("PostgreSQL frontend ledger path posts quarter-scoped import and on-demand 
   assert.doesNotMatch(page, /fetch\("\/ledger_invoice_lookup\.json"\)/);
   assert.doesNotMatch(page, /await saveCurrentLedger\(/);
   assert.doesNotMatch(page, /await loadCurrentLedger\(/);
+});
+
+test("ledger import quarter is selected and validated from PostgreSQL, never legacy archive storage", async () => {
+  const page = await readFile(new URL("../app/QuarterlyReconciliation.tsx", import.meta.url), "utf8");
+  assert.match(page, /reconciliationApi\.listQuarters\(controller\.signal\)/);
+  assert.match(page, /const \[postgresQuarters, setPostgresQuarters\]/);
+  assert.match(page, /const preferred = toPostgresQuarterCode\(localStorage\.getItem\(PG_SELECTED_QUARTER_KEY\)/);
+  assert.match(page, /const quarterCode = toPostgresQuarterCode\(activeQuarter\)/);
+  assert.match(page, /postgresQuarters\.includes\(quarterCode\)/);
+  assert.match(page, /importQuarterLedger\(quarterCode, \{ sourceFiles \}\)/);
+  // Legacy selectedQuarter/archive state cannot choose the ledger import target.
+  const importHandler = page.slice(page.indexOf("async function importCurrentLedger"), page.indexOf("function clearData"));
+  assert.doesNotMatch(importHandler, /selectedQuarter\(|sheetForQuarter\(|local-quarterly-reconciliation-selected-quarter/);
 });

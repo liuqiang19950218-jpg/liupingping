@@ -258,7 +258,7 @@ const formFromFollowups = (base: DetailForm, followups: Followup[]): DetailForm 
   }))),
 });
 const toPostgresQuarterCode = (quarter: string) => {
-  const match = quarter.trim().match(/^(\d{4})\s*Q([1-4])$/i);
+  const match = quarter.trim().match(/^(\d{4})\s*-?\s*Q([1-4])$/i);
   return match ? `${match[1]}-Q${match[2]}` : null;
 };
 const num = (value: unknown) => {
@@ -662,6 +662,7 @@ export function QuarterlyReconciliation({
   const [viewReady, setViewReady] = useState(false);
   const [activeQuarter, setActiveQuarter] = useState("");
   const [archivedQuarters, setArchivedQuarters] = useState<string[]>([]);
+  const [postgresQuarters, setPostgresQuarters] = useState<string[]>([]);
   const [apiIds, setApiIds] = useState<string[]>([]);
   const [apiDifferenceItems, setApiDifferenceItems] = useState<Record<string, DifferenceItem[]>>({});
   const [apiFollowups, setApiFollowups] = useState<Record<string, Followup[]>>({});
@@ -770,13 +771,11 @@ export function QuarterlyReconciliation({
     const refreshArchive = () => {
       const quarter = selectedQuarter();
       setArchivedQuarters(quarterOptions());
-      setActiveQuarter(quarter);
       const archived = sheetForQuarter(quarter);
       if (archived) setSheet(archived as LocalSheet);
     };
     const refreshOptions = () => {
       setArchivedQuarters(quarterOptions());
-      setActiveQuarter(selectedQuarter());
     };
     refreshArchive();
     window.addEventListener("reconciliation-quarter-selected", refreshArchive);
@@ -791,6 +790,30 @@ export function QuarterlyReconciliation({
         refreshOptions,
       );
     };
+  }, [mode]);
+  useEffect(() => {
+    if (mode !== "import") return;
+    const controller = new AbortController();
+    const loadPostgresQuarter = async () => {
+      try {
+        const { quarters } = await reconciliationApi.listQuarters(controller.signal);
+        if (controller.signal.aborted) return;
+        const options = quarters.map((item) => item.code);
+        const preferred = toPostgresQuarterCode(localStorage.getItem(PG_SELECTED_QUARTER_KEY) ?? "");
+        const quarter = preferred && options.includes(preferred) ? preferred : options[0] ?? "";
+        setPostgresQuarters(options);
+        setActiveQuarter(quarter);
+        if (quarter) localStorage.setItem(PG_SELECTED_QUARTER_KEY, quarter);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setPostgresQuarters([]);
+          setActiveQuarter("");
+          setMessage(error instanceof Error ? `PostgreSQL 季度加载失败：${error.message}` : "PostgreSQL 季度加载失败。");
+        }
+      }
+    };
+    void loadPostgresQuarter();
+    return () => controller.abort();
   }, [mode]);
   useEffect(() => {
     if (mode === "import") return;
@@ -856,8 +879,7 @@ export function QuarterlyReconciliation({
   }, []);
   useEffect(() => {
     if (mode !== "import" || !sheet || !viewReady) return;
-    const quarter = writeArchivedSheet(sheet);
-    setActiveQuarter(quarter);
+    writeArchivedSheet(sheet);
     setArchivedQuarters(quarterOptions());
   }, [sheet, viewReady, mode]);
   useEffect(() => {
@@ -1068,13 +1090,13 @@ export function QuarterlyReconciliation({
       setPage(1);
       return;
     }
-    const archived = sheetForQuarter(quarter);
-    if (!archived) return;
-    selectQuarter(quarter);
-    setSheet(archived as LocalSheet);
+    const postgresQuarter = toPostgresQuarterCode(quarter);
+    if (!postgresQuarter || !postgresQuarters.includes(postgresQuarter)) return;
+    localStorage.setItem(PG_SELECTED_QUARTER_KEY, postgresQuarter);
+    setActiveQuarter(postgresQuarter);
     setRegion(T.all);
     setPage(1);
-    setMessage(`已切换至 ${quarter} 对账明细。`);
+    setMessage(`已切换至 ${postgresQuarter} 季度。`);
   };
   const setCell = (row: unknown[], name: string, value: string | number) => {
     const i = index(name);
@@ -1577,7 +1599,8 @@ export function QuarterlyReconciliation({
   async function importCurrentLedger(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     if (!files.length) return;
-    if (!activeQuarter) {
+    const quarterCode = toPostgresQuarterCode(activeQuarter);
+    if (!quarterCode || !postgresQuarters.includes(quarterCode)) {
       setMessage("当前没有有效的 PostgreSQL 季度，无法上传本年往来明细。");
       event.target.value = "";
       return;
@@ -1591,7 +1614,7 @@ export function QuarterlyReconciliation({
           "没有从文件中读取到可导入的表头和数据行。",
         );
       setMessage("正在写入数据库…");
-      const result = await reconciliationApi.importQuarterLedger(activeQuarter, { sourceFiles });
+      const result = await reconciliationApi.importQuarterLedger(quarterCode, { sourceFiles });
       recordImport({
         fileName: result.sourceFiles.join("、"),
         importedAt: new Date().toISOString(),
@@ -1599,7 +1622,7 @@ export function QuarterlyReconciliation({
         description: "本年往来明细数据。",
         recordCount: result.insertedRows,
         targetStore: "PostgreSQL · recon.ledger_datasets / ledger_verification_entries",
-        quarter: activeQuarter,
+        quarter: quarterCode,
         status: "success",
         stats: { inserted: result.insertedRows },
       });
@@ -1618,7 +1641,7 @@ export function QuarterlyReconciliation({
         dataType: "ledger",
         description,
         targetStore: "PostgreSQL · ledger/import",
-        quarter: activeQuarter,
+        quarter: quarterCode,
         status: "failed",
         stats: { errors: 1 },
       });
@@ -1970,7 +1993,7 @@ export function QuarterlyReconciliation({
             </div>
           )}
         </div>
-        {archivedQuarters.length > 0 && (
+        {(mode === "import" ? postgresQuarters : archivedQuarters).length > 0 && (
           <div className="quarter-archive-control">
             <label>
               对账季度
@@ -1979,7 +2002,7 @@ export function QuarterlyReconciliation({
                 value={activeQuarter}
                 onChange={(event) => changeQuarter(event.target.value)}
               >
-                {archivedQuarters.map((quarter) => (
+                {(mode === "import" ? postgresQuarters : archivedQuarters).map((quarter) => (
                   <option key={quarter} value={quarter}>
                     {quarter}
                   </option>
