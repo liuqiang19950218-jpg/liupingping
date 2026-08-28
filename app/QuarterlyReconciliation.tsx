@@ -25,6 +25,7 @@ import { ImportDashboard } from "./ImportDashboard";
 import { recordImport } from "./import-history";
 import {
   reconciliationApi,
+  ReconciliationApiError,
   type DifferenceItem,
   type Followup,
   type MaterialStatus,
@@ -594,8 +595,8 @@ const loadCurrentLedger = () =>
   );
 const saveCurrentLedger = (value: LedgerUpload) =>
   dbRequest<IDBValidKey>("readwrite", (store) => store.put(value, "current"));
-async function readLedgerFiles(files: File[]) {
-  const keys = new Set<string>();
+async function readLedgerSourceFiles(files: File[]) {
+  const sourceFiles: { sourceFileName: string; headers: string[]; rows: unknown[][] }[] = [];
   for (const file of files) {
     const workbook = XLSX.read(await file.arrayBuffer(), {
       type: "array",
@@ -617,43 +618,12 @@ async function readLedgerFiles(files: File[]) {
               "\u6458\u8981",
             ]) >= 0,
         );
-      if (!headerRow) continue;
-      const invoiceAt = headerIndex(headerRow, [
-        "\u53d1\u7968\u53f7",
-        "\u53d1\u7968\u4ee3\u7801",
-        "\u5355\u636e\u7f16\u53f7",
-        "\u6458\u8981",
-      ]);
-      const dateAt = headerIndex(headerRow, [
-        "\u5f00\u7968\u65e5\u671f",
-        "\u4e1a\u52a1\u65e5\u671f",
-        "\u8d22\u52a1\u65e5\u671f",
-        "\u4ea4\u6613\u65e5\u671f",
-        "\u65e5\u671f",
-      ]);
-      const amountAt = headerIndex(headerRow, [
-        "\u672c\u671f\u5e94\u6536",
-        "\u5e94\u6536\u91d1\u989d",
-        "\u5f00\u7968\u91d1\u989d",
-        "\u542b\u7a0e\u91d1\u989d",
-        "\u501f\u65b9",
-        "\u91d1\u989d",
-      ]);
-      if (invoiceAt < 0 || dateAt < 0 || amountAt < 0) continue;
       const start = rows.indexOf(headerRow) + 1;
-      for (const row of rows.slice(start)) {
-        const source = row.map((value) => String(value ?? "")).join(" ");
-        const cell = String(row[invoiceAt] ?? "").replace(/\s/g, "");
-        const matched = source.match(/(?<!\d)(?:\d{8}|\d{20})(?!\d)/);
-        const invoice = (matched?.[0] ?? cell).replace(/\s/g, "");
-        const date = normalizeDate(row[dateAt]);
-        const amount = num(row[amountAt]);
-        if (invoice && date && amount)
-          keys.add(`${invoice}|${date}|${amount.toFixed(2)}`);
-      }
+      if (headerRow && rows.slice(start).some((row) => row.some((value) => String(value ?? "").trim())))
+        sourceFiles.push({ sourceFileName: workbook.SheetNames.length > 1 ? `${file.name}#${sheetName}` : file.name, headers: headerRow.map(String), rows: rows.slice(start).filter((row) => row.some((value) => String(value ?? "").trim())) });
     }
   }
-  return [...keys];
+  return sourceFiles;
 }
 
 export function QuarterlyReconciliation({
@@ -671,15 +641,9 @@ export function QuarterlyReconciliation({
   const [speechRecording, setSpeechRecording] = useState(false);
   const [speechMessage, setSpeechMessage] = useState("");
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-  const [ledgerKeys, setLedgerKeys] = useState<Set<string> | null>(null);
-  const [currentLedgerKeys, setCurrentLedgerKeys] = useState<Set<string>>(
-    new Set(),
-  );
   const [currentLedgerInfo, setCurrentLedgerInfo] =
     useState<LedgerUpload | null>(null);
   const [uploadingLedger, setUploadingLedger] = useState(false);
-  const [ledgerError, setLedgerError] = useState(false);
-  const [ledgerLookup, setLedgerLookup] = useState<LedgerLookup>({});
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [columnFilters, setColumnFilters] = useState<Record<number, string>>(
     {},
@@ -897,42 +861,6 @@ export function QuarterlyReconciliation({
     setArchivedQuarters(quarterOptions());
   }, [sheet, viewReady, mode]);
   useEffect(() => {
-    let alive = true;
-    fetch("/ledger_keys.json")
-      .then((r) => {
-        if (!r.ok) throw new Error("ledger");
-        return r.json() as Promise<string[]>;
-      })
-      .then(async (keys) => {
-        const lookup = await fetch("/ledger_invoice_lookup.json")
-          .then((r) => (r.ok ? (r.json() as Promise<LedgerLookup>) : {}))
-          .catch(() => ({}));
-        const saved = await loadCurrentLedger().catch(() => undefined);
-        historicalLedgerKeys = new Set(keys);
-        historicalLedgerLookup = lookup;
-        if (alive) {
-          setLedgerKeys(new Set([...keys, ...(saved?.keys ?? [])]));
-          setLedgerLookup(lookup);
-        }
-      })
-      .catch(() => {
-        if (alive) setLedgerError(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  useEffect(() => {
-    loadCurrentLedger()
-      .then((saved) => {
-        if (saved) {
-          setCurrentLedgerInfo(saved);
-          setCurrentLedgerKeys(new Set(saved.keys));
-        }
-      })
-      .catch(() => undefined);
-  }, []);
-  useEffect(() => {
     const timer = window.setTimeout(
       () => setSearchQuery(searchInput.trim()),
       250,
@@ -1093,10 +1021,6 @@ export function QuarterlyReconciliation({
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
   }, [page, pageCount]);
-  const matchingLedgerKeys = useMemo(
-    () => (ledgerKeys ? new Set([...ledgerKeys, ...currentLedgerKeys]) : null),
-    [ledgerKeys, currentLedgerKeys],
-  );
   const saveSheet = (next: LocalSheet, syncDashboards = false) => {
     const headers = [...next.headers];
     const solution = "\u89e3\u51b3\u65b9\u6848",
@@ -1653,56 +1577,52 @@ export function QuarterlyReconciliation({
   async function importCurrentLedger(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     if (!files.length) return;
+    if (!activeQuarter) {
+      setMessage("当前没有有效的 PostgreSQL 季度，无法上传本年往来明细。");
+      event.target.value = "";
+      return;
+    }
     setUploadingLedger(true);
     try {
-      const keys = await readLedgerFiles(files);
-      if (!keys.length)
+      setMessage("正在解析 Excel…");
+      const sourceFiles = await readLedgerSourceFiles(files);
+      if (!sourceFiles.length)
         throw new Error(
-          "\u6ca1\u6709\u4ece\u6587\u4ef6\u4e2d\u8bfb\u53d6\u5230\u53ef\u6838\u9a8c\u7684\u53d1\u7968\u53f7\u3001\u65e5\u671f\u548c\u91d1\u989d\u3002",
+          "没有从文件中读取到可导入的表头和数据行。",
         );
-      const upload = {
-        keys,
-        fileNames: files.map((file) => file.name),
-        updatedAt: new Date().toLocaleString("zh-CN"),
-      };
-      await saveCurrentLedger(upload);
+      setMessage("正在写入数据库…");
+      const result = await reconciliationApi.importQuarterLedger(activeQuarter, { sourceFiles });
       recordImport({
-        fileName: upload.fileNames.join("、"),
+        fileName: result.sourceFiles.join("、"),
         importedAt: new Date().toISOString(),
         dataType: "ledger",
         description: "本年往来明细数据。",
-        recordCount: keys.length,
-        targetStore: "IndexedDB · quarterly-reconciliation/ledger/current",
-        quarter: activeQuarter || selectedQuarter(),
+        recordCount: result.insertedRows,
+        targetStore: "PostgreSQL · recon.ledger_datasets / ledger_verification_entries",
+        quarter: activeQuarter,
         status: "success",
-        stats: { inserted: keys.length },
+        stats: { inserted: result.insertedRows },
       });
-      setCurrentLedgerKeys(new Set(keys));
-      setLedgerKeys(
-        historicalLedgerKeys
-          ? new Set([...historicalLedgerKeys, ...keys])
-          : null,
-      );
-      setCurrentLedgerInfo(upload);
+      setCurrentLedgerInfo({ keys: [], fileNames: result.sourceFiles, updatedAt: new Date().toLocaleString("zh-CN") });
       setMessage(
-        `\u5df2\u66ff\u6362\u672c\u5e74\u5f80\u6765\u660e\u7ec6\uff1a${keys.length} \u6761\u53ef\u6838\u9a8c\u8bb0\u5f55\u3002`,
+        `本年往来明细上传成功：${result.insertedRows} 条记录。`,
       );
     } catch (error) {
+      const code = error instanceof ReconciliationApiError ? error.code : "";
+      const description = code === "LEDGER_QUARTER_DATA_ALREADY_EXISTS"
+        ? "当前季度已存在本年往来明细，暂不支持直接覆盖，请确认后续替换策略。"
+        : error instanceof Error ? error.message : "往来明细上传失败。";
       recordImport({
         fileName: files.map((file) => file.name).join("、"),
         importedAt: new Date().toISOString(),
         dataType: "ledger",
-        description: error instanceof Error ? error.message : "往来明细上传失败。",
-        targetStore: "IndexedDB · quarterly-reconciliation/ledger/current",
-        quarter: activeQuarter || selectedQuarter(),
+        description,
+        targetStore: "PostgreSQL · ledger/import",
+        quarter: activeQuarter,
         status: "failed",
         stats: { errors: 1 },
       });
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "\u5f80\u6765\u660e\u7ec6\u4e0a\u4f20\u5931\u8d25\u3002",
-      );
+      setMessage(description);
     } finally {
       setUploadingLedger(false);
       event.target.value = "";
@@ -1796,28 +1716,6 @@ export function QuarterlyReconciliation({
       ...form.instrument,
       ...form.otherInvoice,
     ].filter(hasInvoiceNumber);
-    if (ledgerError) {
-      window.alert("往来明细核验数据加载失败，请刷新后重试。");
-      return;
-    }
-    if (!matchingLedgerKeys) {
-      window.alert("正在加载往来明细，请稍候再保存。");
-      return;
-    }
-    // Keep the save gate identical to the per-row verification displayed in
-    // the difference drawer.  The lookup contains the normalized invoice
-    // date/amount returned by the ledger search; checking keys alone made a
-    // row appear "核验正确" while the subsequent save was rejected.
-    if (
-      needsCheck.some(
-        (entry) => !validLedgerEntry(entry, matchingLedgerKeys, ledgerLookup),
-      )
-    ) {
-      window.alert(
-        "存在未通过往来明细核验的发票，不能保存。请确认日期、发票号和金额。",
-      );
-      return;
-    }
     if (mode !== "import") {
       const reconciliationId = apiIds[active];
       if (!reconciliationId || !activeQuarter) return;
@@ -2698,8 +2596,7 @@ export function QuarterlyReconciliation({
               onChange={setForm}
               onClose={() => setActiveDifferenceType(null)}
               onPreview={setPreviewImage}
-              ledgerKeys={matchingLedgerKeys}
-              ledgerLookup={ledgerLookup}
+              quarter={activeQuarter}
             />
           )}
         </div>
@@ -2843,16 +2740,14 @@ export function QuarterlyReconciliation({
                 title={T.transitReview}
                 entries={form.transit}
                 requiresReview={true}
-                ledgerKeys={ledgerKeys}
-                ledgerLookup={ledgerLookup}
+                quarter={activeQuarter}
                 setEntries={(entries) => setForm({ ...form, transit: entries })}
               />
               <InvoiceGroup
                 title={T.returnReview}
                 entries={form.returned}
                 requiresReview={true}
-                ledgerKeys={ledgerKeys}
-                ledgerLookup={ledgerLookup}
+                quarter={activeQuarter}
                 setEntries={(entries) =>
                   setForm({ ...form, returned: entries })
                 }
@@ -2861,8 +2756,7 @@ export function QuarterlyReconciliation({
                 title={T.otherInvoice}
                 entries={form.otherInvoice}
                 requiresReview={false}
-                ledgerKeys={ledgerKeys}
-                ledgerLookup={ledgerLookup}
+                quarter={activeQuarter}
                 setEntries={(entries) =>
                   setForm({ ...form, otherInvoice: entries })
                 }
@@ -3000,16 +2894,14 @@ function DifferenceDetailDrawer({
   onChange,
   onClose,
   onPreview,
-  ledgerKeys,
-  ledgerLookup,
+  quarter,
 }: {
   type: DifferenceType;
   form: DetailForm;
   onChange: (next: DetailForm) => void;
   onClose: () => void;
   onPreview: (image: string) => void;
-  ledgerKeys: Set<string> | null;
-  ledgerLookup: LedgerLookup;
+  quarter: string;
 }) {
   const meta = DIFFERENCE_SUMMARIES.find((item) => item.type === type)!;
   const entries = entriesFor(form, type);
@@ -3021,6 +2913,8 @@ function DifferenceDetailDrawer({
   const subtotal = meaningfulEntries.reduce((total, entry) => total + num(entry.amount), 0);
   const [ocrStatus, setOcrStatus] = useState("");
   const [ocrRecognizing, setOcrRecognizing] = useState(false);
+  const [verificationResults, setVerificationResults] = useState<Record<number, "matched" | "not_found" | "pending">>({});
+  const verifyRequest = useRef<AbortController | null>(null);
   const setEntries = (next: InvoiceEntry[] | OtherEntry[]) =>
     onChange({ ...form, [type]: next } as DetailForm);
   const add = () =>
@@ -3057,19 +2951,12 @@ function DifferenceDetailDrawer({
     );
   const updateInvoice = (index: number, invoice: string) => {
     const normalizedInvoice = invoice.trim();
-    const matched = findLedgerMatch(normalizedInvoice, ledgerLookup, ledgerKeys);
     setEntries(
       entries.map((entry, entryIndex) => {
         if (entryIndex !== index) return entry;
         const current = entry as InvoiceEntry;
         if (!normalizedInvoice) return blankInvoice();
-        if (!matched) return { ...current, invoice: normalizedInvoice, date: "", amount: "" };
-        return {
-          ...current,
-          invoice: normalizedInvoice,
-          date: matched.dates.length === 1 ? matched.dates[0] : current.date,
-          amount: matched.amount.toFixed(2),
-        };
+        return normalizedInvoice ? { ...current, invoice: normalizedInvoice } : blankInvoice();
       }) as InvoiceEntry[],
     );
   };
@@ -3084,13 +2971,10 @@ function DifferenceDetailDrawer({
     let nextIndex = 0;
     let matchedCount = 0;
     const createRecognizedEntry = (invoice: string) => {
-      const matched = findLedgerMatch(invoice, ledgerLookup, ledgerKeys);
-      if (matched) matchedCount += 1;
       return {
         ...blankInvoice(),
         invoice,
-        date: matched?.dates.length === 1 ? matched.dates[0] : "",
-        amount: matched ? matched.amount.toFixed(2) : "",
+        date: "", amount: "",
       };
     };
     const nextEntries = invoiceEntries.map((entry) => {
@@ -3117,13 +3001,10 @@ function DifferenceDetailDrawer({
         recognized.push(...extractInvoiceNumbersFromOcr(await response.json()));
       }
       const uniqueNumbers = [...new Set(recognized)];
-      const ledgerNumbers = uniqueNumbers.filter((invoice) =>
-        Boolean(findLedgerMatch(invoice, ledgerLookup, ledgerKeys)),
-      );
-      const result = fillRecognizedInvoices(ledgerNumbers.length ? ledgerNumbers : uniqueNumbers);
+      const result = fillRecognizedInvoices(uniqueNumbers);
       setOcrStatus(
         result.added
-          ? `已识别 ${result.added} 个发票号，${result.matched} 个已自动带出开票日期和金额。`
+          ? `已识别 ${result.added} 个发票号，请填写日期和金额后由服务器核验。`
           : "未识别到新的发票号，请确认图片清晰且未重复导入。",
       );
     } catch {
@@ -3143,15 +3024,26 @@ function DifferenceDetailDrawer({
       );
     reader.readAsDataURL(file);
   };
-  const verification = (entry: InvoiceEntry) => {
+  useEffect(() => {
+    const candidates = entries.map((entry, index) => ({ entry: entry as InvoiceEntry, index })).filter(({ entry }) => meta.invoice && hasInvoiceNumber(entry) && entry.invoice && entry.date && entry.amount !== "");
+    if (!candidates.length || !quarter) return;
+    verifyRequest.current?.abort();
+    const controller = new AbortController(); verifyRequest.current = controller;
+    const timer = window.setTimeout(() => {
+      void Promise.all(candidates.map(async ({ entry, index }) => {
+        try { const result = await reconciliationApi.verifyLedgerInvoice(quarter, { invoiceNo: entry.invoice, invoiceDate: entry.date, amount: entry.amount }, controller.signal); return [index, result.status] as const; }
+        catch (error) { if (controller.signal.aborted) return null; return [index, error instanceof ReconciliationApiError && error.code === "LEDGER_INVOICE_NOT_FOUND" ? "not_found" : "pending"] as const; }
+      })).then((results) => { if (!controller.signal.aborted) setVerificationResults(Object.fromEntries(results.filter((item): item is readonly [number, "matched" | "not_found" | "pending"] => item !== null))); });
+    }, 400);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [entries, meta.invoice, quarter]);
+  const verification = (entry: InvoiceEntry, index: number) => {
     if (!hasInvoiceNumber(entry)) return null;
     if (!entry.date || !entry.invoice || entry.amount === "") {
       return { label: "\u5f85\u6838\u9a8c", kind: "pending" };
     }
-    if (!ledgerKeys) return { label: "\u6b63\u5728\u52a0\u8f7d", kind: "pending" };
-    return validLedgerEntry(entry, ledgerKeys, ledgerLookup)
-      ? { label: "\u5f80\u6765\u6838\u9a8c\u6b63\u786e", kind: "correct" }
-      : { label: "\u5f80\u6765\u6838\u9a8c\u9519\u8bef", kind: "error" };
+    const status = verificationResults[index] ?? "pending";
+    return status === "matched" ? { label: "往来明细核验：正确", kind: "correct" } : status === "not_found" ? { label: "往来明细未找到此发票", kind: "error" } : { label: "正在核验", kind: "pending" };
   };
   return (
     <aside className="difference-detail-drawer" role="dialog" aria-modal="true" aria-label={`填写${meta.label}差额明细`}>
@@ -3202,7 +3094,7 @@ function DifferenceDetailDrawer({
                 <td><input type="number" step="0.01" value={entry.amount} disabled={meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "amount", event.target.value)} placeholder="填写金额" /></td>
                 <td><input value={entry.note} disabled={meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "note", event.target.value)} placeholder="填写差额说明" /></td>
                 {meta.invoice && (() => {
-                  const result = verification(entry as InvoiceEntry);
+                  const result = verification(entry as InvoiceEntry, index);
                   return <td>{result && <span className={`drawer-verification ${result.kind}`}>{result.label}</span>}</td>;
                 })()}
                 {!meta.invoice && <td className="drawer-attachment"><input value={(entry as OtherEntry).image ?? ""} onChange={(event) => setEntries(entries.map((current, currentIndex) => currentIndex === index ? { ...current, image: event.target.value } : current) as OtherEntry[])} placeholder="附件 key（逗号分隔）" /><small>仅保存附件 key；本阶段不上传或读取文件。</small></td>}
@@ -3335,15 +3227,13 @@ function InvoiceGroup({
   title,
   entries,
   requiresReview,
-  ledgerKeys,
-  ledgerLookup,
+  quarter,
   setEntries,
 }: {
   title: string;
   entries: InvoiceEntry[];
   requiresReview: boolean;
-  ledgerKeys: Set<string> | null;
-  ledgerLookup: LedgerLookup;
+  quarter: string;
   setEntries: (entries: InvoiceEntry[]) => void;
 }) {
   const [choices, setChoices] = useState<Record<number, string[]>>({});
@@ -3351,6 +3241,7 @@ function InvoiceGroup({
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoStatus, setPhotoStatus] = useState("");
   const [photoInvoices, setPhotoInvoices] = useState<string[]>([]);
+  const [verificationResults, setVerificationResults] = useState<Record<number, "matched" | "not_found" | "pending">>({});
   const update = (index: number, field: keyof InvoiceEntry, value: string) =>
     setEntries(
       entries.map((entry, i) =>
@@ -3363,30 +3254,17 @@ function InvoiceGroup({
         ? [blankInvoice()]
         : entries.filter((_, i) => i !== index),
     );
-  const autoFill = (index: number) => {
-    if (!requiresReview) return;
-    const match = findLedgerMatch(
-      entries[index]?.invoice ?? "",
-      ledgerLookup,
-      ledgerKeys,
-    );
-    if (!match) return;
-    setEntries(
-      entries.map((entry, i) =>
-        i === index
-          ? {
-              ...entry,
-              date: match.dates.length === 1 ? match.dates[0] : entry.date,
-              amount: match.amount.toFixed(2),
-            }
-          : entry,
-      ),
-    );
-    setChoices((current) => ({
-      ...current,
-      [index]: match.dates.length > 1 ? match.dates : [],
-    }));
-  };
+  const autoFill = (_index: number) => undefined;
+  useEffect(() => {
+    const candidates = entries.map((entry, index) => ({ entry, index })).filter(({ entry }) => requiresReview && entry.invoice && entry.date && entry.amount !== "");
+    if (!quarter || !candidates.length) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => void Promise.all(candidates.map(async ({ entry, index }) => {
+      try { const result = await reconciliationApi.verifyLedgerInvoice(quarter, { invoiceNo: entry.invoice, invoiceDate: entry.date, amount: entry.amount }, controller.signal); return [index, result.status] as const; }
+      catch (error) { return [index, error instanceof ReconciliationApiError && error.code === "LEDGER_INVOICE_NOT_FOUND" ? "not_found" : "pending"] as const; }
+    })).then((results) => { if (!controller.signal.aborted) setVerificationResults(Object.fromEntries(results)); }), 400);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [entries, requiresReview, quarter]);
   const recognizePhotos = async (files: File[]) => {
     if (!files.length) return;
     setPhotoBusy(true);
@@ -3414,13 +3292,10 @@ function InvoiceGroup({
         }
       }
       const found = [...numbers];
-      const verified = found.filter((invoice) =>
-        findLedgerMatch(invoice, ledgerLookup, ledgerKeys),
-      ).length;
       setPhotoInvoices(found);
       setPhotoStatus(
         found.length
-          ? `已识别 ${rows} 行、${found.length} 个不重复发票号，其中 ${verified} 个可由往来明细自动补全。`
+          ? `已识别 ${rows} 行、${found.length} 个不重复发票号；请填写日期和金额后由服务器核验。`
           : "未识别到发票号，请确认截图包含“发票号码”整列。",
       );
     } catch {
@@ -3441,15 +3316,7 @@ function InvoiceGroup({
     }
     const next = [
       ...entries.filter(anyInvoice),
-      ...fresh.map((invoice) => {
-        const match = findLedgerMatch(invoice, ledgerLookup, ledgerKeys);
-        return {
-          invoice,
-          date: match?.dates.length === 1 ? match.dates[0] : "",
-          amount: match ? match.amount.toFixed(2) : "",
-          note: "照片识别导入",
-        };
-      }),
+      ...fresh.map((invoice) => ({ invoice, date: "", amount: "", note: "照片识别导入" })),
     ];
     setEntries(next.length ? next : [blankInvoice()]);
     setPhotoInvoices([]);
@@ -3500,16 +3367,14 @@ function InvoiceGroup({
           )}
           {entries.map((entry, index) => {
             const has = hasInvoiceNumber(entry);
-            const matched = validLedgerEntry(entry, ledgerKeys);
+            const verification = verificationResults[index] ?? "pending";
             const status = !has
               ? ""
               : !entry.date || !entry.invoice || entry.amount === ""
                 ? T.incomplete
-                : !ledgerKeys
-                  ? T.loading
-                  : matched
+                : verification === "matched"
                     ? T.matched
-                    : T.missing;
+                    : verification === "not_found" ? T.missing : T.loading;
             return (
               <div className="invoice-entry" key={index}>
                 <div className="entry-head">
@@ -3569,7 +3434,7 @@ function InvoiceGroup({
                 />
                 {requiresReview && (
                   <p
-                    className={`ledger-check ${has && ledgerKeys ? (matched ? "matched" : "not-matched") : ""}`}
+                    className={`ledger-check ${has && verification !== "pending" ? (verification === "matched" ? "matched" : "not-matched") : ""}`}
                   >
                     {status || "填写完整发票号后将自动带出日期和金额"}
                   </p>

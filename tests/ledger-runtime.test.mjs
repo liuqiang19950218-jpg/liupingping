@@ -133,3 +133,18 @@ test("difference enforcement: client verificationStatus is never trusted", async
   assert.match(write, /"instrument"/);
   assert.match(write, /"otherInvoice"/);
 });
+
+test("PostgreSQL frontend ledger path posts quarter-scoped import and on-demand verify", async () => {
+  const page = await readFile(new URL("../app/QuarterlyReconciliation.tsx", import.meta.url), "utf8");
+  assert.match(page, /readLedgerSourceFiles/);
+  assert.match(page, /importQuarterLedger\(activeQuarter, \{ sourceFiles \}\)/);
+  assert.match(page, /verifyLedgerInvoice\(quarter, \{ invoiceNo: entry\.invoice, invoiceDate: entry\.date, amount: entry\.amount \}/);
+  assert.match(page, /LEDGER_QUARTER_DATA_ALREADY_EXISTS/);
+  assert.match(page, /setTimeout\(.*400/s);
+  // The runtime no longer fetches the 32万-row browser JSON or reads/writes the
+  // current-year IndexedDB ledger; legacy helper definitions remain isolated.
+  assert.doesNotMatch(page, /fetch\("\/ledger_keys\.json"\)/);
+  assert.doesNotMatch(page, /fetch\("\/ledger_invoice_lookup\.json"\)/);
+  assert.doesNotMatch(page, /await saveCurrentLedger\(/);
+  assert.doesNotMatch(page, /await loadCurrentLedger\(/);
+});

@@ -10,7 +10,7 @@ Phase 2G.0 全系统上传 / 导入 / 替换 / 文件写入入口总审计。只
 | # | 动作 | UI | 组件 | handler | 接受类型 | 旧存储 | 当前 PG 目标 | 写 API | 读消费方 | 多机共享 | PG 状态 | cutover blocker |
 |---|------|-----|--------|---------|----------|--------|--------------|--------|-----------|---------|---------|----------------|
 | 1 | 上传季度对账表 | 上传对账季度表 | QuarterlyReconciliation.tsx | importFile | .xlsx/.xls | localStorage `local-quarterly-reconciliation-archive` | recon.reconciliations / import_batches / migration_manifests | POST /api/quarter/[code]/import | 本季度对账详细情况表 (851 行 PG) | YES | COMPLETE | 无 |
-| 2 | 上传/替换本年往来明细 | 上传本年往来明细 | QuarterlyReconciliation.tsx | importCurrentLedger | .xlsx/.xls multiple | IndexedDB `quarterly-reconciliation/ledger/current` | (本阶段新增) recon.ledger_datasets + ledger_verification_entries CURRENT_YEAR_QUARTER | (本阶段新增) POST /api/quarter/[code]/ledger/import | 发票核验 | NO（旧 IndexedDB）→ YES（PG 后） | 2G.1 已后端化，前端未接线 | 前端接线 |
+| 2 | 上传/替换本年往来明细 | 上传本年往来明细 | QuarterlyReconciliation.tsx | importCurrentLedger | .xlsx/.xls multiple | IndexedDB `quarterly-reconciliation/ledger/current`（仅保留旧版本遗留） | recon.ledger_datasets + ledger_verification_entries CURRENT_YEAR_QUARTER | POST /api/quarter/[code]/ledger/import | 发票核验 | YES | 前后端 PG 已接线 | 同季度重传策略待确认（409 明确提示） |
 | 3 | 导入资料提供情况表 | 导入资料提供情况表 | QuarterlyReconciliation.tsx | importMaterials | .xlsx/.xls | localStorage `local-quarterly-reconciliation-archive`（按客户合并） | recon.material_status（仅逐行手改走 PG） | PUT/PATCH /material-status（逐行） | 对账看板 资料状态 | 批量 NO / 逐行 YES | 批量未 PG | BLOCKER |
 | 4 | 导入 SPD 表 | 导入 SPD 表 | QuarterlyReconciliation.tsx | importSpdSheet | .xlsx/.xls | localStorage `local-quarterly-reconciliation-spd-sheet-archive` | recon.spd_dashboard_rows（仅迁移回填 142 行） | 无 POST（路由仅 GET） | 对账看板 SPD 统计 | NO | 上传未 PG | BLOCKER |
 | 5 | 上传公司应收更新表 | 上传公司应收更新表 | QuarterlyReconciliation.tsx | importCompanyReceivables | .xlsx/.xls | localStorage archive（仅 company 列） | 无 | 无（PATCH 白名单无 companyReceivable） | 本季度对账表 | NO | 未 PG | BLOCKER |
@@ -22,7 +22,7 @@ Phase 2G.0 全系统上传 / 导入 / 替换 / 文件写入入口总审计。只
 ## 用户人工确认的 6 个业务入口基准（真实状态）
 
 1. QUARTER_RECON_IMPORT — PG 完成（QUARTER_RECON_IMPORT_PG_COMPLETE = YES）
-2. CURRENT_YEAR_LEDGER_UPLOAD — 旧 IndexedDB；2G.1 后端 PG 完成、前端未接线
+2. CURRENT_YEAR_LEDGER_UPLOAD — PostgreSQL 已接线；浏览器继续解析 Excel，最终写入按当前 quarter 的 ledger/import，禁止 IndexedDB 回退
 3. HISTORICAL_LEDGER_REPLACE — 无网页入口；底库=打包静态 JSON；schema 已支持版本化（V1..Vn，active 切换）
 4. MATERIAL_STATUS_IMPORT — 批量只写 localStorage；逐行手改已接 PG
 5. INDEPENDENT_SPD_IMPORT — 网页上传只写 localStorage；spd_dashboard_rows 无写 API
@@ -56,7 +56,7 @@ Phase 2G.0 全系统上传 / 导入 / 替换 / 文件写入入口总审计。只
 
 ## Cutover Blocker 汇总
 
-- BLOCKER：本年往来前端接线（后端已就绪）
+- CURRENT_YEAR_LEDGER_FRONTEND_PG_COMPLETE：YES；同季度重传策略仍待用户确认
 - BLOCKER：资料批量导入→PG
 - BLOCKER：独立 SPD 上传→PG POST
 - BLOCKER：公司应收更新 PG API
