@@ -124,6 +124,53 @@ export type SpdDashboardData = {
   items: SpdDashboardRow[];
 };
 
+// Phase 2H.1 — remaining business import result shapes.
+export type MaterialImportResult = {
+  quarter: string;
+  status: "IMPORTED" | "PARTIAL";
+  sourceRows: number;
+  matchedRows: number;
+  unmatchedRows: number;
+  ambiguousRows: number;
+  writtenMaterialCells: number;
+  unmatchedKeys: string[];
+  sourceSha256: string;
+  importBatchId: string;
+};
+export type SpdImportResult = {
+  quarter: string;
+  status: "REPLACED";
+  sourceRows: number;
+  replacedRows: number;
+  linkedReconciliations: number;
+  sourceSha256: string;
+  importBatchId: string;
+};
+export type CompanyReceivableImportResult = {
+  quarter: string;
+  status: "IMPORTED" | "PARTIAL";
+  sourceRows: number;
+  matchedRows: number;
+  updatedRows: number;
+  unchangedRows: number;
+  unmatchedRows: number;
+  ambiguousRows: number;
+  sourceSha256: string;
+  importBatchId: string;
+};
+export type HistoricalLedgerReplaceResult = {
+  status: "REPLACED";
+  datasetId: string;
+  datasetType: "HISTORICAL_BASE";
+  version: number;
+  sourceFiles: string[];
+  sourceSha256: string;
+  insertedRows: number;
+  distinctInvoices: number;
+  previousVersion: number;
+  importBatchId: string | null;
+};
+
 export class ReconciliationApiError extends Error {
   constructor(public readonly code: string, message: string) { super(message); }
 }
@@ -157,4 +204,9 @@ export const reconciliationApi = {
   upsertMaterialStatus: (quarter: string, body: Omit<MaterialStatus, "id">, id?: string) => request(id ? `${base(quarter, id)}/material-status` : `/api/quarter/${encodeURIComponent(quarter)}/material-status`, { method: id ? "POST" : "PUT", body: JSON.stringify(body) }),
   updateMaterialStatus: (quarter: string, materialId: string, body: Partial<MaterialStatus>, id?: string) => request(id ? `${base(quarter, id)}/material-status/${encodeURIComponent(materialId)}` : `/api/quarter/${encodeURIComponent(quarter)}/material-status/${encodeURIComponent(materialId)}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteMaterialStatus: (quarter: string, materialId: string, id?: string) => request(id ? `${base(quarter, id)}/material-status/${encodeURIComponent(materialId)}` : `/api/quarter/${encodeURIComponent(quarter)}/material-status/${encodeURIComponent(materialId)}`, { method: "DELETE" }),
+  // Phase 2H.1 — remaining business imports (server-scoped quarter imports).
+  importMaterials: (quarter: string, body: { sourceFileName: string; headers: string[]; rows: unknown[][] }) => request<MaterialImportResult>(`/api/quarter/${encodeURIComponent(quarter)}/materials/import`, { method: "POST", body: JSON.stringify(body) }),
+  importSpdDashboard: (quarter: string, body: { sourceFileName: string; headers: string[]; rows: unknown[][] }) => request<SpdImportResult>(`/api/quarter/${encodeURIComponent(quarter)}/spd-dashboard/import`, { method: "POST", body: JSON.stringify(body) }),
+  importCompanyReceivables: (quarter: string, body: { sourceFileName: string; headers: string[]; rows: unknown[][] }) => request<CompanyReceivableImportResult>(`/api/quarter/${encodeURIComponent(quarter)}/company-receivables/import`, { method: "POST", body: JSON.stringify(body) }),
+  replaceHistoricalLedger: (body: { sourceFiles: LedgerSourceFileInput[] }) => request<HistoricalLedgerReplaceResult>(`/api/ledger/historical/import`, { method: "POST", body: JSON.stringify(body) }),
 };
