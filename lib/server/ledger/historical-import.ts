@@ -190,13 +190,16 @@ export async function replaceHistoricalLedger(
     }
 
     // 4) Atomic active switch: old active -> false, new -> true.
+    // NOTE: recon.ledger_datasets (migration 006) has NO updated_at column —
+    // the switch must ONLY flip is_active (Phase 2H.1.1 hotfix removed the
+    // erroneous timestamp write that caused HTTP 500 on valid V2 imports).
     await client.query(
-      `UPDATE recon.ledger_datasets SET is_active = false, updated_at = now()
+      `UPDATE recon.ledger_datasets SET is_active = false
        WHERE dataset_type = $1 AND is_active = true`,
       [DATASET_HISTORICAL],
     );
     await client.query(
-      `UPDATE recon.ledger_datasets SET is_active = true, updated_at = now()
+      `UPDATE recon.ledger_datasets SET is_active = true
        WHERE id = $1`,
       [datasetId],
     );

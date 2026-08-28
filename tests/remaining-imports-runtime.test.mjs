@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises";
 // and spd-dashboard.test.mjs). Live-DB verification happens in the 8001 staging
 // HTTP run against quarterly_recon_remaining_imports_test_20260828.
 //
-// Coverage map (24 cases):
+// Coverage map (26 cases):
 //   MATERIAL:       1 exact match · 2 unmatched partial · 3 status upsert
 //                   4 SPD-A -> material_status · 5 independent SPD untouched
 //                   6 malformed rollback
@@ -18,8 +18,9 @@ import { readFile } from "node:fs/promises";
 //                   15 sales data untouched · 16 unmatched · 17 ambiguous
 //   HISTORICAL:     18 V2 successful · 19 V1 retained · 20 V2 active
 //                   21 verify uses V2 · 22 failed V3 rollback
-//                   23 current-year unaffected
-//   AUDIT:          24 four types produce PG audit metadata
+//                   23 current-year unaffected · 24 input/normalization contract
+//                   25 regression: active-switch UPDATE must NOT set updated_at
+//   AUDIT:          26 four types produce PG audit metadata
 
 // ---------------------------------------------------------------------------
 // Pure replication of the server helpers (must equal remaining-imports-common.ts)
@@ -289,6 +290,29 @@ test("HIST-24 input: accepts sourceFiles[] and reuses Phase-2G normalization (in
   assert.match(lib, /parseLedgerSourceFile/);
   assert.match(lib, /sourceFiles/);
   assert.match(lib, /invoice_no_normalized|invoice_no_raw|invoice_date_raw|invoice_amount/);
+});
+
+test("HIST-25 regression: active-switch UPDATE on ledger_datasets must NOT set updated_at (006 has no such column)", async () => {
+  const lib = await readFile(new URL("../lib/server/ledger/historical-import.ts", import.meta.url), "utf8");
+  // Migration 006 recon.ledger_datasets has NO updated_at column (cols: id,
+  // dataset_type, year, quarter_id, version, is_active, source_file_name,
+  // source_sha256, source_payload, row_count, imported_at, created_at). The
+  // Phase 2H.1.1 blocker was a timestamp write in the two active-switch
+  // UPDATEs -> valid V2 imports returned HTTP 500. The switch must flip
+  // ONLY is_active. Keep the transaction/ordering/rollback guarantees.
+  assert.doesNotMatch(lib, /UPDATE recon\.ledger_datasets SET is_active = (true|false),\s*updated_at = now\(\)/);
+  // No SQL statement that touches ledger_datasets may write updated_at.
+  assert.doesNotMatch(lib, /UPDATE recon\.ledger_datasets[\s\S]*?updated_at = now\(\)/);
+  assert.doesNotMatch(lib, /recon\.ledger_datasets[^\n]*updated_at = now\(\)/);
+  // Active switch still present, and still only flips is_active.
+  assert.match(lib, /UPDATE recon\.ledger_datasets SET is_active = false/);
+  assert.match(lib, /UPDATE recon\.ledger_datasets SET is_active = true/);
+  // Old versions NEVER deleted; transaction still wraps the switch.
+  assert.doesNotMatch(lib, /DELETE FROM recon\.ledger_datasets/);
+  assert.match(lib, /withPostgresTransaction/);
+  // Ordering guarantee: validation -> deactivate old -> activate new.
+  assert.ok(lib.indexOf("POST_IMPORT_VALIDATION_FAILED") < lib.indexOf("SET is_active = false"));
+  assert.ok(lib.indexOf("SET is_active = true") > lib.indexOf("POST_IMPORT_VALIDATION_FAILED"));
 });
 
 // --- AUDIT ------------------------------------------------------------------
