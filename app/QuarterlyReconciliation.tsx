@@ -38,6 +38,7 @@ import {
   toFormDifferenceCategory,
 } from "../lib/difference-category-adapter.mjs";
 import "./reconciliation.css";
+import "./reconciliation-writeoff-section.css";
 
 type InvoiceEntry = {
   id?: string;
@@ -287,6 +288,7 @@ const num = (value: unknown) => {
   const n = Number(String(value ?? "").replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
 };
+const nullableText = (value: string) => value.trim() || null;
 const exactAmount = (value: unknown) => {
   const normalized = String(value ?? "").replace(/[\s,\uFFE5\u00A5]/g, "");
   if (!normalized) return null;
@@ -1743,12 +1745,18 @@ export function QuarterlyReconciliation({
       try {
         setSaving(true);
         setMessage("正在保存到 PostgreSQL…");
-        await reconciliationApi.patch(activeQuarter, reconciliationId, {
-          customerBookAmount: form.customerAmount.trim() || null, ownerName: form.responsible.trim() || null,
-          badDebtAmount: form.badDebt.trim() || null, badDebtReason: form.badDebtReason.trim() || null,
-          adjustmentAmount: form.adjustment.trim() || null, adjustmentReason: form.adjustmentReason.trim() || null,
-          solution: form.resolutionSolution.trim() || null, solutionDate: form.resolutionTime.trim() || null,
-        });
+        const original = sheet.details?.[String(active)];
+        const reconciliationPatch = {
+          ...(nullableText(form.customerAmount) !== nullableText(original?.customerAmount ?? "") ? { customerBookAmount: nullableText(form.customerAmount) } : {}),
+          ...(nullableText(form.responsible) !== nullableText(original?.responsible ?? "") ? { ownerName: nullableText(form.responsible) } : {}),
+          ...(nullableText(form.badDebt) !== nullableText(original?.badDebt ?? "") ? { badDebtAmount: nullableText(form.badDebt) } : {}),
+          ...(nullableText(form.badDebtReason) !== nullableText(original?.badDebtReason ?? "") ? { badDebtReason: nullableText(form.badDebtReason) } : {}),
+          ...(nullableText(form.adjustment) !== nullableText(original?.adjustment ?? "") ? { adjustmentAmount: nullableText(form.adjustment) } : {}),
+          ...(nullableText(form.adjustmentReason) !== nullableText(original?.adjustmentReason ?? "") ? { adjustmentReason: nullableText(form.adjustmentReason) } : {}),
+          ...(nullableText(form.resolutionSolution) !== nullableText(original?.resolutionSolution ?? "") ? { solution: nullableText(form.resolutionSolution) } : {}),
+          ...(nullableText(form.resolutionTime) !== nullableText(original?.resolutionTime ?? "") ? { solutionDate: nullableText(form.resolutionTime) } : {}),
+        };
+        if (Object.keys(reconciliationPatch).length) await reconciliationApi.patch(activeQuarter, reconciliationId, reconciliationPatch);
         const differenceMutations = planDifferenceItemMutations(apiDifferenceItems[reconciliationId] ?? [], desired);
         for (const item of differenceMutations.patch) await reconciliationApi.patchDifferenceItem(activeQuarter, reconciliationId, item.id, item.body);
         for (const item of differenceMutations.delete) await reconciliationApi.deleteDifferenceItem(activeQuarter, reconciliationId, item);
@@ -1767,7 +1775,8 @@ export function QuarterlyReconciliation({
         } else if (followup && !desiredEvents.length) {
           await reconciliationApi.deleteFollowup(activeQuarter, reconciliationId);
         } else if (followup) {
-          await reconciliationApi.updateFollowup(activeQuarter, reconciliationId, { followStatus: form.resolved ? "closed" : "pending" });
+          const nextStatus = form.resolved ? "closed" : "pending";
+          if (followup.followStatus !== nextStatus) await reconciliationApi.updateFollowup(activeQuarter, reconciliationId, { followStatus: nextStatus });
           const existingEventCount = followup.events.length;
           for (const event of desiredEvents.slice(existingEventCount)) await reconciliationApi.createFollowupEvent(activeQuarter, reconciliationId, {
             eventType: "followup", content: event.solution || null, occurredAt: `${event.time || new Date().toISOString().slice(0, 10)}T00:00:00.000Z`,
@@ -2522,39 +2531,29 @@ export function QuarterlyReconciliation({
                   <strong>{money(Math.max(0, Math.abs(difference) - total))}</strong>
                 </span>
               </div>
-              <div className="detail-grid two">
-                <div>
-                  <TextField
-                    label={T.badDebt}
-                    value={form.badDebt}
-                    type="number"
-                    onChange={(value) => setForm({ ...form, badDebt: value })}
-                  />
-                  <TextField
-                    label={"死账原因"}
-                    value={form.badDebtReason}
-                    onChange={(value) =>
-                      setForm({ ...form, badDebtReason: value })
-                    }
-                  />
-                </div>
-                <div>
-                  <TextField
-                    label={T.adjustment}
-                    value={form.adjustment}
-                    type="number"
-                    onChange={(value) =>
-                      setForm({ ...form, adjustment: value })
-                    }
-                  />
-                  <TextField
-                    label={"调账原因"}
-                    value={form.adjustmentReason}
-                    onChange={(value) =>
-                      setForm({ ...form, adjustmentReason: value })
-                    }
-                  />
-                </div>
+              <section className="writeoff-adjustment-section" aria-label="呆账、调账和解决信息">
+                <TextField
+                  label="呆账金额"
+                  value={form.badDebt}
+                  type="number"
+                  onChange={(value) => setForm({ ...form, badDebt: value })}
+                />
+                <TextField
+                  label="调账金额"
+                  value={form.adjustment}
+                  type="number"
+                  onChange={(value) => setForm({ ...form, adjustment: value })}
+                />
+                <TextField
+                  label="呆账原因"
+                  value={form.badDebtReason}
+                  onChange={(value) => setForm({ ...form, badDebtReason: value })}
+                />
+                <TextField
+                  label="调账原因"
+                  value={form.adjustmentReason}
+                  onChange={(value) => setForm({ ...form, adjustmentReason: value })}
+                />
                 <TextField
                   label={"\u89e3\u51b3\u65f6\u95f4"}
                   value={form.resolutionTime}
@@ -2586,10 +2585,9 @@ export function QuarterlyReconciliation({
                     </p>
                   )}
                 </div>
-              </div>
+              </section>
               <section className="difference-summary-list" aria-label="跟进记录">
-                <div className="difference-summary-heading"><b>跟进记录</b><small>保存后同步至 PostgreSQL</small></div>
-                <label><input type="checkbox" checked={form.resolved} onChange={(event) => setForm({ ...form, resolved: event.target.checked })} /> 已解决</label>
+                <div className="difference-summary-heading followup-heading"><span><b>跟进记录</b><small>保存后同步至 PostgreSQL</small></span><label className="followup-resolved-toggle"><input type="checkbox" checked={form.resolved} onChange={(event) => setForm({ ...form, resolved: event.target.checked })} /> 已解决</label></div>
                 {form.followUps.map((followup, index) => (
                   <div className="customer-save-row" key={`${followup.time}-${index}`}>
                     <input type="date" value={followup.time} disabled={index < persistedFollowupEventCount} onChange={(event) => setForm({ ...form, followUps: form.followUps.map((item, itemIndex) => itemIndex === index ? { ...item, time: event.target.value } : item) })} />
