@@ -22,14 +22,37 @@ import { verifyLedgerInvoice } from "../ledger/ledger";
 const AMOUNT_RE = /^-?\d+(\.\d{1,2})?$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Canonical difference categories persisted in recon.difference_items.
+// These are the ONLY values ever written to the DB — the legacy write aliases
+// (returned/lost/instrument/otherInvoice/other) are accepted on the API edge
+// and normalized to these canonical values before any write.
 export const DIFFERENCE_CATEGORIES = [
   "transit",
-  "returned",
-  "lost",
-  "instrument",
-  "otherInvoice",
-  "other",
+  "returned_invoice",
+  "lost_invoice",
+  "equipment",
+  "other_with_invoice",
+  "other_without_invoice",
 ] as const;
+
+// API-edge → canonical category normalization. Both the canonical value and the
+// legacy write-taxonomy alias map to the same canonical stored category. The DB
+// stores ONLY canonical values (no returned/lost/instrument/otherInvoice/other).
+const DIFFERENCE_CATEGORY_ALIASES: Record<string, string> = {
+  // canonical → canonical
+  transit: "transit",
+  returned_invoice: "returned_invoice",
+  lost_invoice: "lost_invoice",
+  equipment: "equipment",
+  other_with_invoice: "other_with_invoice",
+  other_without_invoice: "other_without_invoice",
+  // legacy write-taxonomy aliases → canonical
+  returned: "returned_invoice",
+  lost: "lost_invoice",
+  instrument: "equipment",
+  otherInvoice: "other_with_invoice",
+  other: "other_without_invoice",
+};
 
 export const VERIFICATION_STATUSES = [
   "not_applicable",
@@ -39,23 +62,23 @@ export const VERIFICATION_STATUSES = [
 ] as const;
 
 // Categories that carry an invoice and MUST be verified against the company
-// ledger. Mirrors the legacy UI (`invoice: true`): transit/returned/lost/
-// instrument/otherInvoice in the NEW write taxonomy, PLUS the migrated legacy
-// category values verbatim (returned_invoice/lost_invoice/equipment/
-// other_with_invoice) which the DB stores as-is for migrated quarters.
-// `other` and `other_without_invoice` are 无发票 -> not_applicable.
+// ledger. Canonical stored categories (the DB holds ONLY canonical values):
+// transit/returned_invoice/lost_invoice/equipment/other_with_invoice.
+// `other_without_invoice` is 无发票 -> not_applicable. (Legacy write aliases are
+// included defensively so a raw alias never slips through unverified, but the
+// write path normalizes to canonical before this set is consulted.)
 export const LEDGER_VERIFICATION_CATEGORIES = new Set<string>([
-  // new write taxonomy
+  // canonical stored taxonomy
   "transit",
-  "returned",
-  "lost",
-  "instrument",
-  "otherInvoice",
-  // migrated legacy taxonomy (verbatim values in recon.difference_items)
   "returned_invoice",
   "lost_invoice",
   "equipment",
   "other_with_invoice",
+  // legacy write-taxonomy aliases (defensive; normalized to canonical on write)
+  "returned",
+  "lost",
+  "instrument",
+  "otherInvoice",
 ]);
 
 type Row = Record<string, unknown>;
@@ -335,15 +358,23 @@ export async function patchReconciliation(
 // Difference items
 // ---------------------------------------------------------------------------
 function normalizeCategory(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    !(DIFFERENCE_CATEGORIES as readonly string[]).includes(value)
-  ) {
+  return normalizeDifferenceCategory(value);
+}
+
+// Public API-edge → canonical category normalizer. Accepts both the canonical
+// stored category and the legacy write-taxonomy alias; always returns the
+// canonical stored category. Throws INVALID_INPUT for unknown categories.
+export function normalizeDifferenceCategory(value: unknown): string {
+  if (typeof value !== "string") {
+    throw invalidInput("差额类别必须是合法类别之一");
+  }
+  const canonical = DIFFERENCE_CATEGORY_ALIASES[value];
+  if (!canonical) {
     throw invalidInput(
-      "差额类别必须是 transit/returned/lost/instrument/otherInvoice/other 之一",
+      "差额类别必须是 transit/returned_invoice/lost_invoice/equipment/other_with_invoice/other_without_invoice 之一",
     );
   }
-  return value;
+  return canonical;
 }
 
 function normalizeVerificationStatus(value: unknown): string {
