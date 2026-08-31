@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { moneyToCents, useDashboardData } from "./dashboard-postgres-data";
+import { useDashboardData } from "./dashboard-postgres-data";
+import { isUnsettled } from "../lib/reconciliation-settlement-status.mjs";
 import "./q1-action-panel.css";
 
 type ActionItem = {
@@ -72,7 +73,7 @@ function exportList(items: ActionItem[]) {
 export function Q1ActionPanel() {
   const { quarter, rows, loading, error } = useDashboardData();
   const items = useMemo<ActionItem[]>(() => rows
-    .filter((row) => moneyToCents(row.customerBookAmount) !== null && row.reconciliationStatus !== "对清")
+    .filter(isUnsettled)
     .map((row) => {
       const split = splitResolutionSolution(row.solution ?? "");
       return { region: row.region || "未填写", customer: row.customer || "—", companyReceivable: row.companyReceivable || "—", cause: split.cause, action: split.action };

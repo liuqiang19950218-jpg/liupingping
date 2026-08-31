@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { type CockpitRow } from "./cockpit-data";
 import { moneyToCents, useDashboardData } from "./dashboard-postgres-data";
+import { isSettled, isUnreconciled, isUnsettled, settlementRate } from "../lib/reconciliation-settlement-status.mjs";
 import { CockpitTrendChart } from "./CockpitTrendChart";
 import { DifferenceStructureChart } from "./DifferenceStructureChart";
 import {
@@ -32,8 +33,7 @@ const money = (n: number) =>
     n === 0
       ? "0"
       : n.toLocaleString("zh-CN", { maximumFractionDigits: 2 }),
-  reconciliationStatus = (r: CockpitRow) =>
-    !r.filled ? "未对账" : r.cleared ? "对清" : "未对清",
+  reconciliationStatus = (r: CockpitRow) => r.reconciliationStatus,
   today = new Date("2026-05-20").getTime(),
   overdue = (r: CockpitRow) =>
     new Date(r.expectedDate).getTime() < today && !r.actualDate;
@@ -70,6 +70,8 @@ const needsFollowUp = (r: CockpitRow) => r.followStatus !== "已解决";
 // leaves the pending list once it is resolved.
 const isPendingFollowUp = (r: CockpitRow) =>
   Boolean(r.solution.trim()) && r.followStatus !== "已解决";
+const matchesSettlementFilter = (row: CockpitRow, value: string) =>
+  value === "全部" || (value === "已对清" ? isSettled(row) : isUnsettled(row));
 const invoiceExceptionReason = (r: CockpitRow) =>
   [
     r.transitInvoiceFail && "在途明细缺少发票号、日期或金额",
@@ -128,12 +130,11 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     const differences = dashboard.differencesByReconciliation.get(row.id) ?? [];
     const amount = (category: string) => differences.filter((item) => item.category === category).reduce((sum, item) => sum + Number(moneyToCents(item.differenceAmount) ?? 0n) / 100, 0);
     const followup = dashboard.followupsByReconciliation.get(row.id)?.[0];
-    const filled = moneyToCents(row.customerBookAmount) !== null;
     return {
       id: row.id, quarter: row.quarterCode, region: row.region ?? "未填写", accountSet: row.accountSet ?? "未填写账套", owner: row.ownerName ?? "未填写", customer: row.customer ?? "未填写客户名称",
       companyReceivable: Number(moneyToCents(row.companyReceivable) ?? 0n) / 100, customerBook: Number(moneyToCents(row.customerBookAmount) ?? 0n) / 100, difference: Number(moneyToCents(row.reconciliationDifference) ?? 0n) / 100,
       transit: amount("transit"), returned: amount("returned") + amount("returned_invoice"), lost: amount("lost") + amount("lost_invoice"), instrument: amount("instrument") + amount("equipment"), otherInvoice: amount("otherInvoice") + amount("other_with_invoice"), otherNoInvoice: amount("other") + amount("other_without_invoice"),
-      badDebt: Number(moneyToCents(row.badDebtAmount) ?? 0n) / 100, adjustment: Number(moneyToCents(row.adjustmentAmount) ?? 0n) / 100, badDebtReason: row.badDebtReason ?? "", adjustmentReason: row.adjustmentReason ?? "", filled, cleared: row.reconciliationStatus === "对清", cause: row.solution ?? "", followStatus: followup?.followStatus ?? "", solution: row.solution ?? "", expectedDate: followup?.expectedCompleteAt ?? "—", actualDate: followup?.closedAt ?? undefined, updatedAt: followup?.updatedAt ?? "—", latestFollowUpAt: followup?.latestEvent?.occurredAt ?? followup?.latestFollowUpAt ?? undefined, processStage: followup?.processStage ?? undefined,
+      badDebt: Number(moneyToCents(row.badDebtAmount) ?? 0n) / 100, adjustment: Number(moneyToCents(row.adjustmentAmount) ?? 0n) / 100, badDebtReason: row.badDebtReason ?? "", adjustmentReason: row.adjustmentReason ?? "", reconciliationStatus: row.reconciliationStatus ?? "未对账", filled: isSettled(row) || isUnsettled(row), cleared: isSettled(row), cause: row.solution ?? "", followStatus: followup?.followStatus ?? "", solution: row.solution ?? "", expectedDate: followup?.expectedCompleteAt ?? "—", actualDate: followup?.closedAt ?? undefined, updatedAt: followup?.updatedAt ?? "—", latestFollowUpAt: followup?.latestEvent?.occurredAt ?? followup?.latestFollowUpAt ?? undefined, processStage: followup?.processStage ?? undefined,
       differenceInvoices: differences.map((item) => ({ category: item.category, invoice: item.invoiceNo ?? "", date: item.invoiceDate ?? "", amount: Number(moneyToCents(item.differenceAmount) ?? 0n) / 100, note: item.differenceDescription ?? undefined })),
     };
   }), [dashboard.rows, dashboard.differencesByReconciliation, dashboard.followupsByReconciliation]);
@@ -174,7 +175,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   );
   const quarterRows = useMemo(
     () =>
-      sourceQuarterRows.filter((row) => row.filled),
+      sourceQuarterRows.filter((row) => isSettled(row) || isUnsettled(row)),
     [sourceQuarterRows],
   );
   const regions = useMemo(
@@ -198,8 +199,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           (f.accountSet === "全部" || r.accountSet === f.accountSet) &&
           (f.owner === "全部" || r.owner === f.owner) &&
           (!f.customer || r.customer.includes(f.customer)) &&
-          (f.cleared === "全部" ||
-            (f.cleared === "已对清" ? r.cleared : !r.cleared)) &&
+          matchesSettlementFilter(r, f.cleared) &&
           (f.follow === "全部" || r.followStatus === f.follow),
       ),
     [f, quarterRows],
@@ -208,7 +208,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     () =>
       sourceQuarterRows.filter(
         (row) =>
-          !row.filled &&
+          isUnreconciled(row) &&
           (f.region === "全部" || row.region === f.region) &&
           (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
           (f.owner === "全部" || row.owner === f.owner) &&
@@ -229,8 +229,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
           (f.owner === "全部" || row.owner === f.owner) &&
           (!f.customer || row.customer.includes(f.customer)) &&
-          (f.cleared === "全部" ||
-            (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
+          matchesSettlementFilter(row, f.cleared) &&
           (f.follow === "全部" || row.followStatus === f.follow),
       ),
     [f, dashboardRows],
@@ -247,7 +246,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
           (f.owner === "全部" || row.owner === f.owner) &&
           (!f.customer || row.customer.includes(f.customer)) &&
-          (f.cleared === "全部" || (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
+          matchesSettlementFilter(row, f.cleared) &&
           (f.follow === "全部" || row.followStatus === f.follow),
       ),
     [f, dashboardRows],
@@ -265,11 +264,11 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       ),
       amountRate: rows.reduce((sum, row) => sum + (row.cleared ? row.companyReceivable : 0), 0) / Math.max(rows.reduce((sum, row) => sum + row.companyReceivable, 0), 1) * 100,
       // 未对清金额按未对清客户的公司应收总额统计，不采用对账差额。
-      pendingConfirmation: rows.filter((row) => !row.cleared).reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0),
+      pendingConfirmation: rows.filter(isUnsettled).reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0),
       unaccounted: unaccountedRows.length,
       clear,
       unclear,
-      rate: rows.length ? (clear / rows.length) * 100 : 0,
+      rate: settlementRate({ settled: clear, unsettled: unclear }),
       unresolved: pendingFollowUpRows.reduce((sum, row) => sum + Math.abs(row.difference), 0),
       invoice: rows.filter(hasInvoiceException).length,
       overdue: rows.filter(overdue).length,
@@ -293,7 +292,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         region,
         x,
         clear,
-        unclear: x.filter((row) => !row.cleared).length,
+        unclear: x.filter(isUnsettled).length,
         rate: x.length ? (clear / x.length) * 100 : 0,
         amountRate:
           (x.reduce((sum, row) => sum + (row.cleared ? row.companyReceivable : 0), 0) /
@@ -301,7 +300,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           100,
         // 区域表现的金额口径：未对清客户的公司应收，不使用待解决清单差额。
         unreconciledAmount: x
-          .filter((row) => !row.cleared)
+          .filter(isUnsettled)
           .reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0),
         risk: x.reduce((s, r) => s + getRisks(r).length, 0),
       };
@@ -355,7 +354,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
         (f.owner === "全部" || row.owner === f.owner) &&
         (!f.customer || row.customer.includes(f.customer)) &&
-        (f.cleared === "全部" || (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
+        matchesSettlementFilter(row, f.cleared) &&
         (f.follow === "全部" || row.followStatus === f.follow),
     )
     .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference) || b.overdueDays - a.overdueDays);
@@ -374,8 +373,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
             (f.owner === "全部" || row.owner === f.owner) &&
             (!f.customer || row.customer.includes(f.customer)) &&
-            (f.cleared === "全部" ||
-              (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
+            matchesSettlementFilter(row, f.cleared) &&
             (f.follow === "全部" || row.followStatus === f.follow),
         );
         const cleared = reconciled.filter((row) => row.cleared).length;
@@ -453,7 +451,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     { name: "应对账总额", value: money(m.reconciliationTotal), list: rows, tone: "blue", icon: "¥", note: "客户账面金额总额" },
     { name: CUSTOMER_RATE_DETAIL_TITLE, value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", icon: "◎", note: "已对清客户占比" },
     { name: AMOUNT_RATE_DETAIL_TITLE, value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", icon: "✓", note: "较上季度 +0.6%" },
-    { name: "未对清金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", icon: "⌛", note: "未对清客户公司应收总额" },
+    { name: "未对清金额", value: money(m.pendingConfirmation), list: rows.filter(isUnsettled), tone: "orange", icon: "⌛", note: "未对清客户公司应收总额" },
     { name: "未解决差额", value: money(m.unresolved), list: pendingFollowUpRows, detailTitle: PENDING_LIST_DETAIL_TITLE, tone: "red", icon: "△", note: "来自待解决清单" },
     { name: "调账金额", value: money(m.adjustmentAmount), list: currentDetailRows.filter((row) => row.adjustment !== 0), tone: "orange", icon: "⇄", note: "来自本年度对账明细" },
     { name: "死账金额", value: money(m.badDebtAmount), list: currentDetailRows.filter((row) => row.badDebt !== 0), tone: "purple", icon: "▣", note: "来自本年度对账明细" },
@@ -677,7 +675,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   <td>{m.total}</td>
                   <td>{m.amountRate.toFixed(1)}%</td>
                   <td>{m.rate.toFixed(1)}%</td>
-                  <td>{money(rows.filter((row) => !row.cleared).reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0))}</td>
+                  <td>{money(rows.filter(isUnsettled).reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0))}</td>
                   <td>{m.unclear}</td>
                 </tr>
               </tbody>

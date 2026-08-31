@@ -1,19 +1,20 @@
 "use client";
 
 import { formatCents, moneyToCents, useDashboardData } from "./dashboard-postgres-data";
+import { isSettled, isUnsettled, settlementRate } from "../lib/reconciliation-settlement-status.mjs";
 
 export function CurrentYearLinkedSummary() {
   const { quarter, rows, loading, error } = useDashboardData();
-  const accountedRows = rows.filter((row) => moneyToCents(row.customerBookAmount) !== null);
-  const clear = accountedRows.filter((row) => row.reconciliationStatus === "对清").length;
-  const unclear = accountedRows.length - clear;
+  const accountedRows = rows.filter((row) => isSettled(row) || isUnsettled(row));
+  const clear = accountedRows.filter(isSettled).length;
+  const unclear = accountedRows.filter(isUnsettled).length;
   const unresolved = accountedRows
-    .filter((row) => row.reconciliationStatus !== "对清")
+    .filter(isUnsettled)
     .reduce((total, row) => {
       const amount = moneyToCents(row.reconciliationDifference);
       return total + (amount === null ? 0n : amount < 0n ? -amount : amount);
     }, 0n);
-  const rate = accountedRows.length ? (clear / accountedRows.length) * 100 : 0;
+  const rate = settlementRate({ settled: clear, unsettled: unclear });
   if (loading) return <section className="current-year-linked-summary" aria-busy="true"><span>正在读取 PostgreSQL 季度数据…</span></section>;
   if (error) return <section className="current-year-linked-summary dashboard-data-error" role="alert">季度看板数据读取失败：{error}</section>;
   return (

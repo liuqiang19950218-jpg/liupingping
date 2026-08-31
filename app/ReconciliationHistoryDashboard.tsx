@@ -2,23 +2,24 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import * as echarts from "echarts";
-import { moneyToCents, useAllDashboardQuarterRows, useDashboardData } from "./dashboard-postgres-data";
+import { useAllDashboardQuarterRows, useDashboardData } from "./dashboard-postgres-data";
 import type { Reconciliation } from "../lib/api/reconciliation-api";
+import { isSettled, isUnsettled, settlementRate } from "../lib/reconciliation-settlement-status.mjs";
 import "./history-dashboard.css";
 import "./history-dashboard-extra.css";
 
 type TrendDataItem = { quarter: string; unreconciledCustomers: number; reconciliationRate: number };
 type RegionReconciliationItem = { region: string; totalCustomers: number; reconciledCustomers: number; unreconciledCustomers: number; reconciliationRate: number; order: number };
-const calculateRate = (reconciled: number, total: number) => total ? Number(((reconciled / total) * 100).toFixed(1)) : 0;
+const calculateRate = (reconciled: number, total: number) => Number(settlementRate({ settled: reconciled, unsettled: total - reconciled }).toFixed(1));
 
 const rowsToRegions = (rows: Reconciliation[]) => {
   const aggregate = new Map<string, RegionReconciliationItem>();
-  rows.filter((row) => moneyToCents(row.customerBookAmount) !== null).forEach((row) => {
+  rows.filter((row) => isSettled(row) || isUnsettled(row)).forEach((row) => {
     const key = row.region || "未填写";
     const current = aggregate.get(key) ?? { region: key, totalCustomers: 0, reconciledCustomers: 0, unreconciledCustomers: 0, reconciliationRate: 0, order: aggregate.size };
     current.totalCustomers += 1;
-    if (row.reconciliationStatus === "对清") current.reconciledCustomers += 1;
-    else current.unreconciledCustomers += 1;
+    if (isSettled(row)) current.reconciledCustomers += 1;
+    else if (isUnsettled(row)) current.unreconciledCustomers += 1;
     aggregate.set(key, current);
   });
   return [...aggregate.values()].map((item) => ({ ...item, reconciliationRate: calculateRate(item.reconciledCustomers, item.totalCustomers) }));

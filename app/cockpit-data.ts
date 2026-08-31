@@ -1,4 +1,5 @@
 import { ensureArchiveFromActive, quarterOf } from "./quarter-storage";
+import { isSettled } from "../lib/reconciliation-settlement-status.mjs";
 
 export type CockpitRow = {
   id: string;
@@ -20,6 +21,7 @@ export type CockpitRow = {
   adjustment: number;
   badDebtReason?: string;
   adjustmentReason?: string;
+  reconciliationStatus: string;
   filled: boolean;
   cleared: boolean;
   cause: string;
@@ -404,6 +406,7 @@ const row = (x: (typeof urgent)[number], i: number): CockpitRow => ({
   otherNoInvoice: x[8],
   badDebt: x[16] || 0,
   adjustment: 0,
+  reconciliationStatus: i !== 6 && i !== 7 ? "未对清" : "未对账",
   filled: i !== 6 && i !== 7,
   cleared: false,
   cause: x[9],
@@ -437,6 +440,7 @@ const normal = (quarter: string, i: number): CockpitRow => {
     otherNoInvoice: 0,
     badDebt: 0,
     adjustment: 0,
+    reconciliationStatus: diff ? "未对清" : "已对清",
     filled: true,
     cleared: !diff,
     cause: diff ? "季度资料待补" : "账实一致",
@@ -627,7 +631,8 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           badDebtReason: detail?.badDebtReason || String(entry[badDebtReasonAt] ?? ""),
           adjustmentReason: detail?.adjustmentReason || String(entry[adjustmentReasonAt] ?? ""),
           filled,
-          cleared: String(entry[clearedAt] ?? "") === "对清",
+          reconciliationStatus: String(entry[clearedAt] ?? ""),
+          cleared: isSettled(String(entry[clearedAt] ?? "")),
           cause: String(entry[noteAt] ?? ""),
           followStatus:
             detail?.resolved === true ||

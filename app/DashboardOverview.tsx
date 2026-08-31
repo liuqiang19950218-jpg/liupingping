@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatCents, moneyToCents, useDashboardData } from "./dashboard-postgres-data";
 import type { Reconciliation } from "../lib/api/reconciliation-api";
+import { isSettled, isUnsettled, settlementRate } from "../lib/reconciliation-settlement-status.mjs";
 import "./dashboard-overview.css";
 import "./dashboard-overview-overrides.css";
 
@@ -37,7 +38,7 @@ function unreconciledDetailTemplate(rows: Reconciliation[]): DetailTemplate {
       "\u8d26\u5957", "\u533a\u57df", "\u5ba2\u6237\u540d\u79f0", "\u5bf9\u8d26\u8d1f\u8d23\u4eba",
       "\u516c\u53f8\u5e94\u6536", "\u5ba2\u6237\u8d26\u9762\u91d1\u989d", "\u5bf9\u8d26\u5dee\u989d", "\u662f\u5426\u5bf9\u6e05",
     ],
-    rows: rows.filter((row) => moneyToCents(row.customerBookAmount) !== null && row.reconciliationStatus !== "对清").map((row) => [
+    rows: rows.filter(isUnsettled).map((row) => [
       row.accountSet, row.region, row.customer, row.ownerName, row.companyReceivable,
       row.customerBookAmount, row.reconciliationDifference, row.reconciliationStatus ?? "未填写",
     ]),
@@ -45,11 +46,11 @@ function unreconciledDetailTemplate(rows: Reconciliation[]): DetailTemplate {
 }
 
 function analyze(rows: Reconciliation[], quarter: string): Analysis {
-  const accounted = rows.filter((row) => moneyToCents(row.customerBookAmount) !== null);
-  const clear = accounted.filter((row) => row.reconciliationStatus === "对清").length;
-  const unclear = accounted.length - clear;
+  const accounted = rows.filter((row) => isSettled(row) || isUnsettled(row));
+  const clear = accounted.filter(isSettled).length;
+  const unclear = accounted.filter(isUnsettled).length;
   const unreconciledReceivable = accounted
-    .filter((row) => row.reconciliationStatus !== "对清")
+    .filter(isUnsettled)
     .reduce((sum, row) => { const value = moneyToCents(row.companyReceivable) ?? 0n; return sum + (value < 0n ? -value : value); }, 0n);
   const map = new Map<string, RegionAnalysis>();
   accounted.forEach((row) => {
@@ -64,10 +65,10 @@ function analyze(rows: Reconciliation[], quarter: string): Analysis {
       pendingAmount: 0n,
     };
     current.total += 1;
-    if (row.reconciliationStatus === "对清") current.clear += 1;
-    else current.unclear += 1;
+    if (isSettled(row)) current.clear += 1;
+    else if (isUnsettled(row)) current.unclear += 1;
     // 核心异常中的待解决差额，统一按未对清客户的公司应收金额统计。
-    if (row.reconciliationStatus !== "对清") {
+    if (isUnsettled(row)) {
       const value = moneyToCents(row.companyReceivable) ?? 0n;
       const absolute = value < 0n ? -value : value;
       current.pendingAmount += absolute;
@@ -86,7 +87,7 @@ function analyze(rows: Reconciliation[], quarter: string): Analysis {
     : "当前已填写账面金额的客户均已对清。";
   return {
     quarter,
-    rate: accounted.length ? (clear / accounted.length) * 100 : 0,
+    rate: settlementRate({ settled: clear, unsettled: unclear }),
     clear,
     unclear,
     unreconciledReceivable,
