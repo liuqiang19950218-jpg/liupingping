@@ -10,10 +10,15 @@ export type Reconciliation = {
   ownerId: string | null; ownerName: string | null;
 };
 export type DifferenceItem = {
-  id: string; category: "transit" | "returned" | "lost" | "instrument" | "otherInvoice" | "other";
+  // PostgreSQL returns its canonical persisted taxonomy verbatim.  It includes
+  // migrated Q1 values such as returned_invoice and other_without_invoice.
+  id: string; category: string;
   invoiceNo: string | null; invoiceDate: string | null; differenceAmount: string | null;
   differenceDescription: string | null; verificationStatus: "not_applicable" | "pending" | "matched" | "mismatched";
   attachmentKeys: string[];
+};
+type DifferenceItemWrite = Omit<DifferenceItem, "id" | "verificationStatus"> & {
+  verificationStatus?: DifferenceItem["verificationStatus"];
 };
 export type Quarter = { code: string; year: number; quarter: number; cutoffDate: string | null; status: string; reconciliationCount: number };
 export type Followup = { id: string; followStatus: string; processStage: string | null; riskLevel: string; expectedCompleteAt: string | null; nextFollowUpAt: string | null; latestFollowUpAt: string | null; closedAt: string | null; events: FollowupEvent[] };
@@ -187,8 +192,8 @@ export const reconciliationApi = {
   importQuarter: (quarter: string, body: { sourceFileName: string; headers: string[]; rows: unknown[][] }) => request<QuarterImportResult>(`/api/quarter/${encodeURIComponent(quarter)}/import`, { method: "POST", body: JSON.stringify(body) }),
   patch: (quarter: string, id: string, body: Partial<Pick<Reconciliation, "customerBookAmount" | "reconciliationStatus" | "badDebtAmount" | "badDebtReason" | "adjustmentAmount" | "adjustmentReason" | "solution" | "solutionDate" | "ownerName">>) => request<{ quarter: string; reconciliation: Reconciliation }>(base(quarter, id), { method: "PATCH", body: JSON.stringify(body) }),
   listDifferenceItems: (quarter: string, id: string, signal?: AbortSignal) => request<{ items: DifferenceItem[] }>(`${base(quarter, id)}/difference-items`, {}, signal),
-  createDifferenceItem: (quarter: string, id: string, body: Omit<DifferenceItem, "id">) => request<{ item: DifferenceItem }>(`${base(quarter, id)}/difference-items`, { method: "POST", body: JSON.stringify(body) }),
-  patchDifferenceItem: (quarter: string, id: string, itemId: string, body: Partial<Omit<DifferenceItem, "id">>) => request<{ item: DifferenceItem }>(`${base(quarter, id)}/difference-items/${encodeURIComponent(itemId)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  createDifferenceItem: (quarter: string, id: string, body: DifferenceItemWrite) => request<{ item: DifferenceItem }>(`${base(quarter, id)}/difference-items`, { method: "POST", body: JSON.stringify(body) }),
+  patchDifferenceItem: (quarter: string, id: string, itemId: string, body: Partial<DifferenceItemWrite>) => request<{ item: DifferenceItem }>(`${base(quarter, id)}/difference-items/${encodeURIComponent(itemId)}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteDifferenceItem: (quarter: string, id: string, itemId: string) => request(`${base(quarter, id)}/difference-items/${encodeURIComponent(itemId)}`, { method: "DELETE" }),
   getFollowups: (quarter: string, id: string) => request<{ followups: Followup[] }>(`${base(quarter, id)}/followups`),
   createFollowup: (quarter: string, id: string, body: Partial<Followup> & { event?: Omit<FollowupEvent, "id"> }) => request(`${base(quarter, id)}/followups`, { method: "POST", body: JSON.stringify(body) }),

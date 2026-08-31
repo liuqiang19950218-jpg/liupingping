@@ -28,11 +28,20 @@ import {
   type DifferenceItem,
   type Followup,
   type MaterialStatus,
+  type QuarterDifferenceItem,
   type Reconciliation,
 } from "../lib/api/reconciliation-api";
+import {
+  FORM_DIFFERENCE_CATEGORIES,
+  planDifferenceItemMutations,
+  toApiDifferenceCategory,
+  toFormDifferenceCategory,
+} from "../lib/difference-category-adapter.mjs";
 import "./reconciliation.css";
 
 type InvoiceEntry = {
+  id?: string;
+  verificationStatus?: DifferenceItem["verificationStatus"];
   date: string;
   invoice: string;
   amount: string;
@@ -59,7 +68,7 @@ declare global {
     webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
   }
 }
-type OtherEntry = { amount: string; note: string; image?: string };
+type OtherEntry = { id?: string; verificationStatus?: DifferenceItem["verificationStatus"]; amount: string; note: string; image?: string };
 type DifferenceType =
   | "transit"
   | "returned"
@@ -217,15 +226,29 @@ const API_HEADERS = [
   T.other, T.note, T.badDebt, T.adjustment, T.cleared, "解决方案", "解决时间",
   ...MATERIAL_HEADERS,
 ];
-const apiSheet = (quarter: string, reconciliations: Reconciliation[], material: MaterialStatus[] = []): LocalSheet => ({
+const summaryLabel: Record<DifferenceType, string> = {
+  transit: "在途", returned: "退票", lost: "丢票", instrument: "仪器设备", otherInvoice: "其他（有发票）", other: "其他",
+};
+const summaryValuesFromDifferenceItems = (items: Array<Pick<DifferenceItem, "category" | "differenceAmount" | "differenceDescription">>) => {
+  const amounts: Record<DifferenceType, number> = { transit: 0, returned: 0, lost: 0, instrument: 0, otherInvoice: 0, other: 0 };
+  const notes: string[] = [];
+  items.forEach((item) => {
+    const category = toFormDifferenceCategory(item.category);
+    amounts[category] += num(item.differenceAmount);
+    if (item.differenceDescription) notes.push(`${summaryLabel[category]}：${item.differenceDescription}`);
+  });
+  return { amounts, note: notes.join("；") };
+};
+const apiSheet = (quarter: string, reconciliations: Reconciliation[], material: MaterialStatus[] = [], differenceItems: QuarterDifferenceItem[] = []): LocalSheet => ({
   headers: API_HEADERS,
   fileName: `${quarter}-PostgreSQL`,
   rows: reconciliations.map((row, i) => {
     const byType = new Map(material.filter((item) => item.reconciliationId === row.id).map((item) => [item.materialType, item.rawValue ?? (item.provided ? "已提供" : "")]));
+    const summary = summaryValuesFromDifferenceItems(differenceItems.filter((item) => item.reconciliationId === row.id));
     return [
     i + 1, row.accountSet ?? "", row.region ?? "", row.ownerName ?? "", row.customer ?? "",
     row.companyReceivable ?? "", row.customerBookAmount ?? "", row.reconciliationDifference ?? "",
-    "", "", "", "", "", "", row.badDebtAmount ?? "", row.adjustmentAmount ?? "",
+    summary.amounts.transit || "", summary.amounts.returned || "", summary.amounts.lost || "", summary.amounts.instrument || "", summary.amounts.otherInvoice + summary.amounts.other || "", summary.note, row.badDebtAmount ?? "", row.adjustmentAmount ?? "",
     // The server owns this nullable status. Do not manufacture "未对账" for NULL.
     row.reconciliationStatus ?? "", row.solution ?? "", row.solutionDate ?? "",
     ...MATERIAL_HEADERS.map((header) => byType.get(header) ?? ""),
@@ -241,10 +264,10 @@ const apiSheet = (quarter: string, reconciliations: Reconciliation[], material: 
 const formFromDifferenceItems = (base: DetailForm, items: DifferenceItem[]): DetailForm => {
   const next = { ...base };
   (['transit', 'returned', 'lost', 'instrument', 'otherInvoice'] as DifferenceType[]).forEach((category) => {
-    next[category] = items.filter((item) => item.category === category).map((item) => ({ date: item.invoiceDate ?? "", invoice: item.invoiceNo ?? "", amount: item.differenceAmount ?? "", note: item.differenceDescription ?? "" })) as InvoiceEntry[];
+    next[category] = items.filter((item) => toFormDifferenceCategory(item.category) === category).map((item) => ({ id: item.id, verificationStatus: item.verificationStatus, date: item.invoiceDate ?? "", invoice: item.invoiceNo ?? "", amount: item.differenceAmount ?? "", note: item.differenceDescription ?? "" })) as InvoiceEntry[];
     if (!next[category].length) next[category] = [blankInvoice()];
   });
-  next.other = items.filter((item) => item.category === 'other').map((item) => ({ amount: item.differenceAmount ?? "", note: item.differenceDescription ?? "", image: item.attachmentKeys.join(",") }));
+  next.other = items.filter((item) => toFormDifferenceCategory(item.category) === 'other').map((item) => ({ id: item.id, verificationStatus: item.verificationStatus, amount: item.differenceAmount ?? "", note: item.differenceDescription ?? "", image: item.attachmentKeys.join(",") }));
   if (!next.other.length) next.other = [blankOther()];
   return next;
 };
@@ -680,14 +703,15 @@ export function QuarterlyReconciliation({
     return quarter && postgresQuarters.includes(quarter) ? quarter : null;
   };
   const refreshPostgresImportState = async (quarter: string, includeMaterial = false) => {
-    const [reconciliationResult, materialResult] = await Promise.all([
+    const [reconciliationResult, materialResult, differenceResult] = await Promise.all([
       reconciliationApi.list(quarter),
       includeMaterial ? reconciliationApi.getMaterialStatus(quarter) : Promise.resolve(null),
+      reconciliationApi.listQuarterDifferenceItems(quarter),
     ]);
     // The legacy import view persists every sheet change to its archive.  These
     // business imports must only refresh PostgreSQL-backed state, never seed it.
     if (mode !== "import") {
-      setSheet(apiSheet(quarter, reconciliationResult.reconciliations, materialResult?.material ?? []));
+      setSheet(apiSheet(quarter, reconciliationResult.reconciliations, materialResult?.material ?? [], differenceResult.items));
       setApiIds(reconciliationResult.reconciliations.map((item) => item.id));
       setApiDifferenceItems({});
       setRefreshNonce((current) => current + 1);
@@ -853,16 +877,17 @@ export function QuarterlyReconciliation({
             ? preferredQuarter
             : options[0] ?? "";
         if (!quarter) throw new Error("当前没有可用的 PostgreSQL 对账季度。");
-        const [{ reconciliations }, { material }] = await Promise.all([
+        const [{ reconciliations }, { material }, { items: differenceItems }] = await Promise.all([
           reconciliationApi.list(quarter, controller.signal),
           reconciliationApi.getMaterialStatus(quarter),
+          reconciliationApi.listQuarterDifferenceItems(quarter, controller.signal),
         ]);
         if (controller.signal.aborted) return;
         setArchivedQuarters(options);
         setActiveQuarter(quarter);
         setApiIds(reconciliations.map((item) => item.id));
         setApiDifferenceItems({});
-        setSheet(apiSheet(quarter, reconciliations, material));
+        setSheet(apiSheet(quarter, reconciliations, material, differenceItems));
         setMessage("");
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -1703,15 +1728,14 @@ export function QuarterlyReconciliation({
       const mutationKey = `reconciliation:${reconciliationId}`;
       const sequence = (mutationSequence.current.get(mutationKey) ?? 0) + 1;
       mutationSequence.current.set(mutationKey, sequence);
-      const desired = (['transit', 'returned', 'lost', 'instrument', 'otherInvoice', 'other'] as DifferenceType[]).flatMap((category) => {
+      const desired = (FORM_DIFFERENCE_CATEGORIES as DifferenceType[]).flatMap((category) => {
         const entries = category === 'other' ? form.other : form[category] as InvoiceEntry[];
         return entries.filter((entry) => category === 'other'
           ? num(entry.amount) !== 0 || entry.note.trim() || Boolean((entry as OtherEntry).image)
           : hasInvoiceNumber(entry as InvoiceEntry)).map((entry) => ({
-            category, invoiceNo: category === 'other' ? null : (entry as InvoiceEntry).invoice || null,
+            id: entry.id, formCategory: category, category: toApiDifferenceCategory(category), invoiceNo: category === 'other' ? null : (entry as InvoiceEntry).invoice || null,
             invoiceDate: category === 'other' ? null : (entry as InvoiceEntry).date || null,
             differenceAmount: entry.amount || null, differenceDescription: entry.note || null,
-            verificationStatus: category === 'other' ? 'not_applicable' as const : 'matched' as const,
             // This UI only round-trips approved attachment keys. It never uploads or reads binary data.
             attachmentKeys: category === 'other' ? String((entry as OtherEntry).image ?? '').split(',').map((key) => key.trim()).filter((key) => key && !key.startsWith('data:')) : [],
           }));
@@ -1725,15 +1749,10 @@ export function QuarterlyReconciliation({
           adjustmentAmount: form.adjustment.trim() || null, adjustmentReason: form.adjustmentReason.trim() || null,
           solution: form.resolutionSolution.trim() || null, solutionDate: form.resolutionTime.trim() || null,
         });
-        const categoryOrder: DifferenceType[] = ['transit', 'returned', 'lost', 'instrument', 'otherInvoice', 'other'];
-        const current = [...(apiDifferenceItems[reconciliationId] ?? [])].sort(
-          (left, right) => categoryOrder.indexOf(left.category) - categoryOrder.indexOf(right.category),
-        );
-        for (let i = 0; i < Math.max(current.length, desired.length); i += 1) {
-          if (current[i] && desired[i]) await reconciliationApi.patchDifferenceItem(activeQuarter, reconciliationId, current[i].id, desired[i]);
-          else if (current[i]) await reconciliationApi.deleteDifferenceItem(activeQuarter, reconciliationId, current[i].id);
-          else if (desired[i]) await reconciliationApi.createDifferenceItem(activeQuarter, reconciliationId, desired[i]);
-        }
+        const differenceMutations = planDifferenceItemMutations(apiDifferenceItems[reconciliationId] ?? [], desired);
+        for (const item of differenceMutations.patch) await reconciliationApi.patchDifferenceItem(activeQuarter, reconciliationId, item.id, item.body);
+        for (const item of differenceMutations.delete) await reconciliationApi.deleteDifferenceItem(activeQuarter, reconciliationId, item);
+        for (const item of differenceMutations.create) await reconciliationApi.createDifferenceItem(activeQuarter, reconciliationId, item);
         const followup = apiFollowups[reconciliationId]?.[0];
         const desiredEvents = form.followUps.filter((item) => item.time.trim() || item.solution.trim());
         if (!followup && desiredEvents.length) {
@@ -1755,11 +1774,11 @@ export function QuarterlyReconciliation({
           });
         }
         // Re-read confirmed server state; do not retain an optimistic local copy.
-        const [{ reconciliations }, { items }, { material }] = await Promise.all([
-          reconciliationApi.list(activeQuarter), reconciliationApi.listDifferenceItems(activeQuarter, reconciliationId), reconciliationApi.getMaterialStatus(activeQuarter),
+        const [{ reconciliations }, { items }, { material }, { items: differenceItems }] = await Promise.all([
+          reconciliationApi.list(activeQuarter), reconciliationApi.listDifferenceItems(activeQuarter, reconciliationId), reconciliationApi.getMaterialStatus(activeQuarter), reconciliationApi.listQuarterDifferenceItems(activeQuarter),
         ]);
         if (mutationSequence.current.get(mutationKey) === sequence) {
-          setSheet(apiSheet(activeQuarter, reconciliations, material));
+          setSheet(apiSheet(activeQuarter, reconciliations, material, differenceItems));
           setApiIds(reconciliations.map((item) => item.id));
           setApiDifferenceItems((currentItems) => ({ ...currentItems, [reconciliationId]: items }));
           const { followups } = await reconciliationApi.getFollowups(activeQuarter, reconciliationId);
