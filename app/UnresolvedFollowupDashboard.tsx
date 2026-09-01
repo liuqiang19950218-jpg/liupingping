@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { reconciliationApi, type QuarterFollowupItem, type Reconciliation } from "../lib/api/reconciliation-api";
+import { solutionFollowupBucket } from "../lib/solution-followup-routing.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import "./unresolved-followup.css";
 
@@ -48,6 +49,8 @@ type TableFilterKey = (typeof TABLE_FILTER_COLUMNS)[number]["key"];
 type Item = {
   id: string;
   reconciliationId: string;
+  followupId?: string;
+  solutionRouted: boolean;
   quarter: string;
   accountSet: string;
   region: string;
@@ -173,11 +176,36 @@ const tableFilterValue = (item: Item, key: TableFilterKey) => {
       return stageOf(item);
   }
 };
-function toItems(quarter: string, rows: Map<string, Reconciliation>, followups: QuarterFollowupItem[]): Item[] {
-  return followups.map((followup) => {
-    const row = rows.get(followup.reconciliationId);
-    return { id: followup.id, reconciliationId: followup.reconciliationId, quarter, accountSet: row?.accountSet ?? "", region: row?.region ?? "未填写区域", customer: row?.customer ?? "", owner: row?.ownerName ?? "", amount: amountOf(row?.reconciliationDifference), firstTime: followup.expectedCompleteAt ?? "", expectedDate: followup.expectedCompleteAt ?? "", firstSolution: row?.solution ?? "", followUps: followup.events.map((event) => ({ time: event.occurredAt, solution: event.content ?? "" })), processStage: followup.processStage && followup.processStage !== "已关闭" ? followup.processStage as Exclude<ProcessStage, "已关闭"> : undefined, resolved: Boolean(followup.closedAt) || followup.followStatus === "closed" || followup.followStatus === "已解决" };
-  });
+export function toItems(quarter: string, rows: Map<string, Reconciliation>, followups: QuarterFollowupItem[]): Item[] {
+  const followupByReconciliation = new Map(followups.map((item) => [item.reconciliationId, item]));
+  return [...rows.values()].flatMap((row) => {
+    const followup = followupByReconciliation.get(row.id);
+    const firstSolution = row.solution?.trim() ?? "";
+    const firstTime = row.solutionDate?.trim() ?? "";
+    // Final business rule: solution + date is pending; solution without date is archived.
+    // A blank solution retains the prior followup-driven behavior and is not inferred.
+    if (!firstSolution && !followup) return [];
+    const solutionBucket = solutionFollowupBucket(firstSolution, firstTime);
+    const solutionRouted = solutionBucket !== null;
+    return [{
+      id: followup?.id ?? `solution:${row.id}`,
+      reconciliationId: row.id,
+      followupId: followup?.id,
+      solutionRouted,
+      quarter,
+      accountSet: row.accountSet ?? "",
+      region: row.region ?? "未填写区域",
+      customer: row.customer ?? "",
+      owner: row.ownerName ?? "",
+      amount: amountOf(row.reconciliationDifference),
+      firstTime: solutionRouted ? firstTime : (followup?.expectedCompleteAt ?? ""),
+      expectedDate: solutionRouted ? firstTime : (followup?.expectedCompleteAt ?? ""),
+      firstSolution,
+      followUps: followup?.events.map((event) => ({ time: event.occurredAt, solution: event.content ?? "" })) ?? [],
+      processStage: followup?.processStage && followup.processStage !== "已关闭" ? followup.processStage as Exclude<ProcessStage, "已关闭"> : undefined,
+      resolved: solutionRouted ? solutionBucket === "resolved" : Boolean(followup?.closedAt) || followup?.followStatus === "closed" || followup?.followStatus === "已解决",
+    }];
+  }).filter((item) => item.customer);
 }
 
 function Badge({
@@ -497,7 +525,9 @@ export function UnresolvedFollowupDashboard() {
       return;
     }
     if (!quarter) return;
-    await reconciliationApi.createFollowupEvent(quarter.code, editing.reconciliationId, { eventType: "follow_up", content: followSolution.trim(), occurredAt: followTime || new Date().toISOString() });
+    const event = { eventType: "follow_up", content: followSolution.trim(), occurredAt: followTime || new Date().toISOString() };
+    if (editing.followupId) await reconciliationApi.createFollowupEvent(quarter.code, editing.reconciliationId, event);
+    else await reconciliationApi.createFollowup(quarter.code, editing.reconciliationId, { followStatus: "pending", event });
     refresh();
     setEditing(null);
     setFollowTime("");
@@ -963,7 +993,7 @@ export function UnresolvedFollowupDashboard() {
                         >
                           查看详情
                         </button>
-                        {tab === "pending" ? (
+                        {!item.solutionRouted && tab === "pending" ? (
                           <button
                             type="button"
                             className="uf-resolve"
@@ -971,7 +1001,7 @@ export function UnresolvedFollowupDashboard() {
                           >
                             已解决
                           </button>
-                        ) : (
+                        ) : !item.solutionRouted ? (
                           <button
                             type="button"
                             className="uf-secondary"
@@ -979,7 +1009,7 @@ export function UnresolvedFollowupDashboard() {
                           >
                             撤销
                           </button>
-                        )}
+                        ) : null}
                       </td>
                     </tr>
                   );

@@ -30,15 +30,16 @@ test("solution time remains a date input and the speech button stays with soluti
   assert.match(page, /resolutionTime[\s\S]{0,500}type="date"/);
   assert.match(page, /solution-field-with-speech[\s\S]{0,800}speech-record-button/);
 });
-test("followups remain rendered and the resolved state is compactly attached to its heading", () => {
-  assert.match(page, /aria-label="跟进记录"/);
-  assert.match(page, /followup-resolved-toggle/);
-  assert.match(page, /新增跟进/);
+test("detail form excludes followup controls", () => {
+  assert.doesNotMatch(page, /aria-label="跟进记录"/);
+  assert.doesNotMatch(page, /followup-resolved-toggle/);
+  assert.doesNotMatch(page, /新增跟进/);
 });
-test("no-op save skips the reconciliation patch and delegates followup mutations to the identity-aware planner", () => {
+test("no-op save skips the reconciliation patch and never mutates followups", () => {
   assert.match(page, /if \(Object\.keys\(reconciliationPatch\)\.length\) await reconciliationApi\.patch/);
-  assert.match(page, /planFollowupSave\(followup, form\.followUps, form\.resolved\)/);
-  assert.doesNotMatch(page, /else if \(followup && !desiredEvents\.length\)/);
+  assert.doesNotMatch(page, /planFollowupSave/);
+  assert.doesNotMatch(page, /createFollowup\(activeQuarter, reconciliationId/);
+  assert.doesNotMatch(page, /updateFollowup\(activeQuarter, reconciliationId/);
   assert.doesNotMatch(page, /deleteFollowup\(activeQuarter, reconciliationId\)/);
 });
 test("six-category adapter and shared dashboard settlement helper remain in the source tree", async () => {

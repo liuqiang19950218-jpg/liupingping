@@ -26,7 +26,6 @@ import {
   reconciliationApi,
   ReconciliationApiError,
   type DifferenceItem,
-  type Followup,
   type MaterialStatus,
   type QuarterDifferenceItem,
   type Reconciliation,
@@ -37,7 +36,6 @@ import {
   toApiDifferenceCategory,
   toFormDifferenceCategory,
 } from "../lib/difference-category-adapter.mjs";
-import { planFollowupSave } from "../lib/followup-save-plan.mjs";
 import "./reconciliation.css";
 import "./reconciliation-writeoff-section.css";
 
@@ -94,8 +92,6 @@ type DetailForm = {
   adjustmentReason: string;
   resolutionSolution: string;
   resolutionTime: string;
-  resolved: boolean;
-  followUps: { id?: string; time: string; solution: string }[];
 };
 type LocalSheet = {
   headers: string[];
@@ -219,8 +215,6 @@ const empty = (): DetailForm => ({
   adjustmentReason: "",
   resolutionSolution: "",
   resolutionTime: "",
-  resolved: false,
-  followUps: [],
 });
 const API_HEADERS = [
   "序号", "账套", T.region, RESPONSIBLE_HEADER, T.customer, T.company,
@@ -273,15 +267,6 @@ const formFromDifferenceItems = (base: DetailForm, items: DifferenceItem[]): Det
   if (!next.other.length) next.other = [blankOther()];
   return next;
 };
-const formFromFollowups = (base: DetailForm, followups: Followup[]): DetailForm => ({
-  ...base,
-  resolved: followups.some((item) => item.followStatus === "closed"),
-  followUps: followups.flatMap((item) => item.events.map((event) => ({
-    id: event.id,
-    time: event.occurredAt.slice(0, 10),
-    solution: event.content ?? "",
-  }))),
-});
 const toPostgresQuarterCode = (quarter: string) => {
   const match = quarter.trim().match(/^(\d{4})\s*-?\s*Q([1-4])$/i);
   return match ? `${match[1]}-Q${match[2]}` : null;
@@ -695,7 +680,6 @@ export function QuarterlyReconciliation({
   const [postgresQuarters, setPostgresQuarters] = useState<string[]>([]);
   const [apiIds, setApiIds] = useState<string[]>([]);
   const [apiDifferenceItems, setApiDifferenceItems] = useState<Record<string, DifferenceItem[]>>({});
-  const [apiFollowups, setApiFollowups] = useState<Record<string, Followup[]>>({});
   const [saving, setSaving] = useState(false);
   const mutationSequence = useRef<Map<string, number>>(new Map());
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -1669,13 +1653,9 @@ export function QuarterlyReconciliation({
       const reconciliationId = apiIds[id];
       if (!reconciliationId || !activeQuarter) return;
       try {
-        const [{ items }, { followups }] = await Promise.all([
-          reconciliationApi.listDifferenceItems(activeQuarter, reconciliationId),
-          reconciliationApi.getFollowups(activeQuarter, reconciliationId),
-        ]);
+        const { items } = await reconciliationApi.listDifferenceItems(activeQuarter, reconciliationId);
         setApiDifferenceItems((current) => ({ ...current, [reconciliationId]: items }));
-        setApiFollowups((current) => ({ ...current, [reconciliationId]: followups }));
-        setForm(formFromFollowups(formFromDifferenceItems(base, items), followups));
+        setForm(formFromDifferenceItems(base, items));
       } catch (error) {
         setActive(null);
         setMessage(error instanceof Error ? `差额明细加载失败：${error.message}` : "差额明细加载失败。");
@@ -1763,19 +1743,8 @@ export function QuarterlyReconciliation({
         for (const item of differenceMutations.patch) await reconciliationApi.patchDifferenceItem(activeQuarter, reconciliationId, item.id, item.body);
         for (const item of differenceMutations.delete) await reconciliationApi.deleteDifferenceItem(activeQuarter, reconciliationId, item);
         for (const item of differenceMutations.create) await reconciliationApi.createDifferenceItem(activeQuarter, reconciliationId, item);
-        const followup = apiFollowups[reconciliationId]?.[0] ?? null;
-        const followupPlan = planFollowupSave(followup, form.followUps, form.resolved);
-        // Saving this form never deletes a followup item. Existing server events
-        // remain read-only in this UI until an event-specific write endpoint is
-        // available; newly entered events are appended below.
-        if (followupPlan.patchEvents.length || followupPlan.deleteEvents.length) {
-          throw new Error("当前运行时不支持修改或删除历史跟进事件；请刷新后重试。");
-        }
-        if (followupPlan.createFollowup) {
-          await reconciliationApi.createFollowup(activeQuarter, reconciliationId, followupPlan.createFollowup);
-        }
-        if (followupPlan.patchFollowup) await reconciliationApi.updateFollowup(activeQuarter, reconciliationId, followupPlan.patchFollowup);
-        for (const event of followupPlan.createEvents) await reconciliationApi.createFollowupEvent(activeQuarter, reconciliationId, event);
+        // The detail form owns reconciliation fields only. Followup items and
+        // events are managed exclusively by the unresolved-followup dashboard.
         // Re-read confirmed server state; do not retain an optimistic local copy.
         const [{ reconciliations }, { items }, { material }, { items: differenceItems }] = await Promise.all([
           reconciliationApi.list(activeQuarter), reconciliationApi.listDifferenceItems(activeQuarter, reconciliationId), reconciliationApi.getMaterialStatus(activeQuarter), reconciliationApi.listQuarterDifferenceItems(activeQuarter),
@@ -1784,8 +1753,6 @@ export function QuarterlyReconciliation({
           setSheet(apiSheet(activeQuarter, reconciliations, material, differenceItems));
           setApiIds(reconciliations.map((item) => item.id));
           setApiDifferenceItems((currentItems) => ({ ...currentItems, [reconciliationId]: items }));
-          const { followups } = await reconciliationApi.getFollowups(activeQuarter, reconciliationId);
-          setApiFollowups((currentItems) => ({ ...currentItems, [reconciliationId]: followups }));
           setMessage("已保存到 PostgreSQL。显示内容已按服务端确认结果刷新。");
           stopSolutionRecording();
           setActive(null);
@@ -1868,8 +1835,6 @@ export function QuarterlyReconciliation({
   const isClear =
     form.customerAmount !== "" &&
     (Math.abs(difference) < 0.01 || Math.abs(difference - total) < 0.01);
-  const persistedFollowupEventCount =
-    active === null ? 0 : apiFollowups[apiIds[active]]?.[0]?.events.length ?? 0;
 
   return (
     <>
@@ -2579,17 +2544,6 @@ export function QuarterlyReconciliation({
                     </p>
                   )}
                 </div>
-              </section>
-              <section className="difference-summary-list" aria-label="跟进记录">
-                <div className="difference-summary-heading followup-heading"><span><b>跟进记录</b><small>保存后同步至 PostgreSQL</small></span><label className="followup-resolved-toggle"><input type="checkbox" checked={form.resolved} onChange={(event) => setForm({ ...form, resolved: event.target.checked })} /> 已解决</label></div>
-                {form.followUps.map((followup, index) => (
-                  <div className="customer-save-row" key={`${followup.time}-${index}`}>
-                    <input type="date" value={followup.time} disabled={index < persistedFollowupEventCount} onChange={(event) => setForm({ ...form, followUps: form.followUps.map((item, itemIndex) => itemIndex === index ? { ...item, time: event.target.value } : item) })} />
-                    <input value={followup.solution} disabled={index < persistedFollowupEventCount} placeholder="跟进方案 / 历史" onChange={(event) => setForm({ ...form, followUps: form.followUps.map((item, itemIndex) => itemIndex === index ? { ...item, solution: event.target.value } : item) })} />
-                    <button type="button" disabled={index < persistedFollowupEventCount} onClick={() => setForm({ ...form, followUps: form.followUps.filter((_, itemIndex) => itemIndex !== index) })}>删除</button>
-                  </div>
-                ))}
-                <button type="button" onClick={() => setForm({ ...form, followUps: [...form.followUps, { time: new Date().toISOString().slice(0, 10), solution: "" }] })}>＋ 新增跟进</button>
               </section>
             </div>
           </section>
