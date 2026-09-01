@@ -32,6 +32,12 @@ export type ReconciliationRead = {
   solutionDate: string | null;
   ownerId: string | null;
   ownerName: string | null;
+  // Phase 2K.9B-1: independent manual resolution + finance attention state.
+  // manualResolutionStatus: 'resolved' | 'reopened' | null (never derived from
+  // solution/solutionDate/follow_status). financeAttention: 'none' | 无需关注 |
+  // 一般关注 | 需财务复核 (raw stored value, 'none' is distinct from 无需关注).
+  manualResolutionStatus: string | null;
+  financeAttention: string | null;
 };
 
 export type DifferenceItemRead = {
@@ -129,6 +135,27 @@ async function assertOwnerNameColumn(
   }
 }
 
+// Migration 008 is required for the manualResolutionStatus contract (Phase
+// 2K.9B-1). If the column is missing the API must fail with a recognizable
+// server error (not a silent SQL 500) so an un-migrated database is obvious.
+async function assertManualResolutionColumn(
+  client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }> },
+): Promise<void> {
+  const res = await client.query(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'recon' AND table_name = 'reconciliations' AND column_name = 'manual_resolution_status'
+     ) AS present`,
+  );
+  if (res.rows[0]?.present !== true) {
+    throw new ApiError(
+      500,
+      "SCHEMA_008_REQUIRED",
+      "人工解决状态字段需要先应用迁移 008_manual_resolution_status",
+    );
+  }
+}
+
 export async function listQuarters(): Promise<QuarterSummary[]> {
   return withPostgresClient(async (client) => {
     const result = await client.query(
@@ -158,6 +185,7 @@ export async function getQuarter(code: string): Promise<QuarterSummary | null> {
 export async function getReconciliations(code: string): Promise<ReconciliationRead[]> {
   return withPostgresClient(async (client) => {
     await assertOwnerNameColumn(client);
+    await assertManualResolutionColumn(client);
     const result = await client.query(
       `SELECT r.id::text,
               r.source_row_key,
@@ -177,7 +205,9 @@ export async function getReconciliations(code: string): Promise<ReconciliationRe
               to_char(r.solution_date, 'YYYY-MM-DD') AS solution_date,
               r.owner_id::text,
               r.owner_name,
-              r.source_payload->>'owner_raw_name' AS owner_raw_name
+              r.source_payload->>'owner_raw_name' AS owner_raw_name,
+              r.manual_resolution_status,
+              r.financial_attention
        FROM recon.reconciliations r
        JOIN recon.quarters q ON q.id = r.quarter_id
        JOIN recon.account_sets a ON a.id = r.account_set_id
@@ -206,6 +236,8 @@ export async function getReconciliations(code: string): Promise<ReconciliationRe
       solutionDate: row.solution_date ?? null,
       ownerId: row.owner_id ?? null,
       ownerName: resolveOwnerName(row.owner_name, row.owner_raw_name),
+      manualResolutionStatus: row.manual_resolution_status ?? null,
+      financeAttention: row.financial_attention ?? null,
     }));
   });
 }

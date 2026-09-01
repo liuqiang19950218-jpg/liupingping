@@ -18,6 +18,11 @@ import {
 } from "../../../db/postgres";
 import { invalidInput, notFound, conflict } from "./errors";
 import { verifyLedgerInvoice } from "../ledger/ledger";
+import {
+  normalizeManualResolutionStatus,
+  normalizeFinanceAttention,
+  StateValidationError,
+} from "../../manual-resolution-state.mjs";
 
 const AMOUNT_RE = /^-?\d+(\.\d{1,2})?$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -321,6 +326,38 @@ export async function patchReconciliation(
       pushSet("owner_name", trimmed === "" ? null : trimmed);
     }
 
+    // Phase 2K.9B-1: independent manual resolution state ('resolved'/'reopened'/null).
+    // Validated by the shared pure normalizer; only manual_resolution_status is
+    // touched — solution / solution_date / follow_status / events are NEVER
+    // modified by this path (field isolation).
+    if ("manualResolutionStatus" in patch) {
+      let manualStatus: string | null;
+      try {
+        manualStatus = normalizeManualResolutionStatus(patch.manualResolutionStatus);
+      } catch (error) {
+        if (error instanceof StateValidationError) {
+          throw invalidInput(error.message);
+        }
+        throw invalidInput("无效的 manualResolutionStatus");
+      }
+      pushSet("manual_resolution_status", manualStatus);
+    }
+
+    // Phase 2K.9B-1: finance attention. 'none' (default) is DISTINCT from
+    // 无需关注 (explicit user choice) — never converted between each other.
+    if ("financeAttention" in patch) {
+      let financeAttention: string;
+      try {
+        financeAttention = normalizeFinanceAttention(patch.financeAttention);
+      } catch (error) {
+        if (error instanceof StateValidationError) {
+          throw invalidInput(error.message);
+        }
+        throw invalidInput("无效的 financeAttention");
+      }
+      pushSet("financial_attention", financeAttention);
+    }
+
     if (sets.length === 0) throw invalidInput("没有可更新的字段");
 
     sets.push("updated_at = now()");
@@ -332,7 +369,8 @@ export async function patchReconciliation(
       `RETURNING id::text AS id, company_receivable::text, customer_book_amount::text, ` +
       `reconciliation_difference::text, reconciliation_status, bad_debt_amount::text, ` +
       `bad_debt_reason, adjustment_amount::text, adjustment_reason, solution, ` +
-      `to_char(solution_date, 'YYYY-MM-DD') AS solution_date, owner_id::text, owner_name`;
+      `to_char(solution_date, 'YYYY-MM-DD') AS solution_date, owner_id::text, owner_name, ` +
+      `manual_resolution_status, financial_attention`;
     const res = await client.query(sql, params);
     const row = res.rows[0];
     return {
@@ -350,6 +388,8 @@ export async function patchReconciliation(
       solutionDate: row.solution_date ?? null,
       ownerId: row.owner_id ?? null,
       ownerName: row.owner_name ?? null,
+      manualResolutionStatus: row.manual_resolution_status ?? null,
+      financeAttention: row.financial_attention ?? null,
     };
   });
 }
