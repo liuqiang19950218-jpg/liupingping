@@ -35,9 +35,11 @@ test("followups remain rendered and the resolved state is compactly attached to 
   assert.match(page, /followup-resolved-toggle/);
   assert.match(page, /新增跟进/);
 });
-test("no-op save skips the reconciliation patch and unchanged followup status update", () => {
+test("no-op save skips the reconciliation patch and delegates followup mutations to the identity-aware planner", () => {
   assert.match(page, /if \(Object\.keys\(reconciliationPatch\)\.length\) await reconciliationApi\.patch/);
-  assert.match(page, /if \(followup\.followStatus !== nextStatus\) await reconciliationApi\.updateFollowup/);
+  assert.match(page, /planFollowupSave\(followup, form\.followUps, form\.resolved\)/);
+  assert.doesNotMatch(page, /else if \(followup && !desiredEvents\.length\)/);
+  assert.doesNotMatch(page, /deleteFollowup\(activeQuarter, reconciliationId\)/);
 });
 test("six-category adapter and shared dashboard settlement helper remain in the source tree", async () => {
   const [adapter, settlement] = await Promise.all([

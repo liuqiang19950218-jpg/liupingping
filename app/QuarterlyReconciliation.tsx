@@ -37,6 +37,7 @@ import {
   toApiDifferenceCategory,
   toFormDifferenceCategory,
 } from "../lib/difference-category-adapter.mjs";
+import { planFollowupSave } from "../lib/followup-save-plan.mjs";
 import "./reconciliation.css";
 import "./reconciliation-writeoff-section.css";
 
@@ -94,7 +95,7 @@ type DetailForm = {
   resolutionSolution: string;
   resolutionTime: string;
   resolved: boolean;
-  followUps: { time: string; solution: string }[];
+  followUps: { id?: string; time: string; solution: string }[];
 };
 type LocalSheet = {
   headers: string[];
@@ -276,6 +277,7 @@ const formFromFollowups = (base: DetailForm, followups: Followup[]): DetailForm 
   ...base,
   resolved: followups.some((item) => item.followStatus === "closed"),
   followUps: followups.flatMap((item) => item.events.map((event) => ({
+    id: event.id,
     time: event.occurredAt.slice(0, 10),
     solution: event.content ?? "",
   }))),
@@ -1761,27 +1763,19 @@ export function QuarterlyReconciliation({
         for (const item of differenceMutations.patch) await reconciliationApi.patchDifferenceItem(activeQuarter, reconciliationId, item.id, item.body);
         for (const item of differenceMutations.delete) await reconciliationApi.deleteDifferenceItem(activeQuarter, reconciliationId, item);
         for (const item of differenceMutations.create) await reconciliationApi.createDifferenceItem(activeQuarter, reconciliationId, item);
-        const followup = apiFollowups[reconciliationId]?.[0];
-        const desiredEvents = form.followUps.filter((item) => item.time.trim() || item.solution.trim());
-        if (!followup && desiredEvents.length) {
-          const [first, ...remaining] = desiredEvents;
-          await reconciliationApi.createFollowup(activeQuarter, reconciliationId, {
-            followStatus: form.resolved ? "closed" : "pending",
-            event: { eventType: "followup", content: first.solution || null, occurredAt: `${first.time || new Date().toISOString().slice(0, 10)}T00:00:00.000Z` },
-          });
-          for (const event of remaining) await reconciliationApi.createFollowupEvent(activeQuarter, reconciliationId, {
-            eventType: "followup", content: event.solution || null, occurredAt: `${event.time || new Date().toISOString().slice(0, 10)}T00:00:00.000Z`,
-          });
-        } else if (followup && !desiredEvents.length) {
-          await reconciliationApi.deleteFollowup(activeQuarter, reconciliationId);
-        } else if (followup) {
-          const nextStatus = form.resolved ? "closed" : "pending";
-          if (followup.followStatus !== nextStatus) await reconciliationApi.updateFollowup(activeQuarter, reconciliationId, { followStatus: nextStatus });
-          const existingEventCount = followup.events.length;
-          for (const event of desiredEvents.slice(existingEventCount)) await reconciliationApi.createFollowupEvent(activeQuarter, reconciliationId, {
-            eventType: "followup", content: event.solution || null, occurredAt: `${event.time || new Date().toISOString().slice(0, 10)}T00:00:00.000Z`,
-          });
+        const followup = apiFollowups[reconciliationId]?.[0] ?? null;
+        const followupPlan = planFollowupSave(followup, form.followUps, form.resolved);
+        // Saving this form never deletes a followup item. Existing server events
+        // remain read-only in this UI until an event-specific write endpoint is
+        // available; newly entered events are appended below.
+        if (followupPlan.patchEvents.length || followupPlan.deleteEvents.length) {
+          throw new Error("当前运行时不支持修改或删除历史跟进事件；请刷新后重试。");
         }
+        if (followupPlan.createFollowup) {
+          await reconciliationApi.createFollowup(activeQuarter, reconciliationId, followupPlan.createFollowup);
+        }
+        if (followupPlan.patchFollowup) await reconciliationApi.updateFollowup(activeQuarter, reconciliationId, followupPlan.patchFollowup);
+        for (const event of followupPlan.createEvents) await reconciliationApi.createFollowupEvent(activeQuarter, reconciliationId, event);
         // Re-read confirmed server state; do not retain an optimistic local copy.
         const [{ reconciliations }, { items }, { material }, { items: differenceItems }] = await Promise.all([
           reconciliationApi.list(activeQuarter), reconciliationApi.listDifferenceItems(activeQuarter, reconciliationId), reconciliationApi.getMaterialStatus(activeQuarter), reconciliationApi.listQuarterDifferenceItems(activeQuarter),
