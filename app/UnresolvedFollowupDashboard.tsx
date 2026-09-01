@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { reconciliationApi, type QuarterFollowupItem, type Reconciliation } from "../lib/api/reconciliation-api";
 import { solutionFollowupBucket } from "../lib/solution-followup-routing.mjs";
+import { businessDayDistance, normalizeDateOnly } from "../lib/date-only.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import "./unresolved-followup.css";
 
@@ -95,17 +96,12 @@ const money = (value: number) =>
   value === 0
     ? "0"
     : value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
-const dayDistance = (value: string) => {
-  const time = new Date(`${value}T00:00:00`).getTime();
-  return Number.isNaN(time)
-    ? null
-    : Math.max(0, Math.floor((Date.now() - time) / 86_400_000));
-};
 const latest = (item: Item) =>
-  [...item.followUps]
+  normalizeDateOnly([...item.followUps]
     .reverse()
     .find((entry) => entry.time.trim())
-    ?.time.trim() || item.firstTime;
+    ?.time.trim() || item.firstTime);
+const dayDistance = (value: string) => businessDayDistance(value);
 const text = (item: Item) =>
   [item.firstSolution, ...item.followUps.map((entry) => entry.solution)].join(
     " ",
