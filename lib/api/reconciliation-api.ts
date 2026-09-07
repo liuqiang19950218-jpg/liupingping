@@ -7,6 +7,8 @@ export type Reconciliation = {
   badDebtAmount: string | null; badDebtReason: string | null;
   adjustmentAmount: string | null; adjustmentReason: string | null;
   solution: string | null; solutionDate: string | null;
+  manualResolutionStatus: "resolved" | "reopened" | null;
+  financeAttention: "none" | "无需关注" | "一般关注" | "需财务复核" | null;
   ownerId: string | null; ownerName: string | null;
 };
 export type DifferenceItem = {
@@ -190,7 +192,7 @@ export const reconciliationApi = {
   listQuarters: (signal?: AbortSignal) => request<{ quarters: Quarter[] }>("/api/quarters", {}, signal),
   list: (quarter: string, signal?: AbortSignal) => request<{ quarter: string; reconciliations: Reconciliation[] }>(base(quarter), {}, signal),
   importQuarter: (quarter: string, body: { sourceFileName: string; headers: string[]; rows: unknown[][] }) => request<QuarterImportResult>(`/api/quarter/${encodeURIComponent(quarter)}/import`, { method: "POST", body: JSON.stringify(body) }),
-  patch: (quarter: string, id: string, body: Partial<Pick<Reconciliation, "customerBookAmount" | "reconciliationStatus" | "badDebtAmount" | "badDebtReason" | "adjustmentAmount" | "adjustmentReason" | "solution" | "solutionDate" | "ownerName">>) => request<{ quarter: string; reconciliation: Reconciliation }>(base(quarter, id), { method: "PATCH", body: JSON.stringify(body) }),
+  patch: (quarter: string, id: string, body: Partial<Pick<Reconciliation, "customerBookAmount" | "reconciliationStatus" | "badDebtAmount" | "badDebtReason" | "adjustmentAmount" | "adjustmentReason" | "solution" | "solutionDate" | "ownerName" | "manualResolutionStatus" | "financeAttention">>) => request<{ quarter: string; reconciliation: Reconciliation }>(base(quarter, id), { method: "PATCH", body: JSON.stringify(body) }),
   listDifferenceItems: (quarter: string, id: string, signal?: AbortSignal) => request<{ items: DifferenceItem[] }>(`${base(quarter, id)}/difference-items`, {}, signal),
   createDifferenceItem: (quarter: string, id: string, body: DifferenceItemWrite) => request<{ item: DifferenceItem }>(`${base(quarter, id)}/difference-items`, { method: "POST", body: JSON.stringify(body) }),
   patchDifferenceItem: (quarter: string, id: string, itemId: string, body: Partial<DifferenceItemWrite>) => request<{ item: DifferenceItem }>(`${base(quarter, id)}/difference-items/${encodeURIComponent(itemId)}`, { method: "PATCH", body: JSON.stringify(body) }),

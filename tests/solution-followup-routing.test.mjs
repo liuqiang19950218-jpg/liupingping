@@ -43,10 +43,11 @@ test("detail form has solution fields only and writes no followup", async () => 
   assert.doesNotMatch(page, /deleteFollowup\(activeQuarter, reconciliationId/);
 });
 
-test("dashboard derives first solution from reconciliations and keeps later events separate", async () => {
+test("legacy tracker uses persisted manual status and keeps later events separate", async () => {
   const page = await read("app/UnresolvedFollowupDashboard.tsx");
-  assert.match(page, /solutionFollowupBucket\(firstSolution, firstTime\)/);
-  assert.match(page, /const firstSolution = row\.solution\?\.trim/);
+  assert.match(page, /isLegacyTrackerItem\(row\)/);
+  assert.match(page, /legacyTrackerTab\(row\.manualResolutionStatus\)/);
+  assert.doesNotMatch(page, /solutionFollowupBucket\(/);
   assert.match(page, /followUps: followup\?\.events/);
   assert.match(page, /else await reconciliationApi\.createFollowup/);
 });

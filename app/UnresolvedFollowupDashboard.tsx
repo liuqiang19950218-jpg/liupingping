@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { reconciliationApi, type QuarterFollowupItem, type Reconciliation } from "../lib/api/reconciliation-api";
-import { solutionFollowupBucket } from "../lib/solution-followup-routing.mjs";
+import { isLegacyTrackerItem, legacyTrackerTab } from "../lib/followup-tracker-routing.mjs";
 import { businessDayDistance, normalizeDateOnly } from "../lib/date-only.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import "./unresolved-followup.css";
@@ -32,7 +32,7 @@ type Sheet = {
   details?: Record<string, Detail>;
 };
 type Risk = "高风险" | "中风险" | "一般关注";
-type Finance = "需财务复核" | "一般关注" | "无需关注";
+type Finance = "none" | "需财务复核" | "一般关注" | "无需关注";
 const TABLE_FILTER_COLUMNS = [
   { key: "quarter", label: "季度" },
   { key: "region", label: "区域" },
@@ -51,7 +51,6 @@ type Item = {
   id: string;
   reconciliationId: string;
   followupId?: string;
-  solutionRouted: boolean;
   quarter: string;
   accountSet: string;
   region: string;
@@ -63,8 +62,8 @@ type Item = {
   firstSolution: string;
   followUps: FollowUp[];
   resolved: boolean;
-  financeAttention?: Finance;
-  processStage?: Exclude<ProcessStage, "已关闭">;
+  financeAttention: Finance;
+  processStage: Exclude<ProcessStage, "已关闭"> | null;
 };
 
 type DashboardMetricFilter =
@@ -106,7 +105,8 @@ const text = (item: Item) =>
   [item.firstSolution, ...item.followUps.map((entry) => entry.solution)].join(
     " ",
   );
-const financeOf = (item: Item): Finance => item.financeAttention ?? "无需关注";
+const financeOf = (item: Item): Finance => item.financeAttention;
+const financeLabel = (value: Finance) => value === "none" ? "未设置" : value;
 const stageOf = (item: Item): ProcessStage => {
   if (item.resolved) return "已关闭";
   if (item.processStage) return item.processStage;
@@ -176,30 +176,27 @@ export function toItems(quarter: string, rows: Map<string, Reconciliation>, foll
   const followupByReconciliation = new Map(followups.map((item) => [item.reconciliationId, item]));
   return [...rows.values()].flatMap((row) => {
     const followup = followupByReconciliation.get(row.id);
-    const firstSolution = row.solution?.trim() ?? "";
     const firstTime = row.solutionDate?.trim() ?? "";
-    // Final business rule: solution + date is pending; solution without date is archived.
-    // A blank solution retains the prior followup-driven behavior and is not inferred.
-    if (!firstSolution && !followup) return [];
-    const solutionBucket = solutionFollowupBucket(firstSolution, firstTime);
-    const solutionRouted = solutionBucket !== null;
+    // Tracker membership is the historical 54-customer date scope.  Never
+    // reintroduce solution/no-date routing: the 55 no-date rows are excluded.
+    if (!isLegacyTrackerItem(row)) return [];
     return [{
       id: followup?.id ?? `solution:${row.id}`,
       reconciliationId: row.id,
       followupId: followup?.id,
-      solutionRouted,
       quarter,
       accountSet: row.accountSet ?? "",
       region: row.region ?? "未填写区域",
       customer: row.customer ?? "",
       owner: row.ownerName ?? "",
       amount: amountOf(row.reconciliationDifference),
-      firstTime: solutionRouted ? firstTime : (followup?.expectedCompleteAt ?? ""),
-      expectedDate: solutionRouted ? firstTime : (followup?.expectedCompleteAt ?? ""),
-      firstSolution,
+      firstTime,
+      expectedDate: firstTime,
+      firstSolution: row.solution?.trim() ?? "",
       followUps: followup?.events.map((event) => ({ time: event.occurredAt, solution: event.content ?? "" })) ?? [],
-      processStage: followup?.processStage && followup.processStage !== "已关闭" ? followup.processStage as Exclude<ProcessStage, "已关闭"> : undefined,
-      resolved: solutionRouted ? solutionBucket === "resolved" : Boolean(followup?.closedAt) || followup?.followStatus === "closed" || followup?.followStatus === "已解决",
+      financeAttention: row.financeAttention ?? "none",
+      processStage: followup?.processStage && followup.processStage !== "已关闭" ? followup.processStage as Exclude<ProcessStage, "已关闭"> : null,
+      resolved: legacyTrackerTab(row.manualResolutionStatus) === "resolved",
     }];
   }).filter((item) => item.customer);
 }
@@ -530,27 +527,48 @@ export function UnresolvedFollowupDashboard() {
     setFollowSolution("");
     setMessage("已保存跟进记录，首次解决方案与首次时间保持不变。");
   };
-  const resolve = async (item: Item) => {
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const withSaving = async (item: Item, action: () => Promise<void>) => {
+    setSavingIds((current) => new Set(current).add(item.reconciliationId));
+    try {
+      await action();
+      refresh();
+    } catch (caught) {
+      setMessage(caught instanceof Error ? `保存失败：${caught.message}` : "保存失败，请稍后重试。");
+    } finally {
+      setSavingIds((current) => { const next = new Set(current); next.delete(item.reconciliationId); return next; });
+    }
+  };
+  const resolve = (item: Item) => withSaving(item, async () => {
     if (!quarter) return;
-    await reconciliationApi.updateFollowup(quarter.code, item.reconciliationId, { followStatus: "closed", closedAt: new Date().toISOString() });
-    refresh();
+    await reconciliationApi.patch(quarter.code, item.reconciliationId, { manualResolutionStatus: "resolved" });
     setMessage("已转入已解决档案。");
-  };
-  const restore = async (item: Item) => {
+  });
+  const restore = (item: Item) => withSaving(item, async () => {
     if (!quarter) return;
-    await reconciliationApi.updateFollowup(quarter.code, item.reconciliationId, { followStatus: "pending", closedAt: null });
-    refresh();
+    await reconciliationApi.patch(quarter.code, item.reconciliationId, { manualResolutionStatus: "reopened" });
     setMessage("已撤销解决状态，客户已回到待解决清单。");
+  });
+  const updateFinanceAttention = (item: Item, financeAttention: Finance) => {
+    if (!quarter || item.financeAttention === financeAttention) return;
+    void withSaving(item, async () => {
+      await reconciliationApi.patch(quarter.code, item.reconciliationId, { financeAttention });
+      setMessage(`已将${item.customer}设置为${financeLabel(financeAttention)}。`);
+    });
   };
-  const updateFinanceAttention = (_item: Item, _financeAttention: Finance) => setMessage("财务关注字段当前未由季度 followup API 提供。");
   const updateProcessStage = async (
     item: Item,
     nextStage: Exclude<ProcessStage, "已关闭">,
   ) => {
-    if (!quarter) return;
-    await reconciliationApi.updateFollowup(quarter.code, item.reconciliationId, { processStage: nextStage });
-    refresh();
-    setMessage(`已将${item.customer}设置为${nextStage}。`);
+    if (!quarter || item.processStage === nextStage) return;
+    if (!item.followupId) {
+      setMessage(`无法保存：${item.customer}（${item.reconciliationId}）没有可匹配的 followup_item。`);
+      return;
+    }
+    await withSaving(item, async () => {
+      await reconciliationApi.updateFollowup(quarter.code, item.reconciliationId, { processStage: nextStage });
+      setMessage(`已将${item.customer}设置为${nextStage}。`);
+    });
   };
   const exportRows = () => {
     const header = [
@@ -931,7 +949,8 @@ export function UnresolvedFollowupDashboard() {
                         <select
                           aria-label={`${item.customer} 财务关注`}
                           className={`uf-finance-select ${financeOf(item) === "需财务复核" ? "is-review" : financeOf(item) === "一般关注" ? "is-general" : ""}`}
-                          value={financeOf(item)}
+                          value={item.financeAttention}
+                          disabled={savingIds.has(item.reconciliationId)}
                           onChange={(event) =>
                             updateFinanceAttention(
                               item,
@@ -939,36 +958,32 @@ export function UnresolvedFollowupDashboard() {
                             )
                           }
                         >
+                          <option value="none">未设置</option>
                           <option value="无需关注">无需关注</option>
                           <option value="一般关注">一般关注</option>
                           <option value="需财务复核">需财务复核</option>
                         </select>
                       </td>
                       <td>
-                        {item.resolved ? (
-                          <span className="uf-stage-closed">已关闭</span>
-                        ) : (
-                          <select
-                            aria-label={`${item.customer} 问题处理阶段`}
-                            className={`uf-stage-select ${stageOf(item) === "待财务调账" ? "is-finance" : ""}`}
-                            value={stageOf(item)}
-                            onChange={(event) =>
-                              updateProcessStage(
-                                item,
-                                event.target.value as Exclude<
-                                  ProcessStage,
-                                  "已关闭"
-                                >,
-                              )
-                            }
-                          >
-                            {PROCESS_STAGES.filter(
-                              (stage) => stage !== "已关闭",
-                            ).map((stage) => (
-                              <option key={stage}>{stage}</option>
-                            ))}
-                          </select>
-                        )}
+                        <select
+                          aria-label={`${item.customer} 问题处理阶段`}
+                          className={`uf-stage-select ${item.processStage === "待财务调账" ? "is-finance" : ""}`}
+                          value={item.processStage ?? ""}
+                          disabled={!item.followupId || savingIds.has(item.reconciliationId)}
+                          onChange={(event) =>
+                            updateProcessStage(
+                              item,
+                              event.target.value as Exclude<ProcessStage, "已关闭">,
+                            )
+                          }
+                        >
+                          <option value="" disabled>未设置</option>
+                          {PROCESS_STAGES.filter(
+                            (stage) => stage !== "已关闭",
+                          ).map((stage) => (
+                            <option key={stage}>{stage}</option>
+                          ))}
+                        </select>
                       </td>
                       <td className="uf-actions">
                         <button
@@ -989,23 +1004,25 @@ export function UnresolvedFollowupDashboard() {
                         >
                           查看详情
                         </button>
-                        {!item.solutionRouted && tab === "pending" ? (
+                        {tab === "pending" ? (
                           <button
                             type="button"
                             className="uf-resolve"
                             onClick={() => resolve(item)}
+                            disabled={savingIds.has(item.reconciliationId)}
                           >
-                            已解决
+                            {savingIds.has(item.reconciliationId) ? "保存中…" : "已解决"}
                           </button>
-                        ) : !item.solutionRouted ? (
+                        ) : (
                           <button
                             type="button"
                             className="uf-secondary"
                             onClick={() => restore(item)}
+                            disabled={savingIds.has(item.reconciliationId)}
                           >
-                            撤销
+                            {savingIds.has(item.reconciliationId) ? "保存中…" : "撤销"}
                           </button>
-                        ) : null}
+                        )}
                       </td>
                     </tr>
                   );
@@ -1144,7 +1161,7 @@ export function UnresolvedFollowupDashboard() {
                                 : "uf-finance-none"
                           }
                         >
-                          {financeOf(item)}
+                          {financeLabel(financeOf(item))}
                         </b>
                       </span>
                     </button>
@@ -1351,7 +1368,7 @@ export function UnresolvedFollowupDashboard() {
                 <dt>财务关注</dt>
                 <dd>
                   <Badge type={financeOf(detail)} variant="finance">
-                    {financeOf(detail)}
+                    {financeLabel(financeOf(detail))}
                   </Badge>
                 </dd>
               </div>
