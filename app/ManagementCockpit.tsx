@@ -3,6 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import { type CockpitRow } from "./cockpit-data";
 import { moneyToCents, useDashboardData } from "./dashboard-postgres-data";
 import { isSettled, isUnreconciled, isUnsettled, settlementRate } from "../lib/reconciliation-settlement-status.mjs";
+import {
+  formatDifferenceCategoryLabel,
+  formatFollowupStatusLabel,
+} from "../lib/ui-business-labels.mjs";
 import { CockpitTrendChart } from "./CockpitTrendChart";
 import { DifferenceStructureChart } from "./DifferenceStructureChart";
 import {
@@ -551,10 +555,9 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             onChange={(e) => change("follow", e.target.value)}
           >
             <option>全部</option>
-            <option>待资料</option>
-            <option>待跟进</option>
-            <option>待财务复核</option>
-            <option>已解决</option>
+            <option value="pending">{formatFollowupStatusLabel("pending")}</option>
+            <option value="closed">{formatFollowupStatusLabel("closed")}</option>
+            <option value="reopened">{formatFollowupStatusLabel("reopened")}</option>
           </select>
         </label>
         <div className="filter-actions">
@@ -755,7 +758,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                       {r.overdueDays}天
                     </td>
                     <td>
-                      <span className="status">{r.followStatus}</span>
+                      <span className="status">{formatFollowupStatusLabel(r.followStatus)}</span>
                     </td>
                     <td>{r.expectedDate}</td>
                     <td>
@@ -906,7 +909,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                         <td>{row.expectedDate || "—"}</td>
                         <td><span className="detail-clamp" title={row.solution}>{row.solution || "—"}</span></td>
                         <td>{row.processStage || "—"}</td>
-                        <td><span className="detail-status">{row.followStatus || "—"}</span></td>
+                        <td><span className="detail-status">{formatFollowupStatusLabel(row.followStatus)}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -964,7 +967,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                           <td>{row.accountSet || "—"}</td>
                           <td>{row.region}</td>
                           <td className="detail-customer" title={row.customer}>{row.customer}</td>
-                          <td>{invoice.category}</td>
+                          <td>{formatDifferenceCategoryLabel(invoice.category)}</td>
                           <td>{invoice.date}</td>
                           <td>{invoice.invoice}</td>
                           <td className="detail-money difference-money">{detailMoney(invoice.amount)}</td>

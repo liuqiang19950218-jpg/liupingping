@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { CockpitRow } from "./cockpit-data";
+import { formatDifferenceCategoryLabel } from "../lib/ui-business-labels.mjs";
 
 export type AgingLevel = "normal" | "attention" | "highAttention" | "highRisk";
 
@@ -117,7 +118,7 @@ export const buildDifferenceAgingBuckets = (rows: CockpitRow[], quarter: string)
             // Prefer the invoice-level 差额说明 from quarterly details. If it has
             // not been filled in, retain the original invoice difference category
             // (在途、退票、丢票、仪器设备、其他等) as the business fallback.
-            differenceReason: String(invoice.note ?? "").trim() || String(invoice.category ?? "").trim(),
+            differenceReason: String(invoice.note ?? "").trim() || formatDifferenceCategoryLabel(invoice.category),
             reconciliationStatus: !row.filled ? "未对账" : row.cleared ? "已对清" : "未对清",
             owner: row.owner,
             ownerId: row.owner,
