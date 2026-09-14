@@ -6,7 +6,7 @@ import { formatDifferenceCategoryLabel, formatFollowupStatusLabel } from "../lib
 test("followup status labels are Chinese presentation-only labels", () => {
   assert.equal(formatFollowupStatusLabel("pending"), "待解决");
   assert.equal(formatFollowupStatusLabel("closed"), "已解决");
-  assert.equal(formatFollowupStatusLabel("reopened"), "已撤回");
+  assert.equal(formatFollowupStatusLabel("reopened"), "已撤销");
   assert.equal(formatFollowupStatusLabel("legacy-value"), "legacy-value");
   assert.equal(formatFollowupStatusLabel(null), "未设置");
 });
