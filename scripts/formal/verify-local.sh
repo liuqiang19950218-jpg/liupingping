@@ -3,7 +3,7 @@
 set -euo pipefail
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "$ROOT"
-npm ci
+npm ci --include=dev
 npm run build
 npm run lint
 node --test tests/*.test.mjs

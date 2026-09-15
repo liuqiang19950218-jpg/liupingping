@@ -24,8 +24,8 @@ validate_sha "$CURRENT_SHA"
 git cat-file -e "$CURRENT_SHA^{commit}" 2>/dev/null || die "current formal build SHA is not available locally; fetch its exact origin ref before release"
 git merge-base --is-ancestor "$CURRENT_SHA" "$TARGET" || die "target is not a descendant of current formal build SHA"
 
-note "npm ci"
-npm ci
+note "npm ci --include=dev"
+npm ci --include=dev
 note "npm run build"
 npm run build
 note "npm run lint"

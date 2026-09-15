@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Install full deps (vinext/wrangler are devDependencies required by `vinext start`)
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 # Copy project and build
 COPY . .
