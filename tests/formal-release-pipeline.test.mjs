@@ -39,6 +39,9 @@ test("formal release builds only the exact release worktree", () => {
   assert.match(release, /release-metadata\.json/);
   assert.match(dockerfile, /builtFrom.*exact-worktree/);
   assert.match(dockerignore, /^\.npm-cache$/m);
+  assert.doesNotMatch(dockerignore, /^dist$/m);
+  assert.match(dockerfile, /test -f dist\/server\/wrangler\.json/);
+  assert.doesNotMatch(dockerfile, /RUN npm ci/);
 });
 
 test("formal runner ignores caller cwd and fails closed on an invalid Git root", () => {
