@@ -75,6 +75,25 @@ test("staging runner uses the durable Git root and an exact worktree", () => {
   assert.doesNotMatch(staging, /historical-dashboard-build/);
 });
 
+test("offline handoff is explicit and transfers verified Git objects", () => {
+  const release = readFileSync("scripts/formal/release.mjs", "utf8");
+  const staging = readFileSync("scripts/formal/staging.mjs", "utf8");
+  const handoff = readFileSync("scripts/formal/offline-git-handoff.mjs", "utf8");
+  for (const runner of [release, staging]) {
+    assert.match(runner, /OFFLINE_EXACT_GIT_HANDOFF_APPROVED/);
+    assert.match(runner, /OFFLINE_BUNDLE_VERIFIED/);
+    assert.match(runner, /OFFLINE_VERIFIED_GIT_BUNDLE/);
+    assert.match(runner, /REMOTE_FETCH_MODE/);
+  }
+  assert.match(handoff, /git", \["bundle", "create"/);
+  assert.match(handoff, /git", \["bundle", "verify"/);
+  assert.match(handoff, /createHash\("sha256"\)/);
+  assert.match(handoff, /BUNDLE_TRANSFER_INTEGRITY=PASS/);
+  assert.match(handoff, /SERVER_TARGET_COMMIT_AVAILABLE=YES/);
+  assert.match(handoff, /git -C "\$root" fetch "\$bundle"/);
+  assert.doesNotMatch(handoff, /zip|dist\//i);
+});
+
 test("data task manifest requires scope, hash, rows, and gates", () => {
   const result = spawnSync(process.execPath, ["scripts/formal/validate-data-manifest.mjs", "tests/fixtures/formal-data-task.valid.json"], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
