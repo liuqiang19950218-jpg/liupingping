@@ -63,6 +63,18 @@ test("formal runner ignores caller cwd and fails closed on an invalid Git root",
   assert.match(invalid.stderr, /FORMAL_RELEASE_BLOCKED: FORMAL_GIT_ROOT/);
 });
 
+test("staging runner uses the durable Git root and an exact worktree", () => {
+  const staging = readFileSync("scripts/formal/staging.mjs", "utf8");
+  assert.match(staging, /FORMAL_GIT_ROOT/);
+  assert.match(staging, /STAGING_RELEASE_ROOT/);
+  assert.match(staging, /STAGING_RUNTIME_ENV_FILE/);
+  assert.match(staging, /git -C "\$git_root" worktree add --detach "\$src"/);
+  assert.match(staging, /-f "\$src\/Dockerfile\.offline"/);
+  assert.match(staging, /-t "\$image" "\$src"/);
+  assert.match(staging, /port 8011/);
+  assert.doesNotMatch(staging, /historical-dashboard-build/);
+});
+
 test("data task manifest requires scope, hash, rows, and gates", () => {
   const result = spawnSync(process.execPath, ["scripts/formal/validate-data-manifest.mjs", "tests/fixtures/formal-data-task.valid.json"], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);

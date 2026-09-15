@@ -16,6 +16,7 @@
     "data-task:formal": "bash scripts/formal/data-task.sh",
     "formal:precheck": "node scripts/formal/precheck.mjs",
     "formal:release": "node scripts/formal/release.mjs",
+    "formal:staging": "node scripts/formal/staging.mjs",
     "formal:data-task": "node scripts/formal/data-task.mjs"
   },
   "dependencies": {
