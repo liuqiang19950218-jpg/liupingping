@@ -21,6 +21,17 @@ test("formal pipeline scripts have the required safeguards", () => {
   assert.match(readFileSync("scripts/formal/rollback-runtime.sh", "utf8"), /Runtime-only rollback/);
 });
 
+test("formal release builds only the exact release worktree", () => {
+  const release = readFileSync("scripts/formal/release.mjs", "utf8");
+  const dockerfile = readFileSync("Dockerfile.offline", "utf8");
+  assert.match(release, /BUILD_CONTEXT_PATH/);
+  assert.match(release, /BUILD_CONTEXT_SHA/);
+  assert.match(release, /-f \\\"\$src\/Dockerfile\.offline\\\"/);
+  assert.match(release, /\\\"\$src\\\"; docker run/);
+  assert.match(release, /release-metadata\.json/);
+  assert.match(dockerfile, /builtFrom.*exact-worktree/);
+});
+
 test("data task manifest requires scope, hash, rows, and gates", () => {
   const result = spawnSync(process.execPath, ["scripts/formal/validate-data-manifest.mjs", "tests/fixtures/formal-data-task.valid.json"], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);

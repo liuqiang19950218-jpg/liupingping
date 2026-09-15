@@ -15,6 +15,7 @@ ENV BUILD_TIME=$BUILD_TIME
 ENV ENVIRONMENT=$ENVIRONMENT
 RUN npm ci --include=dev
 RUN npm run build
+RUN printf '{"gitSha":"%s","builtFrom":"exact-worktree","buildTime":"%s"}\n' "$BUILD_SHA" "$BUILD_TIME" > /app/release-metadata.json
 
 ENV NODE_ENV=production
 ENV WRANGLER_LOG_PATH=.wrangler/wrangler.log
