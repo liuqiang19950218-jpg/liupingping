@@ -54,11 +54,13 @@ test("formal runner ignores caller cwd and fails closed on an invalid Git root",
     FORMAL_RELEASE_DRY_RUN: "YES",
     FORMAL_GIT_ROOT: "/home/liupp/repos/quarterly-recon",
     FORMAL_RELEASE_ROOT: "/home/liupp/releases/quarterly-recon",
+    FORMAL_RUNTIME_ENV_FILE: "/var/lib/quarterly-recon/postgres/runtime-refactor/formal-8000-2k11b.env.runtime",
   };
   const result = spawnSync(process.execPath, [runner, "181ce04e300a121073c3611d58b626981c45b2f5"], { cwd: tmpdir(), env: safeEnv, encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /git_root='\/home\/liupp\/repos\/quarterly-recon'/);
   assert.match(result.stdout, /release_root='\/home\/liupp\/releases\/quarterly-recon'/);
+  assert.match(result.stdout, /runtime_env='\/var\/lib\/quarterly-recon\/postgres\/runtime-refactor\/formal-8000-2k11b\.env\.runtime'/);
 
   const invalid = spawnSync(process.execPath, [runner, "181ce04e300a121073c3611d58b626981c45b2f5"], {
     cwd: tmpdir(),
@@ -83,6 +85,11 @@ test("staging runner uses the durable Git root and an exact worktree", () => {
   assert.match(staging, /SOURCE_GIT_SHA=/);
   assert.match(staging, /grep -Ev '\^\(BUILD_SHA\|BUILD_TIME\|ENVIRONMENT\|SOURCE_GIT_SHA\)/);
   assert.match(release, /SOURCE_GIT_SHA=/);
+  assert.match(release, /image_git_sha/);
+  assert.match(release, /runtime_overlay/);
+  assert.match(release, /runtime-env/);
+  assert.match(release, /kubectl -n quarterly-recon patch deploy quarterly-recon/);
+  assert.doesNotMatch(release, /kubectl -n quarterly-recon set env deploy\/quarterly-recon/);
   assert.doesNotMatch(staging, /historical-dashboard-build/);
 });
 
