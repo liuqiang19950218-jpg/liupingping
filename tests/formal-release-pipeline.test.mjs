@@ -78,6 +78,8 @@ test("staging runner uses the durable Git root and an exact worktree", () => {
   assert.match(staging, /-f "\$src\/Dockerfile\.offline"/);
   assert.match(staging, /-t "\$image" "\$src"/);
   assert.match(staging, /port 8011/);
+  assert.match(staging, /runtime_overlay/);
+  assert.match(staging, /grep -Ev '\^\(BUILD_SHA\|BUILD_TIME\|ENVIRONMENT\)/);
   assert.doesNotMatch(staging, /historical-dashboard-build/);
 });
 

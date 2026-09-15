@@ -13,8 +13,8 @@ export async function GET() {
   const buildSha = process.env.BUILD_SHA ?? null;
   const buildTime = process.env.BUILD_TIME ?? null;
   const environment = process.env.ENVIRONMENT ?? "development";
-  let sourceGitSha = null;
-  try { sourceGitSha = JSON.parse(await readFile("/app/release-metadata.json", "utf8")).gitSha ?? null; } catch {}
+  let sourceGitSha = process.env.SOURCE_GIT_SHA ?? null;
+  try { sourceGitSha = JSON.parse(await readFile("/app/release-metadata.json", "utf8")).gitSha ?? sourceGitSha; } catch {}
   return Response.json({ buildSha, buildTime, environment, sourceGitSha }, { headers: corsHeaders });
 }
 
