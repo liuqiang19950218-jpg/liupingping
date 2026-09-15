@@ -36,7 +36,8 @@ test("formal release builds only the exact release worktree", () => {
   assert.match(release, /BUILD_CONTEXT_SHA/);
   assert.match(release, /test -f "\$src\/Dockerfile\.offline"/);
   assert.match(release, /-t "\$image" "\$src"/);
-  assert.match(release, /release-metadata\.json/);
+  assert.match(release, /docker cp "\$metadata:\/app\/release-metadata\.json" - \| tar -xO/);
+  assert.doesNotMatch(release, /--entrypoint cat/);
   assert.match(dockerfile, /builtFrom.*exact-worktree/);
   assert.match(dockerignore, /^\.npm-cache$/m);
   assert.doesNotMatch(dockerignore, /^dist$/m);
