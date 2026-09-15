@@ -3,7 +3,7 @@ import { exactSha, remote } from "./remote.mjs";
 
 const target = process.argv[2];
 if (!exactSha(target)) throw new Error("target must be an exact lowercase 40-character SHA");
-const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
+const git = (args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 if (git(["status", "--porcelain", "--untracked-files=all"])) throw new Error("worktree must be clean");
 if (git(["rev-parse", "HEAD"]) !== target) throw new Error("HEAD must equal target");
 if (!git(["ls-remote", "origin"]).split("\n").some((line) => line.startsWith(target))) throw new Error("target is absent from origin");
