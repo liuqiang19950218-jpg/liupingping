@@ -60,8 +60,10 @@ test("affected dashboard modules contain no old 对清 equality comparison", asy
   const source = await Promise.all(files.map((file) => readFile(new URL(`../app/${file}`, import.meta.url), "utf8")));
   assert.equal(source.some((text) => /(?:===|!==)\s*["']对清["']/.test(text)), false);
 });
-test("every affected dashboard module imports the shared rule", async () => {
-  const files = ["Q1ActionPanel.tsx", "DashboardOverview.tsx", "CurrentYearLinkedSummary.tsx", "ReconciliationHistoryDashboard.tsx", "ManagementCockpit.tsx", "cockpit-data.ts"];
+test("every realtime dashboard module imports the shared rule", async () => {
+  // ReconciliationHistoryDashboard is intentionally excluded: it only renders
+  // sealed historical snapshots and must not read live reconciliation status.
+  const files = ["Q1ActionPanel.tsx", "DashboardOverview.tsx", "CurrentYearLinkedSummary.tsx", "ManagementCockpit.tsx", "cockpit-data.ts"];
   const source = await Promise.all(files.map((file) => readFile(new URL(`../app/${file}`, import.meta.url), "utf8")));
   assert.equal(source.every((text) => text.includes("reconciliation-settlement-status")), true);
 });
