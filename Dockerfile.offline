@@ -1,11 +1,18 @@
 ARG BASE_IMAGE=quarterly-recon:current-v14
 FROM ${BASE_IMAGE}
 
+ARG BUILD_SHA
+ARG BUILD_TIME
+ARG ENVIRONMENT=formal
+
 WORKDIR /app
 
 # 生产服务器无法稳定访问 Docker Hub 时，复用现有生产镜像中的
 # Node.js、npm 与 node_modules，仅覆盖源码并重新构建应用。
 COPY . .
+ENV BUILD_SHA=$BUILD_SHA
+ENV BUILD_TIME=$BUILD_TIME
+ENV ENVIRONMENT=$ENVIRONMENT
 RUN npm run build
 
 ENV NODE_ENV=production

@@ -1,0 +1,11 @@
+{
+  "taskId": "example-quarter-replacement",
+  "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "targetScope": "quarter=2026-Q3",
+  "expectedRows": 0,
+  "taskScript": "scripts/data-tasks/example-quarter-replacement.sh",
+  "pre": { "required": true },
+  "transaction": { "required": true },
+  "post": { "required": true },
+  "audit": { "required": true }
+}

@@ -1,5 +1,9 @@
 FROM node:22
 
+ARG BUILD_SHA
+ARG BUILD_TIME
+ARG ENVIRONMENT=formal
+
 WORKDIR /app
 
 # Install full deps (vinext/wrangler are devDependencies required by `vinext start`)
@@ -8,6 +12,9 @@ RUN npm ci
 
 # Copy project and build
 COPY . .
+ENV BUILD_SHA=$BUILD_SHA
+ENV BUILD_TIME=$BUILD_TIME
+ENV ENVIRONMENT=$ENVIRONMENT
 RUN npm run build
 
 ENV NODE_ENV=production

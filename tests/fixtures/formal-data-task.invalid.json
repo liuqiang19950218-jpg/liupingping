@@ -1,0 +1,11 @@
+{
+  "taskId": "bad",
+  "sourceSha256": "not-a-sha",
+  "targetScope": "",
+  "expectedRows": -1,
+  "taskScript": "unsafe.sh",
+  "pre": null,
+  "transaction": {},
+  "post": {},
+  "audit": {}
+}
