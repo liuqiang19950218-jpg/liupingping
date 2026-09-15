@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 
 const scripts = ["precheck.sh", "backup-db.sh", "build.sh", "apply-migrations.sh", "deploy.sh", "postcheck.sh", "release.sh", "data-task.sh", "rollback-runtime.sh"];
 test("formal pipeline scripts have the required safeguards", () => {
@@ -48,13 +49,13 @@ test("formal runner ignores caller cwd and fails closed on an invalid Git root",
     FORMAL_GIT_ROOT: "/home/liupp/repos/quarterly-recon",
     FORMAL_RELEASE_ROOT: "/home/liupp/releases/quarterly-recon",
   };
-  const result = spawnSync(process.execPath, [runner, "181ce04e300a121073c3611d58b626981c45b2f5"], { cwd: "C:/Windows/Temp", env: safeEnv, encoding: "utf8" });
+  const result = spawnSync(process.execPath, [runner, "181ce04e300a121073c3611d58b626981c45b2f5"], { cwd: tmpdir(), env: safeEnv, encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /git_root='\/home\/liupp\/repos\/quarterly-recon'/);
   assert.match(result.stdout, /release_root='\/home\/liupp\/releases\/quarterly-recon'/);
 
   const invalid = spawnSync(process.execPath, [runner, "181ce04e300a121073c3611d58b626981c45b2f5"], {
-    cwd: "C:/Windows/Temp",
+    cwd: tmpdir(),
     env: { ...safeEnv, FORMAL_GIT_ROOT: "relative-path" },
     encoding: "utf8",
   });
