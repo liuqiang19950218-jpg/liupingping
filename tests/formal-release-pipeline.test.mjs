@@ -25,6 +25,7 @@ test("formal pipeline scripts have the required safeguards", () => {
 test("formal release builds only the exact release worktree", () => {
   const release = readFileSync("scripts/formal/release.mjs", "utf8");
   const dockerfile = readFileSync("Dockerfile.offline", "utf8");
+  const dockerignore = readFileSync(".dockerignore", "utf8");
   assert.match(release, /FORMAL_GIT_ROOT/);
   assert.match(release, /FORMAL_RELEASE_ROOT/);
   assert.match(release, /git -C \"\$git_root\" rev-parse --git-dir/);
@@ -37,6 +38,7 @@ test("formal release builds only the exact release worktree", () => {
   assert.match(release, /-t "\$image" "\$src"/);
   assert.match(release, /release-metadata\.json/);
   assert.match(dockerfile, /builtFrom.*exact-worktree/);
+  assert.match(dockerignore, /^\.npm-cache$/m);
 });
 
 test("formal runner ignores caller cwd and fails closed on an invalid Git root", () => {
