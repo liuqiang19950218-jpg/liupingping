@@ -71,6 +71,7 @@ test("formal runner ignores caller cwd and fails closed on an invalid Git root",
 
 test("staging runner uses the durable Git root and an exact worktree", () => {
   const staging = readFileSync("scripts/formal/staging.mjs", "utf8");
+  const release = readFileSync("scripts/formal/release.mjs", "utf8");
   assert.match(staging, /FORMAL_GIT_ROOT/);
   assert.match(staging, /STAGING_RELEASE_ROOT/);
   assert.match(staging, /STAGING_RUNTIME_ENV_FILE/);
@@ -79,8 +80,18 @@ test("staging runner uses the durable Git root and an exact worktree", () => {
   assert.match(staging, /-t "\$image" "\$src"/);
   assert.match(staging, /port 8011/);
   assert.match(staging, /runtime_overlay/);
-  assert.match(staging, /grep -Ev '\^\(BUILD_SHA\|BUILD_TIME\|ENVIRONMENT\)/);
+  assert.match(staging, /SOURCE_GIT_SHA=/);
+  assert.match(staging, /grep -Ev '\^\(BUILD_SHA\|BUILD_TIME\|ENVIRONMENT\|SOURCE_GIT_SHA\)/);
+  assert.match(release, /SOURCE_GIT_SHA=/);
   assert.doesNotMatch(staging, /historical-dashboard-build/);
+});
+
+test("version endpoint fails closed without an equal source Git SHA binding", () => {
+  const version = readFileSync("app/api/version/route.ts", "utf8");
+  assert.match(version, /process\.env\.SOURCE_GIT_SHA/);
+  assert.match(version, /buildSha !== sourceGitSha/);
+  assert.match(version, /VERSION_BINDING_INVALID/);
+  assert.doesNotMatch(version, /release-metadata\.json/);
 });
 
 test("offline handoff is explicit and transfers verified Git objects", () => {
