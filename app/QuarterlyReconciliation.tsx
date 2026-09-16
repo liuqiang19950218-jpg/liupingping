@@ -21,6 +21,7 @@ import {
   writeArchivedSheet,
 } from "./quarter-storage";
 import { ImportDashboard } from "./ImportDashboard";
+import { DataImportCenter } from "./DataImportCenter";
 import { recordImport } from "./import-history";
 import {
   reconciliationApi,
@@ -1855,10 +1856,6 @@ export function QuarterlyReconciliation({
           </div>
           {mode === "import" ? (
             <div className="toolbar-actions upload-actions">
-              <label className="file-button">
-                {importingQuarter ? "正在导入…" : T.import}
-                <input type="file" accept=".xlsx,.xls" disabled={importingQuarter} onChange={importFile} />
-              </label>
               <label className="file-button ledger-upload">
                 {uploadingLedger ? T.loading : T.uploadLedger}
                 <input
@@ -1885,15 +1882,6 @@ export function QuarterlyReconciliation({
                   accept=".xlsx,.xls"
                   disabled={importingSpd}
                   onChange={importSpdSheet}
-                />
-              </label>
-              <label className="file-button company-receivable-upload">
-                {importingCompanyReceivables ? T.loading : T.uploadCompanyReceivable}
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  disabled={importingCompanyReceivables}
-                  onChange={importCompanyReceivables}
                 />
               </label>
               <label className="file-button ledger-upload">
@@ -2015,14 +2003,11 @@ export function QuarterlyReconciliation({
         )}
         {mode === "import" ? (
           <>
+            <DataImportCenter />
             <div className="import-status">
-              <strong>{importedQuarter ? "季度对账表已导入 PostgreSQL" : sheet ? "本年度对账表已导入" : T.needImport}</strong>
+              <strong>其他独立导入与历史记录</strong>
               <span>
-                {importedQuarter
-                  ? `${importedQuarter} 已由 PostgreSQL 导入；页面将显示服务器最新数据。`
-                  : sheet
-                  ? `${sheet.fileName}，共 ${sheet.rows.length} 条记录。数据已保存在本机，可返回“本季度对账详细情况”继续填写。`
-                  : "请先上传对账季度表，再按需要上传或替换本年往来明细。"}
+                往来明细、资料提供、SPD 和历史往来底库维持各自既有导入流程；季度基础表与公司应收更新请使用上方新中心。
               </span>
             </div>
             <ImportDashboard ledger={currentLedgerInfo} />

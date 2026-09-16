@@ -1,6 +1,3 @@
-import { importQuarter } from "../../../../../lib/server/recon/import";
-import { handleRouteError, readJsonBody } from "../../../../../lib/server/recon/errors";
-
 export const runtime = "nodejs";
 
 const corsHeaders = {
@@ -16,21 +13,11 @@ type RouteContext = { params: Promise<{ code: string }> };
 // browser XLSX flow. The server re-validates critical fields and writes the whole
 // quarter atomically (quarter, regions, account_sets, customers, import_batches,
 // reconciliations, provenance) in ONE transaction.
-export async function POST(request: Request, context: RouteContext) {
-  const { code } = await context.params;
-  try {
-    const body = await readJsonBody(request);
-    const sourceFileName =
-      typeof body.sourceFileName === "string" ? body.sourceFileName : "";
-    const headers = Array.isArray(body.headers)
-      ? body.headers.map((h) => String(h))
-      : [];
-    const rows = Array.isArray(body.rows) ? (body.rows as unknown[][]) : [];
-    const result = await importQuarter(code, { sourceFileName, headers, rows });
-    return Response.json(result, { status: 201, headers: corsHeaders });
-  } catch (error) {
-    return handleRouteError(error, corsHeaders);
-  }
+export async function POST(_request: Request, _context: RouteContext) {
+  return Response.json(
+    { error: "旧季度基础导入入口已停用，请使用数据导入中心的‘导入新季度基础对账表’或‘全量替换当前季度基础表’。", code: "IMPORT_ENDPOINT_DEPRECATED" },
+    { status: 410, headers: corsHeaders },
+  );
 }
 
 export function OPTIONS() {
