@@ -72,7 +72,7 @@ export async function executeBase(kind: BaseMode, quarterCode: string, input: So
     const existing=await client.query("SELECT count(*)::int count FROM recon.reconciliations WHERE quarter_id=$1",[q]); if(Number(existing.rows[0].count)>0) throw conflict("该季度已经存在基础对账数据，不能再次执行首次导入；如确需整体重建，请联系管理员/Codex进行专项处理。");
     await resolveBaseRows(client,q,rows); const check=await client.query("SELECT count(*)::int count FROM recon.reconciliations WHERE quarter_id=$1",[q]); if(Number(check.rows[0].count)!==rows.length) throw new Error("POST_IMPORT_VALIDATION_FAILED"); const batch=await client.query("INSERT INTO recon.import_batches(quarter_id,data_type,original_file_name,source_sha256,imported_at,valid_record_count,inserted_count,target_module,status,details) VALUES($1,$2,$3,$4,now(),$5,$5,'quarter-base-import','success',$6::jsonb) RETURNING id::text",[q,kind,input.sourceFileName,fileSha,rows.length,JSON.stringify({only_allowed_fields:BASE_HEADERS})]); return {status:"SUCCESS",quarter:quarterCode,importedRows:rows.length,sourceSha256:fileSha,importBatchId:batch.rows[0].id}; }); }
 
-type ReceivableTarget = { id: string; legacy_id: string; timepoint: string; account: string; region: string; customer: string; current: string; book: string | null };
+type ReceivableTarget = { id: string; legacy_id: string; timepoint: string; account: string; region: string; customer: string; current: string; book: string | null; difference?: string | null };
 type ReceivablePreviewRow = { sequence: string; customer: string; oldCompanyReceivable: string; newCompanyReceivable: string; oldDifference: string | null; newDifference: string | null; requiresDifferenceReview: boolean };
 function receivableSnapshot(rows: ReceivableTarget[]) { return sha(rows.map((row) => [row.id, row.legacy_id, row.timepoint, row.account, row.region, row.customer, row.current, row.book]).sort((a, b) => String(a[1]).localeCompare(String(b[1])))); }
 export async function previewReceivable(quarterCode:string,payload:SourcePayload) { if(!isValidQuarterCode(quarterCode)) throw invalidInput("季度必须为 YYYY-QN"); const rows=parseUpdates(payload), fileSha=sourceSha(payload), digest=sha(rows); return withPostgresClient(async client=>{const q=await quarter(client,quarterCode);if(!q)throw notFound("目标季度不存在");const db=(await client.query("SELECT r.id::text,r.legacy_id,r.source_payload->>'timepoint' timepoint,a.name account,g.name region,c.name customer,r.company_receivable::text current,r.customer_book_amount::text book FROM recon.reconciliations r JOIN recon.account_sets a ON a.id=r.account_set_id JOIN recon.customers c ON c.id=r.customer_id LEFT JOIN recon.regions g ON g.id=c.region_id WHERE r.quarter_id=$1",[q])) as {rows:ReceivableTarget[]};const bySeq=new Map(db.rows.map((r: ReceivableTarget)=>[String(r.legacy_id),r]));let matched=0,unmatched=0,conflictCount=0,unchanged=0;const changes:ReceivablePreviewRow[]=[];for(const r of rows){const x=bySeq.get(r.sequence);if(!x){unmatched++;continue;}if(x.timepoint!==r.timepoint||x.account!==r.accountSet||x.region!==r.region||x.customer!==r.customer){conflictCount++;continue;}if(x.current===r.companyReceivable){unchanged++;continue;}matched++;const newDifference=x.book===null?null:(Number(r.companyReceivable)-Number(x.book)).toFixed(2);changes.push({sequence:r.sequence,customer:r.customer,oldCompanyReceivable:x.current,newCompanyReceivable:r.companyReceivable,oldDifference:x.book===null?null:(Number(x.current)-Number(x.book)).toFixed(2),newDifference,requiresDifferenceReview:newDifference!==null});}const blockingIssues=unmatched+conflictCount;return {previewToken:blockingIssues===0?issue("UPDATE_COMPANY_RECEIVABLE",quarterCode,fileSha,digest,receivableSnapshot(db.rows)):null,quarter:quarterCode,sourceSha256:fileSha,sourceRows:rows.length,matched,unmatched,conflict:conflictCount,unchanged,blockingIssues,changes};}); }
@@ -85,16 +85,16 @@ export async function executeReceivable(
   const fileSha = sourceSha(input);
   const preview = verify(input.previewToken, "UPDATE_COMPANY_RECEIVABLE", quarterCode, fileSha, sha(rows));
   return withPostgresTransaction(async (client) => {
-    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["quarter-base:" + quarterCode]);
     const quarterId = await quarter(client, quarterCode);
     if (!quarterId) throw notFound("目标季度不存在");
     const snapshot = await client.query("SELECT r.id::text,r.legacy_id,r.source_payload->>'timepoint' timepoint,a.name account,g.name region,c.name customer,r.company_receivable::text current,r.customer_book_amount::text book FROM recon.reconciliations r JOIN recon.account_sets a ON a.id=r.account_set_id JOIN recon.customers c ON c.id=r.customer_id LEFT JOIN recon.regions g ON g.id=c.region_id WHERE r.quarter_id=$1", [quarterId]);
     if (preview.targetDigest !== receivableSnapshot(snapshot.rows as ReceivableTarget[])) throw conflict("预检之后目标季度已发生并发变更（CONCURRENT_CHANGE）");
     let updated = 0;
     let unchanged = 0;
+    const auditEntries: Array<Record<string, string | null>> = [];
     for (const row of rows) {
       const found = await client.query(
-        "SELECT r.id::text, r.company_receivable::text current, r.customer_book_amount::text book, r.source_payload->>'timepoint' timepoint, a.name account, g.name region, c.name customer FROM recon.reconciliations r JOIN recon.account_sets a ON a.id=r.account_set_id JOIN recon.customers c ON c.id=r.customer_id LEFT JOIN recon.regions g ON g.id=c.region_id WHERE r.quarter_id=$1 AND r.legacy_id=$2 FOR UPDATE OF r",
+        "SELECT r.id::text, r.company_receivable::text current, r.customer_book_amount::text book, r.reconciliation_difference::text difference, r.source_payload->>'timepoint' timepoint, a.name account, g.name region, c.name customer FROM recon.reconciliations r JOIN recon.account_sets a ON a.id=r.account_set_id JOIN recon.customers c ON c.id=r.customer_id LEFT JOIN recon.regions g ON g.id=c.region_id WHERE r.quarter_id=$1 AND r.legacy_id=$2 FOR UPDATE OF r",
         [quarterId, row.sequence],
       );
       if (found.rowCount !== 1) throw conflict("序号 " + row.sequence + " 未匹配或存在冲突");
@@ -105,12 +105,14 @@ export async function executeReceivable(
         "UPDATE recon.reconciliations SET company_receivable=$2::numeric, reconciliation_difference=CASE WHEN customer_book_amount IS NULL THEN NULL ELSE $2::numeric-customer_book_amount END, updated_at=now(), version=version+1 WHERE id=$1",
         [current.id, row.companyReceivable],
       );
+      auditEntries.push({ source_sequence: row.sequence, reconciliation_id: String(current.id), account_set: String(current.account), region: current.region === null ? null : String(current.region), customer_name: String(current.customer), old_company_receivable: String(current.current), new_company_receivable: row.companyReceivable, delta: (Number(row.companyReceivable) - Number(current.current)).toFixed(2), customer_book_amount: current.book === null ? null : String(current.book), old_difference: current.difference === null ? null : String(current.difference), new_difference: current.book === null ? null : (Number(row.companyReceivable) - Number(current.book)).toFixed(2) });
       updated++;
     }
     const batch = await client.query(
       "INSERT INTO recon.import_batches(quarter_id,data_type,original_file_name,source_sha256,imported_at,valid_record_count,updated_count,skipped_count,target_module,status,details) VALUES($1,'UPDATE_COMPANY_RECEIVABLE',$2,$3,now(),$4,$5,$6,'quarter-base-import','success',$7::jsonb) RETURNING id::text",
-      [quarterId, input.sourceFileName, fileSha, rows.length, updated, unchanged, JSON.stringify({ only_updated_field: "company_receivable" })],
+      [quarterId, input.sourceFileName, fileSha, rows.length, updated, unchanged, JSON.stringify({ only_updated_field: "company_receivable", row_audit: auditEntries })],
     );
+    for (const entry of auditEntries) await client.query("INSERT INTO recon.audit_logs(action,entity_type,entity_id,before_data,after_data) VALUES($1,$2,$3,$4::jsonb,$5::jsonb)", ["UPDATE_COMPANY_RECEIVABLE", "reconciliation", entry.reconciliation_id, JSON.stringify({ batch_id: batch.rows[0].id, quarter: quarterCode, source_filename: input.sourceFileName, source_sha256: fileSha, ...entry, company_receivable: entry.old_company_receivable, difference: entry.old_difference }), JSON.stringify({ batch_id: batch.rows[0].id, quarter: quarterCode, source_filename: input.sourceFileName, source_sha256: fileSha, ...entry, company_receivable: entry.new_company_receivable, difference: entry.new_difference })]);
     return { status: "SUCCESS", quarter: quarterCode, updated, unchanged, importBatchId: batch.rows[0].id };
   });
 }
