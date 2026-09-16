@@ -17,7 +17,7 @@ $SshPort = if ($Config.SshPort) { [int]$Config.SshPort } elseif ($Config.Port) {
 $PublicPort = if ($Config.PublicPort) { [int]$Config.PublicPort } elseif ($Config.ApplicationPort) { [int]$Config.ApplicationPort } else { 8000 }
 $RemotePath = if ($Config.RemotePath) { [string]$Config.RemotePath } else { '/home/liupp/apps/quarterly-recon' }
 $Namespace = if ($Config.KubernetesNamespace) { [string]$Config.KubernetesNamespace } else { 'quarterly-recon' }
-$OfflineBaseImage = if ($Config.OfflineBaseImage) { [string]$Config.OfflineBaseImage } else { 'quarterly-recon:current-v14' }
+$OfflineBaseImage = if ($Config.OfflineBaseImage) { [string]$Config.OfflineBaseImage } else { 'quarterly-recon:current-v15' }
 $Remote = "$($Config.User)@$($Config.Host)"
 
 if (-not $Config.Host -or -not $Config.User) { throw '部署配置必须包含 Host 和 User。' }
