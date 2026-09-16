@@ -7,7 +7,6 @@ import {
   formatDifferenceCategoryLabel,
   formatFollowupStatusLabel,
 } from "../lib/ui-business-labels.mjs";
-import { CockpitTrendChart } from "./CockpitTrendChart";
 import { DifferenceStructureChart } from "./DifferenceStructureChart";
 import {
   AgingBucket,
@@ -68,7 +67,6 @@ const historicalInvoiceAmount = (row: CockpitRow) => {
     row.transit + row.returned + (row.lost ?? 0) + (row.instrument ?? 0) + row.otherInvoice,
   );
 };
-const needsFollowUp = (r: CockpitRow) => r.followStatus !== "已解决";
 // Keep the cockpit aligned with the execution page: a reconciliation only
 // becomes an unresolved item after a first solution has been recorded, and it
 // leaves the pending list once it is resolved.
@@ -105,10 +103,6 @@ const level = (r: CockpitRow) =>
       : score(r) >= 40
         ? "需关注"
         : "低风险";
-// D 区风险口径按超期天数统一：超过 30 天为高风险，其余为低风险。
-const overdueRiskLevel = (r: CockpitRow) =>
-  (r.overdueDays ?? 0) > 30 ? "高风险" : "低风险";
-
 const getRisks = (r: CockpitRow) =>
   [
     r.difference !==
@@ -154,8 +148,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     [modal, setModal] = useState<{ title: string; rows: CockpitRow[] } | null>(
       null,
     ),
-    [agingBucket, setAgingBucket] = useState<AgingBucket | null>(null),
-    [range, setRange] = useState(4);
+    [agingBucket, setAgingBucket] = useState<AgingBucket | null>(null);
   const [availableQuarters, setAvailableQuarters] = useState<string[]>([]);
   const [dataVersion, setDataVersion] = useState(0);
   useEffect(() => { if (dashboard.quarter) setF((value) => ({ ...value, quarter: dashboard.quarter!.code })); }, [dashboard.quarter]);
@@ -349,54 +342,6 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   )
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
-  // D 区直接使用“未解决客户跟进”的待解决清单口径，不再额外按风险等级过滤。
-  // 因此 Top10 与执行页的待解决客户一致，并以未解决金额从高到低排序。
-  const highRiskUnresolvedCustomers = dashboardRows.filter(isPendingFollowUp)
-    .filter(
-      (row) =>
-        (f.region === "全部" || row.region === f.region) &&
-        (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
-        (f.owner === "全部" || row.owner === f.owner) &&
-        (!f.customer || row.customer.includes(f.customer)) &&
-        matchesSettlementFilter(row, f.cleared) &&
-        (f.follow === "全部" || row.followStatus === f.follow),
-    )
-    .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference) || b.overdueDays - a.overdueDays);
-  const priority = [...rows]
-      .filter(isPendingFollowUp)
-      .sort((a, b) => score(b) - score(a) || b.difference - a.difference),
-    trend = dashboard.quarters.map((item) => item.code)
-      .slice()
-      .sort((a, b) => a.localeCompare(b))
-      .map((quarter) => {
-        const reconciled = dashboardRows.filter(
-          (row) =>
-            row.quarter === quarter &&
-            row.filled &&
-            (f.region === "全部" || row.region === f.region) &&
-            (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
-            (f.owner === "全部" || row.owner === f.owner) &&
-            (!f.customer || row.customer.includes(f.customer)) &&
-            matchesSettlementFilter(row, f.cleared) &&
-            (f.follow === "全部" || row.followStatus === f.follow),
-        );
-        const cleared = reconciled.filter((row) => row.cleared).length;
-        return {
-          quarter,
-          rate: reconciled.length ? (cleared / reconciled.length) * 100 : 0,
-          unresolved: reconciled
-            .filter(isPendingFollowUp)
-            .reduce((sum, row) => sum + row.difference, 0),
-          overdue: reconciled
-            .filter(overdue)
-            .reduce((sum, row) => sum + row.difference, 0),
-          highRisk: reconciled
-            .filter((row) => level(row) === "高风险")
-            .reduce((sum, row) => sum + row.difference, 0),
-        };
-      })
-      .slice(-range),
-    compare = trend.length > 1 ? trend.at(-1)!.rate - trend.at(-2)!.rate : 0;
   const change = (key: keyof Filters, value: string) => {
       if (key === "quarter") {
         dashboard.selectQuarter(value);
@@ -719,129 +664,6 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
               ))}
             </div>
           </div>
-        </article>
-      </section>
-      <section className="cockpit-lower">
-        <article className="panel follow-panel">
-          <h3>
-            D. 高风险未解决客户 Top10{" "}
-            <button onClick={() => open("全部高风险未解决客户", highRiskUnresolvedCustomers)}>
-              查看全部客户 ›
-            </button>
-          </h3>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>客户</th>
-                  <th>区域</th>
-                  <th>负责人</th>
-                  <th>对账差额</th>
-                  <th>超期天数</th>
-                  <th>状态</th>
-                  <th>预计完成</th>
-                  <th>风险</th>
-                </tr>
-              </thead>
-              <tbody>
-                {highRiskUnresolvedCustomers.slice(0, 10).map((r) => (
-                  <tr key={r.id} onClick={() => open(r.customer, [r])}>
-                    <td>{r.customer}</td>
-                    <td>{r.region}</td>
-                    <td>{r.owner}</td>
-                    <td>{money(r.difference)}</td>
-                    <td
-                      className={`overdue-days ${
-                        r.overdueDays > 30 ? "high" : ""
-                      }`}
-                    >
-                      {r.overdueDays}天
-                    </td>
-                    <td>
-                      <span className="status">{formatFollowupStatusLabel(r.followStatus)}</span>
-                    </td>
-                    <td>{r.expectedDate}</td>
-                    <td>
-                      <span
-                        className={`risk-badge ${
-                          overdueRiskLevel(r) === "高风险" ? "high" : ""
-                        }`}
-                      >
-                        {overdueRiskLevel(r)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-        {false && <article className="panel trend-panel">
-          <h3>
-            E. 历史趋势{" "}
-            <span>
-              <button
-                onClick={() => setRange(4)}
-                className={range === 4 ? "picked" : ""}
-              >
-                最近4季
-              </button>
-              <button
-                onClick={() => setRange(2)}
-                className={range === 2 ? "picked" : ""}
-              >
-                最近2季
-              </button>
-            </span>
-          </h3>
-          <CockpitTrendChart data={trend} onQuarterClick={(quarter) => change("quarter", quarter)} />
-          <p>
-            对清率较上季{" "}
-            <b className={compare >= 0 ? "up" : "down"}>
-              {compare >= 0 ? "提升" : "下降"} {Math.abs(compare).toFixed(1)}{" "}
-              个百分点
-            </b>
-            ，未解决差额呈 <b>{compare >= 0 ? "收窄" : "扩大"}</b> 趋势。
-          </p>
-        </article>}
-        <article className="panel analysis">
-          <h3>F. 自动财务分析结论</h3>
-          <ol>
-            <li>
-              本季度对清率为 <b>{m.rate.toFixed(1)}%</b>，较上季
-              {compare >= 0 ? "提升" : "下降"}{" "}
-              <b>{Math.abs(compare).toFixed(1)}</b> 个百分点；
-            </li>
-            <li>
-              {regionRows[0]?.region || "当前"}区域未对清金额最高，占比{" "}
-              <b>
-                {m.pendingConfirmation
-                  ? `${((regionRows[0]?.unreconciledAmount / m.pendingConfirmation) * 100).toFixed(1)}%`
-                  : "0%"}
-              </b>
-              ；
-            </li>
-            <li>
-              高风险客户{" "}
-              <b>{priority.filter((x) => level(x) === "高风险").length}</b>{" "}
-              家，优先处理逾期与连续未对清客户；
-            </li>
-            <li>
-              发票校验异常 <b>{m.invoice}</b>{" "}
-              笔，需完成票号、日期和金额一致性核验；
-            </li>
-            <li>
-              建议先推进{" "}
-              <b>
-                {priority
-                  .slice(0, 2)
-                  .map((x) => x.customer)
-                  .join("、") || "当前筛选客户"}
-              </b>{" "}
-              的方案闭环。
-            </li>
-          </ol>
-          <footer>数据统计截止：2026-05-20 18:00　数据仅供参考</footer>
         </article>
       </section>
       {f.quarter === "2026 Q1" && (

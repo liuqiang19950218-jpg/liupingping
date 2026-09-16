@@ -44,14 +44,10 @@ const S = {
   unaccounted: "\u672a\u5bf9\u8d26\u5ba2\u6237",
   overview: "\u8d44\u6599\u6536\u96c6\u603b\u89c8",
   effectiveReply: "\u6709\u6548\u56de\u51fd\u7387\uff08\u6309\u533a\u57df\uff09",
-  advice: "\u91cd\u70b9\u8ddf\u8fdb\u5efa\u8bae",
   materialType: "\u8d44\u6599\u7c7b\u578b",
   collected: "\u5df2\u6536\u96c6 / \u5e94\u6536\u96c6",
   rate: "\u6536\u96c6\u7387",
   followRegions: "\u9700\u8ddf\u8fdb\u533a\u57df\u4e0e\u6536\u96c6\u7387",
-  lowReply: "\u4f4e\u6709\u6548\u56de\u51fd\u7387\u533a\u57df\uff08<60%\uff09",
-  followTypes: "\u9700\u91cd\u70b9\u8ddf\u8fdb\u7684\u8d44\u6599\u7c7b\u578b",
-  viewAll: "\u67e5\u770b\u5168\u90e8",
   noData: "\u6682\u65e0\u8d44\u6599\u6536\u96c6\u6570\u636e",
   allComplete: "\u6240\u6709\u533a\u57df100%",
   lossEmpty: "\u5f53\u524d\u5b63\u5ea6\u6682\u65e0\u4e22\u7968\u5dee\u989d\u660e\u7ec6\u3002",
@@ -401,23 +397,6 @@ function CollectionDrilldownDialog({ data, onClose }: { data: CollectionDrilldow
   </div>;
 }
 
-function FollowAdviceCard({ collection, replyRates }: { collection: CollectionRow[]; replyRates: ReplyRateRow[] }) {
-  const lowRegions = replyRates.filter((item) => item.rate < 60);
-  const followTypes = collection
-    .filter((item) => item.rate < 95 || (item.name === "\u5bf9\u8d26\u51fd" && item.followRegions.length > 0))
-    .slice()
-    .sort((a, b) => a.rate - b.rate || a.order - b.order)
-    .slice(0, 3);
-  return <article className="collection-card advice-card"><header className="collection-card-head"><h3>{S.advice}</h3></header>
-    <section className="advice-section"><div className="advice-title"><span className="advice-symbol warning">!</span><h4>{S.lowReply}</h4><button type="button">{S.viewAll}</button></div>
-      <div className="low-region-grid">{lowRegions.length ? lowRegions.map((item) => <span key={item.name}><i />{item.name} {formatPercent(item.rate)}</span>) : <p>{S.allComplete}</p>}</div>
-    </section>
-    <section className="advice-section"><div className="advice-title"><span className="advice-symbol document">{"\u25a4"}</span><h4>{S.followTypes}</h4><button type="button">{S.viewAll}</button></div>
-      <ul className="advice-list">{followTypes.length ? followTypes.map((item) => <li key={item.name}><strong>{item.name}</strong><br /><span>{item.followRegions.length ? item.followRegions.map((region) => `${region.name}${formatPercent(region.rate)}`).join("\u3001") : `${S.rate}${formatPercent(item.rate)}`}</span></li>) : <li>{S.allComplete}</li>}</ul>
-    </section>
-  </article>;
-}
-
 export function Q1SpecialPanels() {
   const { quarter: selected, rows, materialStatus, spdDashboard, loading, error } = useDashboardData();
   const [tab, setTab] = useState<"collection" | "unaccounted">("collection");
@@ -438,7 +417,7 @@ export function Q1SpecialPanels() {
       <button role="tab" aria-selected={tab === "collection"} className={tab === "collection" ? "active" : ""} onClick={() => setTab("collection")}>{S.collection}</button>
       <button role="tab" aria-selected={tab === "unaccounted"} className={tab === "unaccounted" ? "active" : ""} onClick={() => setTab("unaccounted")}>{S.unaccounted}</button>
     </div></div>
-    {tab === "collection" ? <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} onDrilldown={(material) => { if (material.kind !== "spd" && material.kind !== "stock") setDrillSelection({ type: "material", material }); }} /><ReplyRateCard rows={data.replyRates} onDrilldown={(region) => setDrillSelection({ type: "reply", region })} /><FollowAdviceCard collection={data.collection} replyRates={data.replyRates} /></div>
+    {tab === "collection" ? <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} onDrilldown={(material) => { if (material.kind !== "spd" && material.kind !== "stock") setDrillSelection({ type: "material", material }); }} /><ReplyRateCard rows={data.replyRates} onDrilldown={(region) => setDrillSelection({ type: "reply", region })} /></div>
       : <div className="special-legacy-panel"><VerticalScrollList label={S.unaccounted}><table><thead><tr><th>{S.region}</th><th>{S.customer}</th><th>{S.note}</th></tr></thead><tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td>{item.note || "—"}</td></tr>) : <tr><td colSpan={3}>{S.unaccountedEmpty}</td></tr>}</tbody></table></VerticalScrollList></div>}
     {drilldown && <CollectionDrilldownDialog data={drilldown} onClose={() => setDrillSelection(null)} />}
   </section>;

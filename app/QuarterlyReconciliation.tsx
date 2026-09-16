@@ -17,7 +17,6 @@ import {
   selectQuarter,
   selectedQuarter,
   sheetForQuarter,
-  removeArchivedSheet,
   writeArchivedSheet,
 } from "./quarter-storage";
 import { ImportDashboard } from "./ImportDashboard";
@@ -141,7 +140,6 @@ const T = {
   uploadCompanyReceivable:
     "\u4e0a\u4f20\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868",
   uploadSpdSheet: "\u5bfc\u5165SPD\u8868",
-  clearData: "\u6e05\u9664\u672c\u673a\u6570\u636e",
   withdrawQuarter: "\u64a4\u56de\u672c\u5b63\u5ea6\u5bf9\u8d26\u660e\u7ec6",
   importTitle: "\u5b63\u5ea6\u5bf9\u8d26",
   importHint:
@@ -1588,38 +1586,6 @@ export function QuarterlyReconciliation({
       event.target.value = "";
     }
   }
-  function clearData() {
-    localStorage.removeItem(STORAGE_KEY);
-    setSheet(null);
-    setRegion(T.all);
-    setMessage(
-      "\u5df2\u6e05\u9664\u672c\u673a\u4fdd\u5b58\u7684\u6570\u636e\u3002",
-    );
-  }
-
-  function withdrawCurrentQuarter() {
-    const quarter = activeQuarter || selectedQuarter();
-    if (!quarter || !sheetForQuarter(quarter)) {
-      setMessage("\u5f53\u524d\u6ca1\u6709\u53ef\u64a4\u56de\u7684\u5bf9\u8d26\u5b63\u5ea6\u8868\u3002");
-      return;
-    }
-    const confirmed = window.confirm(
-      `\u786e\u8ba4\u64a4\u56de ${quarter} \u7684\u5bf9\u8d26\u660e\u7ec6\u5417\uff1f\n\n\u5c06\u5220\u9664\u8be5\u5b63\u5ea6\u7684\u4e3b\u5bf9\u8d26\u8868\u53ca\u5176\u5df2\u4fdd\u5b58\u7684\u9500\u552e\u586b\u5199\u5185\u5bb9\u3002\n\u4e0d\u5f71\u54cd\u5176\u4ed6\u5b63\u5ea6\u3001\u5f80\u6765\u660e\u7ec6\u3001\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868\u548cSPD\u8868\u3002`,
-    );
-    if (!confirmed) return;
-
-    const result = removeArchivedSheet(quarter);
-    setSheet((result?.sheet as LocalSheet | null) ?? null);
-    setActiveQuarter(result?.nextQuarter ?? "");
-    setArchivedQuarters(quarterOptions());
-    setRegion(T.all);
-    setPage(1);
-    setMessage(
-      result?.nextQuarter
-        ? `\u5df2\u64a4\u56de ${quarter} \u5bf9\u8d26\u660e\u7ec6\uff0c\u5df2\u5207\u6362\u81f3 ${result.nextQuarter}\u3002`
-        : `\u5df2\u64a4\u56de ${quarter} \u5bf9\u8d26\u660e\u7ec6\u3002`,
-    );
-  }
   async function open(id: number) {
     if (!sheet) return;
     const row = sheet.rows[id];
@@ -1901,20 +1867,6 @@ export function QuarterlyReconciliation({
                   onClick={updateDashboards}
                 >
                   一键更新其他看板
-                </button>
-              )}
-              {sheet && (
-                <button
-                  type="button"
-                  className="clear-button withdraw-quarter-button"
-                  onClick={withdrawCurrentQuarter}
-                >
-                  {T.withdrawQuarter}
-                </button>
-              )}
-              {sheet && (
-                <button className="clear-button" onClick={clearData}>
-                  {T.clearData}
                 </button>
               )}
               <DataImportCenter />
@@ -2580,11 +2532,6 @@ export function QuarterlyReconciliation({
               {T.import}
               <input type="file" accept=".xlsx,.xls" onChange={importFile} />
             </label>
-            {sheet && (
-              <button className="clear-button" onClick={clearData}>
-                {T.clearData}
-              </button>
-            )}
           </div>
         </div>
         {message && <p className="import-message">{message}</p>}

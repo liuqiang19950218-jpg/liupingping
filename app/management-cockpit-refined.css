@@ -58,7 +58,6 @@
 .metric-card.blue b { color: #1677ff; }.metric-card.green b { color: #16a36a; }.metric-card.red b { color: #ef4444; }
 
 .cockpit-three { grid-template-columns: minmax(280px, 4fr) minmax(430px, 5fr) minmax(270px, 3fr); gap: 12px; margin-top: 12px; }
-.cockpit-lower { grid-template-columns: minmax(520px, 1.35fr) minmax(360px, 1fr); gap: 12px; margin-top: 12px; }
 .panel { overflow: hidden; border: 1px solid #dfe7f1; border-radius: 8px; box-shadow: 0 2px 8px rgba(15, 35, 65, .04); }
 .panel h3 { display: flex; align-items: center; min-height: 42px; padding: 0 14px; color: #163c68; font-size: 14px; font-weight: 800; }
 .panel h3 small { margin-left: 7px; color: #8493a6; font-size: 10px; font-weight: 500; }
@@ -116,11 +115,6 @@
 .difference-chart { width: 156px; height: 178px; flex: 0 0 156px; border: 0; background: transparent; cursor: pointer; }
 .legend { min-height: 23px; border-bottom: 1px solid #f1f4f8; }.legend:last-child { border-bottom: 0; }
 
-.follow-panel .table-wrap { max-height: 294px; }.follow-panel table td:nth-child(4) { color: #ef4444; font-weight: 800; font-variant-numeric: tabular-nums; }
-.follow-panel .overdue-days{color:#63728a;font-weight:700;font-variant-numeric:tabular-nums}.follow-panel .overdue-days.high{color:#ef4444}
-.trend-panel { min-height: 340px; }.cockpit-trend-chart { height: 274px; min-height: 274px; padding: 2px 8px 0; }
-.trend-panel > p { margin: 3px 14px 12px; border-top: 1px solid #eef2f7; padding-top: 8px; }
-.analysis { min-height: 340px; }.analysis ol { margin: 9px 17px 13px; line-height: 2.08; }.analysis footer { margin-top: auto; }
 
 @media (max-width: 1680px) {
   .cockpit-filter { grid-template-columns: repeat(4, minmax(120px, 1fr)); }
@@ -130,11 +124,9 @@
 @media (max-width: 1366px) {
   .cockpit-three { grid-template-columns: minmax(270px, 4fr) minmax(420px, 6fr); }
   .donut-panel { grid-column: span 2; }
-  .cockpit-lower { grid-template-columns: 1.2fr 1fr; }
-  .analysis { grid-column: span 2; }
 }
 @media (max-width: 900px) {
-  .cockpit-filter, .metric-grid, .cockpit-three, .cockpit-lower { grid-template-columns: 1fr; }
-  .filter-actions, .donut-panel, .analysis { grid-column: auto; justify-self: stretch; }
+  .cockpit-filter, .metric-grid, .cockpit-three { grid-template-columns: 1fr; }
+  .filter-actions, .donut-panel { grid-column: auto; justify-self: stretch; }
   .filter-actions { justify-content: stretch; }.filter-actions button { flex: 1; }
 }

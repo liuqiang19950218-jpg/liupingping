@@ -6,6 +6,7 @@ import { isLegacyTrackerItem, legacyTrackerTab } from "../lib/followup-tracker-r
 import { businessDayDistance, normalizeDateOnly } from "../lib/date-only.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import "./unresolved-followup.css";
+import "./unresolved-followup-layout-overrides.css";
 
 type FollowUp = { time: string; solution: string };
 const PROCESS_STAGES = [
@@ -78,7 +79,6 @@ type DashboardMetricFilter =
 
 const ALL = "全部区域";
 const OVERDUE_DAYS = 7;
-const LONG_UNTOUCHED_DAYS = 30;
 const HIGH_AMOUNT = 100000;
 
 const value = (row: unknown[], headers: string[], names: string[]) => {
@@ -213,95 +213,8 @@ function Badge({
   return <span className={`uf-badge ${variant ?? ""} ${type}`}>{children}</span>;
 }
 
-function AgingCylinderChart({
-  data,
-}: {
-  data: { label: string; value: number }[];
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const paint = () => {
-      const rect = canvas.getBoundingClientRect();
-      const scale = window.devicePixelRatio || 1;
-      const width = Math.max(260, Math.floor(rect.width));
-      const height = 200;
-      canvas.width = width * scale;
-      canvas.height = height * scale;
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      context.setTransform(scale, 0, 0, scale, 0, 0);
-      context.clearRect(0, 0, width, height);
-      const max = Math.max(1, ...data.map((item) => item.value));
-      const chartTop = 25;
-      const chartBottom = 160;
-      const columnWidth = Math.min(38, Math.max(24, (width - 70) / 8));
-      context.font = "11px system-ui";
-      context.textAlign = "right";
-      context.fillStyle = "#7890a7";
-      [0, 0.25, 0.5, 0.75, 1].forEach((tick) => {
-        const y = chartBottom - (chartBottom - chartTop) * tick;
-        context.strokeStyle = "#e9f0f7";
-        context.beginPath();
-        context.moveTo(28, y);
-        context.lineTo(width - 8, y);
-        context.stroke();
-        context.fillText(String(Math.round(max * tick)), 22, y + 4);
-      });
-      data.forEach((item, index) => {
-        const step = (width - 45) / data.length;
-        const x = 34 + step * index + (step - columnWidth) / 2;
-        const valueHeight = Math.max(
-          item.value ? 9 : 0,
-          (item.value / max) * (chartBottom - chartTop),
-        );
-        const y = chartBottom - valueHeight;
-        const gradient = context.createLinearGradient(0, y, 0, chartBottom);
-        gradient.addColorStop(
-          0,
-          index === data.length - 1 ? "#f58a45" : "#86b9ff",
-        );
-        gradient.addColorStop(
-          1,
-          index === data.length - 1 ? "#ef4438" : "#1677ff",
-        );
-        context.fillStyle = gradient;
-        context.beginPath();
-        context.roundRect(x, y, columnWidth, valueHeight, [
-          columnWidth / 2,
-          columnWidth / 2,
-          5,
-          5,
-        ]);
-        context.fill();
-        context.fillStyle = "#1d4f83";
-        context.textAlign = "center";
-        context.font = "700 11px system-ui";
-        context.fillText(String(item.value), x + columnWidth / 2, y - 7);
-        context.fillStyle = "#617b95";
-        context.font = "10px system-ui";
-        context.fillText(item.label, x + columnWidth / 2, 181);
-      });
-    };
-    paint();
-    const observer = new ResizeObserver(paint);
-    observer.observe(canvas);
-    return () => observer.disconnect();
-  }, [data]);
-  const total = data.reduce((sum, item) => sum + item.value, 0);
-  return (
-    <canvas
-      ref={canvasRef}
-      className="uf-aging-canvas"
-      role="img"
-      aria-label={`超期账龄分布：${data.map((item) => `${item.label}${item.value}个，占比${total ? ((item.value / total) * 100).toFixed(1) : 0}%`).join("；")}`}
-    />
-  );
-}
-
 export function UnresolvedFollowupDashboard() {
-  const { quarter, reconciliationById, followups, refresh, loading, error } = useDashboardData();
+  const { quarter, reconciliationById, followups, refresh } = useDashboardData();
   const items = useMemo(() => toItems(quarter?.label ?? "", reconciliationById, followups), [quarter, reconciliationById, followups]);
   const [region, setRegion] = useState(ALL);
   const [query, setQuery] = useState("");
@@ -459,43 +372,6 @@ export function UnresolvedFollowupDashboard() {
     (a, b) =>
       Math.abs(b.amount) - Math.abs(a.amount) ||
       (dayDistance(latest(b)) ?? 0) - (dayDistance(latest(a)) ?? 0),
-  );
-  const aging = ["30天内", "31-60天", "61-90天", "90天以上"].map(
-    (label, index) => ({
-      label,
-      value: overdue.filter((item) => {
-        const days = dayDistance(latest(item)) ?? 0;
-        return index === 0
-          ? days <= 30
-          : index === 1
-            ? days <= 60
-            : index === 2
-              ? days <= 90
-              : true;
-      }).length,
-    }),
-  );
-  const priority = useMemo(
-    () => ({
-      top: pending
-        .filter(
-          (item) =>
-            financeOf(item) === "需财务复核" ||
-            financeOf(item) === "一般关注",
-        )
-        .sort((a, b) => b.amount - a.amount)
-        .slice(0, 5),
-      untouched: pending.filter(
-        (item) => (dayDistance(latest(item)) ?? 0) > LONG_UNTOUCHED_DAYS,
-      ),
-      finance: pending.filter((item) => financeOf(item) === "需财务复核"),
-      stalled: pending.filter(
-        (item) =>
-          item.followUps.length >= 2 &&
-          (dayDistance(latest(item)) ?? 0) > OVERDUE_DAYS,
-      ),
-    }),
-    [pending],
   );
   const reset = () => {
     setRegion(ALL);
@@ -669,39 +545,6 @@ export function UnresolvedFollowupDashboard() {
     ...regionStats.map((item) => item.list.length),
   );
   const maxAmount = Math.max(1, ...regionStats.map((item) => item.amount));
-  const recommendations = [
-    {
-      level: "high",
-      text: `优先处理 ${priority.finance.length} 个需财务复核客户`,
-      action: "提交财务专项处理",
-    },
-    {
-      level: "high",
-      text: `催办 ${aging[3].value} 个超过 90 天未更新事项`,
-      action: "升级管理层关注",
-    },
-    {
-      level: "medium",
-      text: `跟进 ${priority.untouched.length} 个长期未更新客户`,
-      action: "提醒负责人更新",
-    },
-    {
-      level: "medium",
-      text: `复核 ${priority.stalled.length} 个多次跟进无进展事项`,
-      action: "核对当前解决方案",
-    },
-    {
-      level: "normal",
-      text: `持续推进 ${pending.length} 个待解决客户的处理闭环`,
-      action: "查看待解决清单",
-    },
-  ].filter(
-    (item) =>
-      !item.text.startsWith("优先处理 0") &&
-      !item.text.startsWith("催办 0") &&
-      !item.text.startsWith("跟进 0") &&
-      !item.text.startsWith("复核 0"),
-  );
   return (
     <section className="uf-page" aria-busy={false}>
       <section className="uf-kpis" aria-label="未解决客户核心指标">
@@ -1244,41 +1087,6 @@ export function UnresolvedFollowupDashboard() {
                 </em>
               </button>
             ))}
-        </article>
-        <article className="uf-card">
-          <h2>超期账龄分布</h2>
-          <AgingCylinderChart data={aging} />
-          <p className="uf-chart-caption">
-            按最近跟进时间统计，悬停或聚焦可查看账龄数量。
-          </p>
-        </article>
-        <article className="uf-card uf-advice">
-          <h2>下一步处理建议</h2>
-          {recommendations.length ? (
-            recommendations.map((item) => (
-              <div key={item.text}>
-                <Badge
-                  type={
-                    item.level === "high"
-                      ? "高风险"
-                      : item.level === "medium"
-                        ? "中风险"
-                        : "一般关注"
-                  }
-                >
-                  {item.level === "high"
-                    ? "高优先级"
-                    : item.level === "medium"
-                      ? "中优先级"
-                      : "一般优先级"}
-                </Badge>
-                <span>{item.text}</span>
-                <small>{item.action}</small>
-              </div>
-            ))
-          ) : (
-            <p className="uf-no-data">当前没有需要升级处理的事项。</p>
-          )}
         </article>
       </section>
       {editing && (

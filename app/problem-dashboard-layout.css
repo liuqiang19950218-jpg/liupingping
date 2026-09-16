@@ -1,5 +1,5 @@
 .pd-analysis-grid:not(.pd-second-grid) {
-  grid-template-columns: minmax(260px, 0.82fr) minmax(320px, 0.98fr) minmax(480px, 1.4fr);
+  grid-template-columns: minmax(360px, 1fr) minmax(520px, 1.35fr);
 }
 
 @media (max-width: 1366px) {
