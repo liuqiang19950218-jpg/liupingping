@@ -1,51 +1,19 @@
 "use client";
 import * as XLSX from "xlsx";
-import { ChangeEvent, useEffect, useState } from "react";
-
-type Flow = "NEW_QUARTER_BASE" | "UPDATE_COMPANY_RECEIVABLE";
-type Source = { sourceFileName:string; sourceSha256:string; headers:string[]; rows:unknown[][] };
-type Preview = {
-  previewToken: string;
-  quarter: string;
-  sourceSha256: string;
-  sourceRows: number;
-  companyReceivableNull?: number;
-  ownerNull?: number;
-  current?: { records?: number };
-  newDictionaryValues?: { newRegions?: string[]; newAccountSets?: string[] };
-  matched?: number;
-  unmatched?: number;
-  conflict?: number;
-  unchanged?: number;
-  blockingIssues?: number;
-  changes?: Array<{ sequence:string; customer:string; oldCompanyReceivable:string; newCompanyReceivable:string; oldDifference:string|null; newDifference:string|null; requiresDifferenceReview:boolean }>;
-};
-type Batch = { id: string; label: string; quarter: string; original_file_name: string; source_sha256: string; imported_at: string; status: string; inserted_count: number; updated_count: number };
+import { ChangeEvent, DragEvent, useState } from "react";
+type Flow="NEW_QUARTER_BASE"|"UPDATE_COMPANY_RECEIVABLE";
+type Source={sourceFileName:string;sourceSha256:string;headers:string[];rows:unknown[][]};
+type Preview={previewToken:string|null;quarter:string;sourceRows:number;companyReceivableTotal?:string;companyReceivableNull?:number;ownerNull?:number;accountSets?:Record<string,number>;regions?:Record<string,number>;matched?:number;unmatched?:number;conflict?:number;unchanged?:number;changes?:Array<{sequence:string;customer:string;oldCompanyReceivable:string;newCompanyReceivable:string;oldDifference:string|null;newDifference:string|null;requiresDifferenceReview:boolean}>};
 const updateHeaders=["序号","对账时间点","账套","区域","客户名称","新公司应收"];
-const endpoints:Record<Flow,{preview:string;execute:string}>= {
-  NEW_QUARTER_BASE:{preview:"/api/imports/quarter-base/preview",execute:"/api/imports/quarter-base/execute"},
-  UPDATE_COMPANY_RECEIVABLE:{preview:"/api/imports/company-receivable/preview",execute:"/api/imports/company-receivable/execute"},
-};
-const labels:Record<Flow,string>={NEW_QUARTER_BASE:"导入新季度基础对账表",UPDATE_COMPANY_RECEIVABLE:"公司应收增量更新"};
-async function sha256(buffer: ArrayBuffer) {
-  const digest = await crypto.subtle.digest("SHA-256", buffer);
-  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
-}
-async function read(file:File):Promise<Source>{const buffer=await file.arrayBuffer();const wb=XLSX.read(buffer,{type:"array"});const all=XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[wb.SheetNames[0]],{header:1,defval:""});return {sourceFileName:file.name,sourceSha256:await sha256(buffer),headers:(all[0]??[]).map(String),rows:all.slice(1).filter(r=>r.some(v=>String(v??"").trim()!==""))};}
-async function api(path:string,body:unknown){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});const json=await r.json().catch(()=>({}));if(!r.ok)throw new Error(json.error??"请求失败");return json;}
-
-export function DataImportCenter(){const [flow,setFlow]=useState<Flow>("NEW_QUARTER_BASE"),[quarter,setQuarter]=useState("2026-Q3"),[source,setSource]=useState<Source|null>(null),[preview,setPreview]=useState<Preview|null>(null),[message,setMessage]=useState(""),[busy,setBusy]=useState(false),[batches,setBatches]=useState<Batch[]>([]);
-  const refreshHistory=()=>fetch("/api/imports/history").then(r=>r.ok?r.json():Promise.reject()).then(value=>setBatches(value.batches)).catch(()=>setBatches([]));
-  useEffect(()=>{void refreshHistory();},[]);
-  const choose=async(event:ChangeEvent<HTMLInputElement>)=>{const file=event.target.files?.[0];event.target.value="";if(!file)return;try{setBusy(true);setMessage("正在解析并执行只读预检…");const next=await read(file);setSource(next);const p=await api(endpoints[flow].preview,{quarter,...next});setPreview(p);setMessage("预检完成。请核对后确认执行。");}catch(e){setPreview(null);setMessage(e instanceof Error?e.message:"预检失败");}finally{setBusy(false);}};
-  const execute=async()=>{if(!source||!preview)return;try{setBusy(true);const result=await api(endpoints[flow].execute,{quarter,...source,previewToken:preview.previewToken});setMessage(`${labels[flow]}成功：${result.importedRows??result.updated??0} 条。`);setPreview(null);void refreshHistory();}catch(e){setMessage(e instanceof Error?e.message:"执行失败");}finally{setBusy(false);}};
-  const template=()=>{const wb=XLSX.utils.book_new();const ws=XLSX.utils.aoa_to_sheet([updateHeaders]);XLSX.utils.book_append_sheet(wb,ws,"公司应收更新");XLSX.writeFile(wb,"公司应收增量更新模板.xlsx");};
-  return <section className="base-import-center" aria-label="季度基础数据维护">
-    <div><h2>季度基础数据维护</h2><p>全部流程先预检，再由 PostgreSQL 原子事务执行；不会使用浏览器本地业务数据。</p></div>
-    <div className="base-import-cards">{(Object.keys(labels) as Flow[]).map(kind=><button key={kind} type="button" className={`base-import-card ${kind===flow?"selected":""}`} onClick={()=>{setFlow(kind);setPreview(null);setMessage("");}}><strong>{labels[kind]}</strong><span>{kind==="NEW_QUARTER_BASE"?"新季度首次建立，只导入 7 个基础字段。":"仅更新精确匹配记录的公司应收，不覆盖已填写的业务内容。"}</span></button>)}</div>
-    <div className="base-import-form"><label>目标季度 <select value={quarter} onChange={e=>{setQuarter(e.target.value);setPreview(null);}}>{[2026,2027,2028,2029,2030].flatMap(y=>[1,2,3,4].map(q=><option key={`${y}-${q}`} value={`${y}-Q${q}`}>{y} Q{q}</option>))}</select></label>{flow==="UPDATE_COMPANY_RECEIVABLE"&&<button type="button" onClick={template}>下载公司应收更新模板</button>}<label className="upload-action">上传并预检<input type="file" accept=".xlsx,.xls" onChange={choose} disabled={busy}/></label></div>
-    {preview&&<article className="base-import-preview"><h3>{labels[flow]}预检</h3><p>季度：{preview.quarter}；SHA256：{String(preview.sourceSha256).slice(0,16)}…；有效记录：{preview.sourceRows}</p>{flow==="UPDATE_COMPANY_RECEIVABLE"?<><p>精确匹配：{preview.matched??0}；金额未变化：{preview.unchanged??0}；未匹配：{preview.unmatched??0}；匹配冲突：{preview.conflict??0}</p>{preview.changes?.map(change=><p key={change.sequence}>序号 {change.sequence} · {change.customer}：公司应收 {change.oldCompanyReceivable} → {change.newCompanyReceivable}；差额 {change.oldDifference??"NULL"} → {change.newDifference??"NULL"}{change.requiresDifferenceReview?"（差额需复核）":""}</p>)}{(preview.blockingIssues??0)>0&&<p className="base-import-message">存在未匹配或冲突记录，不能执行更新。</p>}</>:<><p>当前记录：{preview.current?.records??"—"}；新文件公司应收 NULL：{preview.companyReceivableNull??"—"}；负责人 NULL：{preview.ownerNull??"—"}</p><p>新增区域：{preview.newDictionaryValues?.newRegions?.join("、")||"无"}；新增账套：{preview.newDictionaryValues?.newAccountSets?.join("、")||"无"}</p></>}<button type="button" className="execute-import" disabled={busy||!preview.previewToken} onClick={execute}>确认正式执行</button></article>}
-    <p className="base-import-message" role="status">{message}</p>
-    {batches.length>0&&<section className="base-import-history"><h3>季度基础数据维护历史</h3><ul>{batches.map(batch=><li key={batch.id}>{batch.label} · {batch.quarter} · {batch.original_file_name} · {batch.status} · {new Date(batch.imported_at).toLocaleString("zh-CN")}</li>)}</ul></section>}
-  </section>;
+const config:Record<Flow,{title:string;description:string;icon:string;preview:string;execute:string}>={NEW_QUARTER_BASE:{title:"导入新季度基础对账表",description:"用于新季度首次建立基础对账数据，仅导入 7 个基础字段。",icon:"＋",preview:"/api/imports/quarter-base/preview",execute:"/api/imports/quarter-base/execute"},UPDATE_COMPANY_RECEIVABLE:{title:"公司应收增量更新",description:"仅更新精确匹配记录的公司应收，不覆盖已填写的业务内容。",icon:"↻",preview:"/api/imports/company-receivable/preview",execute:"/api/imports/company-receivable/execute"}};
+async function sha256(buffer:ArrayBuffer){const digest=await crypto.subtle.digest("SHA-256",buffer);return Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,"0")).join("");}
+async function parse(file:File):Promise<Source>{const buffer=await file.arrayBuffer();const book=XLSX.read(buffer,{type:"array"});const rows=XLSX.utils.sheet_to_json<unknown[]>(book.Sheets[book.SheetNames[0]],{header:1,defval:""});return {sourceFileName:file.name,sourceSha256:await sha256(buffer),headers:(rows[0]??[]).map(String),rows:rows.slice(1).filter(row=>row.some(v=>String(v??"").trim()))};}
+async function post(path:string,body:unknown){const response=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"请求失败");return json;}
+export function DataImportCenter(){const[open,setOpen]=useState(false),[flow,setFlow]=useState<Flow>("NEW_QUARTER_BASE"),[quarter,setQuarter]=useState("2026-Q3"),[source,setSource]=useState<Source|null>(null),[preview,setPreview]=useState<Preview|null>(null),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);const current=config[flow];
+const select=(next:Flow)=>{if(open&&(source||preview)&&!window.confirm("切换功能将清除当前未提交内容，是否继续？"))return;setFlow(next);setSource(null);setPreview(null);setMessage("");setOpen(true);};
+const choose=async(file?:File)=>{if(!file)return;try{setBusy(true);setSource(await parse(file));setPreview(null);setMessage("文件已选择，点击“开始预检”继续。");}catch(e){setMessage(e instanceof Error?e.message:"文件解析失败");}finally{setBusy(false);}};
+const runPreview=async()=>{if(!source)return;try{setBusy(true);setPreview(await post(current.preview,{quarter,...source}));setMessage("预检完成，请核对后确认。");}catch(e){setPreview(null);setMessage(e instanceof Error?e.message:"预检失败");}finally{setBusy(false);}};
+const execute=async()=>{if(!source||!preview?.previewToken)return;try{setBusy(true);const r=await post(current.execute,{quarter,...source,previewToken:preview.previewToken});setMessage(`${current.title}成功：${r.importedRows??r.updated??0} 条。`);setSource(null);setPreview(null);}catch(e){setMessage(e instanceof Error?e.message:"执行失败");}finally{setBusy(false);}};
+const template=()=>{const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([updateHeaders]),"公司应收更新");XLSX.writeFile(wb,"公司应收增量更新模板.xlsx");};const drop=(e:DragEvent<HTMLLabelElement>)=>{e.preventDefault();void choose(e.dataTransfer.files?.[0]);};
+return <><button type="button" className="file-button import-action-button" onClick={()=>select("NEW_QUARTER_BASE")}>＋ 导入新季度基础对账表</button><button type="button" className="file-button import-action-button" onClick={()=>select("UPDATE_COMPANY_RECEIVABLE")}>↻ 公司应收增量更新</button>{open&&<div className="import-drawer-backdrop import-operation-backdrop" onMouseDown={()=>setOpen(false)}><aside className="import-operation-drawer" role="dialog" aria-modal="true" aria-label={current.title} onMouseDown={e=>e.stopPropagation()}><header><div className="drawer-title"><b>{current.icon}</b><div><p>{current.title}</p><span>{current.description}</span></div></div><button type="button" onClick={()=>setOpen(false)} aria-label="关闭">×</button></header><section className="drawer-body"><div className="drawer-switch"><button type="button" className={flow==="NEW_QUARTER_BASE"?"selected":""} onClick={()=>select("NEW_QUARTER_BASE")}>新季度基础表</button><button type="button" className={flow==="UPDATE_COMPANY_RECEIVABLE"?"selected":""} onClick={()=>select("UPDATE_COMPANY_RECEIVABLE")}>公司应收更新</button></div><label className="drawer-quarter">目标季度<select value={quarter} onChange={e=>{setQuarter(e.target.value);setPreview(null);}}>{[2026,2027,2028,2029,2030].flatMap(y=>[1,2,3,4].map(q=><option key={`${y}-${q}`} value={`${y}-Q${q}`}>{y} 年第 {q} 季度</option>))}</select></label>{flow==="UPDATE_COMPANY_RECEIVABLE"&&<button type="button" className="drawer-secondary" onClick={template}>下载公司应收更新模板</button>}<label className="file-dropzone" onDragOver={e=>e.preventDefault()} onDrop={drop}><input type="file" accept=".xlsx,.xls" onChange={(e:ChangeEvent<HTMLInputElement>)=>void choose(e.target.files?.[0])}/><strong>⇧ 拖拽文件到这里，或点击选择文件</strong><span>支持 .xlsx / .xls{source?` · 已选择：${source.sourceFileName}`:""}</span></label>{!preview?<button type="button" className="drawer-primary" disabled={!source||busy} onClick={runPreview}>{busy?"处理中…":"开始预检"}</button>:<div className="drawer-preview"><h3>预检结果</h3><p>季度：{preview.quarter} · 文件：{source?.sourceFileName} · 有效记录：{preview.sourceRows}</p>{flow==="NEW_QUARTER_BASE"?<><p>公司应收合计：{preview.companyReceivableTotal??"—"}；NULL：{preview.companyReceivableNull??0}；负责人空值：{preview.ownerNull??0}</p><p>区域：{Object.entries(preview.regions??{}).map(([k,v])=>`${k} ${v}`).join("、")||"无"}</p><p>账套：{Object.entries(preview.accountSets??{}).map(([k,v])=>`${k} ${v}`).join("、")||"无"}</p></>:<><p>精确匹配：{preview.matched??0}；未变化：{preview.unchanged??0}；无法匹配：{preview.unmatched??0}；冲突：{preview.conflict??0}</p>{preview.changes?.map(row=><p key={row.sequence}>{row.customer}：{row.oldCompanyReceivable} → {row.newCompanyReceivable}；差额 {row.oldDifference??"NULL"} → {row.newDifference??"NULL"}{row.requiresDifferenceReview?"（差额需复核）":""}</p>)}</>}<button type="button" className="drawer-primary" disabled={busy||!preview.previewToken} onClick={execute}>{busy?"执行中…":flow==="NEW_QUARTER_BASE"?"确认导入":"确认更新"}</button></div>}<p className="drawer-message" role="status">{message}</p></section></aside></div>}</>;
 }

@@ -1917,6 +1917,7 @@ export function QuarterlyReconciliation({
                   {T.clearData}
                 </button>
               )}
+              <DataImportCenter />
             </div>
           ) : (
             <div className="toolbar-actions">
@@ -2003,7 +2004,6 @@ export function QuarterlyReconciliation({
         )}
         {mode === "import" ? (
           <>
-            <DataImportCenter />
             <div className="import-status">
               <strong>其他独立导入与历史记录</strong>
               <span>
