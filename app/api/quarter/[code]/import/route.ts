@@ -15,7 +15,7 @@ type RouteContext = { params: Promise<{ code: string }> };
 // reconciliations, provenance) in ONE transaction.
 export async function POST(_request: Request, _context: RouteContext) {
   return Response.json(
-    { error: "旧季度基础导入入口已停用，请使用数据导入中心的‘导入新季度基础对账表’或‘全量替换当前季度基础表’。", code: "IMPORT_ENDPOINT_DEPRECATED" },
+    { error: "旧季度基础导入入口已停用，请使用数据导入中心的‘导入新季度基础对账表’。", code: "IMPORT_ENDPOINT_DEPRECATED" },
     { status: 410, headers: corsHeaders },
   );
 }

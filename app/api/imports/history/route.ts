@@ -5,7 +5,6 @@ export const runtime = "nodejs";
 
 const labels: Record<string, string> = {
   NEW_QUARTER_BASE: "新季度基础导入",
-  REPLACE_QUARTER_BASE: "季度基础全量替换",
   UPDATE_COMPANY_RECEIVABLE: "公司应收增量更新",
 };
 
