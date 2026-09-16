@@ -10,9 +10,10 @@ const corsHeaders = {
 
 export async function GET() {
   const buildSha = process.env.BUILD_SHA ?? null;
+  const sourceGitSha = process.env.SOURCE_GIT_SHA ?? buildSha;
   const buildTime = process.env.BUILD_TIME ?? null;
   const environment = process.env.ENVIRONMENT ?? "development";
-  return Response.json({ buildSha, buildTime, environment }, { headers: corsHeaders });
+  return Response.json({ buildSha, sourceGitSha, buildTime, environment }, { headers: corsHeaders });
 }
 
 export function OPTIONS() {
