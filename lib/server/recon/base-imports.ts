@@ -94,7 +94,7 @@ export async function executeReceivable(
     let unchanged = 0;
     for (const row of rows) {
       const found = await client.query(
-        "SELECT r.id::text, r.company_receivable::text current, r.customer_book_amount::text book, r.source_payload->>'timepoint' timepoint, a.name account, g.name region, c.name customer FROM recon.reconciliations r JOIN recon.account_sets a ON a.id=r.account_set_id JOIN recon.customers c ON c.id=r.customer_id LEFT JOIN recon.regions g ON g.id=c.region_id WHERE r.quarter_id=$1 AND r.legacy_id=$2 FOR UPDATE",
+        "SELECT r.id::text, r.company_receivable::text current, r.customer_book_amount::text book, r.source_payload->>'timepoint' timepoint, a.name account, g.name region, c.name customer FROM recon.reconciliations r JOIN recon.account_sets a ON a.id=r.account_set_id JOIN recon.customers c ON c.id=r.customer_id LEFT JOIN recon.regions g ON g.id=c.region_id WHERE r.quarter_id=$1 AND r.legacy_id=$2 FOR UPDATE OF r",
         [quarterId, row.sequence],
       );
       if (found.rowCount !== 1) throw conflict("序号 " + row.sequence + " 未匹配或存在冲突");
