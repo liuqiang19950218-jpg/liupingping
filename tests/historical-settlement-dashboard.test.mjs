@@ -64,7 +64,8 @@ test("API route is a single read-only sealed snapshot query", () => {
   assert.match(query, /source_row ASC/);
   assert.doesNotMatch(query, /\b(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\b/);
   assert.match(component, /\/api\/historical-settlement-snapshots/);
-  assert.doesNotMatch(component, /useAllDashboardQuarterRows|useDashboardData|recon\.reconciliations/);
+  assert.doesNotMatch(component, /useAllDashboardQuarterRows|recon\.reconciliations/);
   assert.match(component, /历史季度对清趋势/);
   assert.match(component, /历史各区域对清情况/);
+  assert.match(component, /isLaterThanSnapshot/);
 });
