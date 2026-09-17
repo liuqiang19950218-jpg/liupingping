@@ -124,7 +124,7 @@ export async function executePreviousQuarterTransfer(quarter: string, targetId: 
         `INSERT INTO recon.difference_items
            (reconciliation_id, category, invoice_no, invoice_date, difference_amount, difference_description, verification_status, attachment_keys, source_payload)
          VALUES ($1, $2, $3, $4, $5::numeric, $6, 'not_applicable', '[]'::jsonb,
-           jsonb_build_object('transfer_previous_quarter', jsonb_build_object('source_quarter', $7, 'source_difference_item_id', $8, 'source_reconciliation_id', $9, 'batch_id', $10)))
+           jsonb_build_object('transfer_previous_quarter', jsonb_build_object('source_quarter', $7::text, 'source_difference_item_id', $8::text, 'source_reconciliation_id', $9::text, 'batch_id', $10::text)))
          RETURNING id::text`,
         [target.id, item.category, item.invoice_no, item.invoice_date, item.difference_amount, item.difference_description, target.previousQuarter, item.id, source.id, batchId],
       );
