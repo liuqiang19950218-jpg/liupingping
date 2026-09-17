@@ -19,7 +19,7 @@ export type DifferenceItem = {
   differenceDescription: string | null; verificationStatus: "not_applicable" | "pending" | "matched" | "mismatched";
   attachmentKeys: string[];
 };
-export type PreviousQuarterTransferCandidate = { id: string; sequence: string | null; region: string | null; timepoint: string | null; companyReceivable: string | null; customerBookAmount: string | null };
+export type PreviousQuarterTransferCandidate = { id: string; sequence: string | null; region: string | null; timepoint: string | null; companyReceivable: string | null; customerBookAmount: string | null; accountSet: string; matchMode: "EXACT_ACCOUNT_SET" | "EQUIVALENT_ACCOUNT_SET" };
 export type PreviousQuarterTransferItem = Pick<DifferenceItem, "id" | "category" | "invoiceNo" | "invoiceDate" | "differenceAmount" | "differenceDescription"> & { transferStatus: "AVAILABLE" | "ALREADY_TRANSFERRED" | "CURRENT_INVOICE_EXISTS" };
 export type PreviousQuarterTransferPreview = {
   matchStatus: "ZERO_MATCH" | "MULTI_MATCH" | "READY";
@@ -28,6 +28,7 @@ export type PreviousQuarterTransferPreview = {
   candidates: PreviousQuarterTransferCandidate[];
   items: PreviousQuarterTransferItem[];
   previewToken: string | null;
+  accountMatchMode?: "EXACT_ACCOUNT_SET" | "EQUIVALENT_ACCOUNT_SET";
 };
 type DifferenceItemWrite = Omit<DifferenceItem, "id" | "verificationStatus"> & {
   verificationStatus?: DifferenceItem["verificationStatus"];

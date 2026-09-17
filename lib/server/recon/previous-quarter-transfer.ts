@@ -1,11 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { withPostgresClient, withPostgresTransaction } from "../../../db/postgres";
 import { ApiError, conflict, invalidInput, notFound } from "./errors";
-import { previousQuarterCode } from "../../previous-quarter-transfer-rules.mjs";
+import { crossQuarterAccountSetMatchMode, previousQuarterCode } from "../../previous-quarter-transfer-rules.mjs";
 
 type SqlClient = { query: (sql: string, params?: unknown[]) => Promise<{ rowCount: number | null; rows: Record<string, unknown>[] }> };
 type TransferItem = { id: string; category: string; invoiceNo: string | null; invoiceDate: string | null; differenceAmount: string | null; differenceDescription: string | null; transferStatus: "AVAILABLE" | "ALREADY_TRANSFERRED" | "CURRENT_INVOICE_EXISTS" };
 type Target = { id: string; quarter: string; previousQuarter: string; accountSet: string; customer: string };
+type MatchMode = "EXACT_ACCOUNT_SET" | "EQUIVALENT_ACCOUNT_SET";
+type Source = { id: string; sequence: string | null; region: string | null; timepoint: string | null; companyReceivable: string | null; customerBookAmount: string | null; accountSet: string; matchMode: MatchMode };
 
 const previewTokens = new Map<string, { expiresAt: number; targetId: string; sourceId: string; targetQuarter: string; previousQuarter: string; snapshot: string }>();
 const CONCURRENT = (message = "本季度差额明细已被其他用户更新，请重新预览后再操作。") => new ApiError(409, "CONCURRENT_CHANGE", message);
@@ -26,9 +28,9 @@ async function targetFor(client: SqlClient, quarter: string, reconciliationId: s
   return { id: String(row.id), quarter: String(row.quarter), previousQuarter: previousQuarterCode(quarter), accountSet: String(row.account_set), customer: String(row.customer) };
 }
 
-async function matchingSources(client: SqlClient, target: Target) {
+async function matchingSources(client: SqlClient, target: Target): Promise<Source[]> {
   const result = await client.query(
-    `SELECT r.id::text, r.legacy_id::text AS sequence, g.name AS region,
+    `SELECT r.id::text, r.legacy_id::text AS sequence, a.name AS account_set, g.name AS region,
             r.source_payload->>'timepoint' AS timepoint,
             r.company_receivable::text AS company_receivable,
             r.customer_book_amount::text AS customer_book_amount
@@ -37,11 +39,16 @@ async function matchingSources(client: SqlClient, target: Target) {
      JOIN recon.account_sets a ON a.id = r.account_set_id
      JOIN recon.customers c ON c.id = r.customer_id
      LEFT JOIN recon.regions g ON g.id = c.region_id
-     WHERE q.code = $1 AND a.name = $2 AND c.name = $3
+     WHERE q.code = $1 AND c.name = $2
      ORDER BY r.source_row_key NULLS LAST, r.created_at ASC, r.id ASC`,
-    [target.previousQuarter, target.accountSet, target.customer],
+    [target.previousQuarter, target.customer],
   );
-  return result.rows.map((row) => ({ id: String(row.id), sequence: row.sequence ?? null, region: row.region ?? null, timepoint: row.timepoint ?? null, companyReceivable: row.company_receivable ?? null, customerBookAmount: row.customer_book_amount ?? null }));
+  const candidates = result.rows.map((row) => ({ id: String(row.id), sequence: row.sequence ?? null, region: row.region ?? null, timepoint: row.timepoint ?? null, companyReceivable: row.company_receivable ?? null, customerBookAmount: row.customer_book_amount ?? null, accountSet: String(row.account_set) }));
+  const exact = candidates.filter((candidate) => candidate.accountSet === target.accountSet);
+  if (exact.length) return exact.map((candidate) => ({ ...candidate, matchMode: "EXACT_ACCOUNT_SET" }));
+  return candidates.flatMap((candidate) => crossQuarterAccountSetMatchMode(target.accountSet, candidate.accountSet) === "EQUIVALENT_ACCOUNT_SET"
+    ? [{ ...candidate, matchMode: "EQUIVALENT_ACCOUNT_SET" as const }]
+    : []);
 }
 
 async function itemsForPreview(client: SqlClient, targetId: string, sourceId: string): Promise<{ items: TransferItem[]; snapshot: string }> {
@@ -80,7 +87,7 @@ export async function previewPreviousQuarterTransfer(quarter: string, targetId: 
     const { items, snapshot } = await itemsForPreview(client, target.id, source.id);
     const token = randomUUID();
     previewTokens.set(token, { expiresAt: Date.now() + 15 * 60_000, targetId: target.id, sourceId: source.id, targetQuarter: target.quarter, previousQuarter: target.previousQuarter, snapshot });
-    return { matchStatus: "READY" as const, target, source, candidates: sources, items, previewToken: token };
+    return { matchStatus: "READY" as const, target, source, candidates: sources, items, previewToken: token, accountMatchMode: source.matchMode };
   });
 }
 
@@ -134,7 +141,7 @@ export async function executePreviousQuarterTransfer(quarter: string, targetId: 
       `INSERT INTO recon.audit_logs(action, entity_type, entity_id, request_id, before_data, after_data)
        VALUES($1, 'reconciliation', $2, $3, $4::jsonb, $5::jsonb)`,
       ["TRANSFER_PREVIOUS_QUARTER_DIFFERENCE_ITEMS", target.id, batchId,
-        JSON.stringify({ target_quarter: quarter, source_quarter: target.previousQuarter, target_reconciliation_id: target.id, source_reconciliation_id: source.id, account_set: target.accountSet, customer_name: target.customer }),
+        JSON.stringify({ target_quarter: quarter, source_quarter: target.previousQuarter, target_reconciliation_id: target.id, source_reconciliation_id: source.id, current_account_set: target.accountSet, source_account_set: source.accountSet, account_match_mode: source.matchMode, customer_name: target.customer }),
         JSON.stringify({ batch_id: batchId, selected_count: selected.length, inserted_count: targetIds.length, skipped_duplicate_count: 0, source_difference_item_ids: selected, target_difference_item_ids: targetIds })],
     );
     return { batchId, targetQuarter: quarter, sourceQuarter: target.previousQuarter, insertedCount: targetIds.length, targetDifferenceItemIds: targetIds };
