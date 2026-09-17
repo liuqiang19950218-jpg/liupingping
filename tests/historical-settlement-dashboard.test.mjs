@@ -36,6 +36,9 @@ test("historical dashboard consumes seven sealed periods and source trend values
   assert.deepEqual(trend.map((item) => Number(item.reconciliationRate.toFixed(1))), [97.4, 97.7, 97.8, 98, 98.4, 99.2, 99.2]);
   assert.equal(latestHistoricalPeriod(periods).label, "2026 Q1");
   assert.equal(periods.some((period) => period.label === "2026 Q2"), false);
+  assert.equal(trend[0].unsettledCustomers, 17, "2024 Q3 bar data comes from the sealed total");
+  assert.equal(typeof trend[0].unsettledCustomers, "number");
+  assert.equal(historicalTrend([{ ...periods[0], total: { ...periods[0].total, unsettledCount: null } }])[0].unsettledCustomers, 0, "zero remains a chart value");
 });
 
 test("historical total is never recomputed from regions and NULL unsettled displays as zero", () => {
@@ -68,4 +71,7 @@ test("API route is a single read-only sealed snapshot query", () => {
   assert.match(component, /历史季度对清趋势/);
   assert.match(component, /历史各区域对清情况/);
   assert.match(component, /isLaterThanSnapshot/);
+  assert.match(component, /unsettledCustomers/);
+  assert.doesNotMatch(component, /unreconciledCustomers/);
+  assert.match(component, /Number\.isFinite\(value\) \? value : 0/);
 });

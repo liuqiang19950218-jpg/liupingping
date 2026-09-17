@@ -8,7 +8,7 @@ import { isSettled, isUnsettled, settlementRate } from "../lib/reconciliation-se
 import "./history-dashboard.css";
 import "./history-dashboard-extra.css";
 
-type TrendDataItem = { quarter: string; unreconciledCustomers: number; reconciliationRate: number };
+type TrendDataItem = { quarter: string; unsettledCustomers: number; reconciliationRate: number };
 type HistoricalPeriod = {
   year: number;
   quarter: number;
@@ -23,12 +23,12 @@ function UnreconciledRiskChart({ data, currentQuarter }: { data: TrendDataItem[]
     const element = host.current;
     if (!element || !data.length) return;
     const chart = echarts.init(element);
-    const maxCustomers = Math.max(...data.map((item) => item.unreconciledCustomers));
+    const maxCustomers = Math.max(...data.map((item) => item.unsettledCustomers));
     const customerAxisMax = Math.max(5, Math.ceil((maxCustomers + 2) / 5) * 5);
     const dense = data.length > 7;
     chart.setOption({
       animationDuration: 260,
-      tooltip: { trigger: "axis", backgroundColor: "#fff", borderColor: "#dfe7f1", borderWidth: 1, textStyle: { color: "#34425e", fontSize: 13 }, formatter: (params: Array<{ axisValue: string; seriesName: string; value: number }>) => `${params[0]?.axisValue ?? ""}<br/>${params.map((item) => `${item.seriesName}：${item.seriesName === "未对清客户数" ? `${item.value}户` : `${item.value.toFixed(2)}%`}`).join("<br/>")}` },
+      tooltip: { trigger: "axis", backgroundColor: "#fff", borderColor: "#dfe7f1", borderWidth: 1, textStyle: { color: "#34425e", fontSize: 13 }, formatter: (params: Array<{ axisValue: string; seriesName: string; value: unknown }>) => `${params[0]?.axisValue ?? ""}<br/>${params.map((item) => { const value = Number(item.value); const displayValue = Number.isFinite(value) ? value : 0; return `${item.seriesName}：${item.seriesName === "未对清客户数" ? `${displayValue}户` : `${displayValue.toFixed(2)}%`}`; }).join("<br/>")}` },
       legend: { top: 2, left: "center", itemWidth: 14, itemHeight: 10, itemGap: 44, textStyle: { color: "#34425e", fontSize: 14 } },
       grid: { left: 54, right: 54, top: 64, bottom: 48 },
       xAxis: { type: "category", data: data.map((item) => item.quarter), axisTick: { show: false }, axisLine: { lineStyle: { color: "#d7dee9" } }, axisLabel: { interval: 0, color: "#34425e", fontSize: dense ? 11 : 13, margin: 16, formatter: (value: string) => value === currentQuarter ? `${value}\n{current|当前}` : value, rich: { current: { color: "#fff", backgroundColor: "#1267f4", padding: [3, 6], borderRadius: 4, fontSize: 11, lineHeight: 26 } } } },
@@ -37,7 +37,7 @@ function UnreconciledRiskChart({ data, currentQuarter }: { data: TrendDataItem[]
         { type: "value", name: "对清率（%）", min: 0, max: 100, interval: 25, nameTextStyle: { color: "#71809a", fontSize: 12 }, axisLabel: { color: "#71809a", fontSize: 12, formatter: "{value}%" }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
       ],
       series: [
-        { name: "未对清客户数", type: "bar", yAxisIndex: 0, data: data.map((item) => item.unreconciledCustomers), barWidth: dense ? 22 : 32, itemStyle: { color: "#1267f4", borderRadius: [5, 5, 0, 0] }, label: { show: true, position: "top", color: "#18243b", fontSize: dense ? 11 : 13, fontWeight: 600 } },
+        { name: "未对清客户数", type: "bar", yAxisIndex: 0, data: data.map((item) => item.unsettledCustomers), barWidth: dense ? 22 : 32, barGap: "28%", itemStyle: { color: "#1267f4", borderRadius: [5, 5, 0, 0] }, label: { show: true, position: "top", color: "#18243b", fontSize: dense ? 11 : 13, fontWeight: 600 } },
         { name: "对清率", type: "line", yAxisIndex: 1, data: data.map((item) => item.reconciliationRate), symbol: "circle", symbolSize: 8, lineStyle: { width: 3, color: "#ff7a1a" }, itemStyle: { color: "#ff7a1a", borderColor: "#fff", borderWidth: 2 }, label: { show: true, position: "top", formatter: ({ value }: { value: number }) => `${value.toFixed(1)}%`, color: "#ff7a1a", fontSize: 13, fontWeight: 700 }, z: 3 },
       ],
     });
@@ -84,7 +84,7 @@ export function ReconciliationHistoryDashboard() {
       quarterNumber: quarter.quarter,
       trend: {
         quarter: quarter.label,
-        unreconciledCustomers: accounted.length - settled,
+        unsettledCustomers: accounted.length - settled,
         reconciliationRate: settlementRate({ settled, unsettled: accounted.length - settled }),
       },
     };
