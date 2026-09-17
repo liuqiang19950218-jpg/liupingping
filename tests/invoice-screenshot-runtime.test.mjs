@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { isCompletelyEmptyInvoiceDraft, mergeRecognizedInvoiceDrafts } from "../lib/invoice-draft-merge.mjs";
 
 test("screenshot invoice flow is draft-only and keeps every detected row accountable", () => {
   const drawer = readFileSync("app/BatchInvoiceScreenshotDrawer.tsx", "utf8");
@@ -28,6 +29,23 @@ test("screenshot candidates dedupe before resolving and only ready rows can be a
   assert.match(drawer, /disabled=\{busy \|\| blockingRows\.length > 0 \|\| addableRows\.length === 0\}/);
   assert.match(drawer, /批量填入差额明细（\{addableRows\.length\}条）/);
   assert.match(drawer, /当前没有可填入的发票明细/);
+});
+
+test("recognized invoices reuse only fully empty invoice drafts in display order", () => {
+  const blank = () => ({ invoice: "", date: "", amount: "", note: "" });
+  const item = (invoice) => ({ invoice, date: `2026-01-${invoice}`, amount: "2400", note: "" });
+  const partial = { invoice: "", date: "", amount: "", note: "客户反馈待确认" };
+  // Cases A/B/E/F/G: empty placeholders are filled first, with no extra row.
+  assert.deepEqual(mergeRecognizedInvoiceDrafts([blank()], [item("A"), item("B"), item("C")]).map((row) => row.invoice), ["A", "B", "C"]);
+  assert.deepEqual(mergeRecognizedInvoiceDrafts([blank(), blank()], [item("A"), item("B"), item("C")]).map((row) => row.invoice), ["A", "B", "C"]);
+  assert.deepEqual(mergeRecognizedInvoiceDrafts([blank()], [item("A")]).map((row) => row.invoice), ["A"]);
+  // Cases C/D: business content is never overwritten; remaining batch rows append.
+  assert.deepEqual(mergeRecognizedInvoiceDrafts([item("OLD1"), item("OLD2")], [item("A"), item("B")]).map((row) => row.invoice), ["OLD1", "OLD2", "A", "B"]);
+  assert.deepEqual(mergeRecognizedInvoiceDrafts([blank(), partial, blank()], [item("A"), item("B"), item("C")]).map((row) => row.invoice), ["A", "", "B", "C"]);
+  assert.equal(mergeRecognizedInvoiceDrafts([blank()], [item("A")])[0].date, "2026-01-A");
+  assert.equal(mergeRecognizedInvoiceDrafts([blank()], [item("A")])[0].amount, "2400");
+  assert.equal(isCompletelyEmptyInvoiceDraft({ ...blank(), id: "metadata", verificationStatus: "pending" }), true);
+  assert.equal(isCompletelyEmptyInvoiceDraft(partial), false);
 });
 
 test("batch resolve uses the active ledger scope and performs no write", () => {
