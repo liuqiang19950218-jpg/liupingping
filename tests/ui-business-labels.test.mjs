@@ -25,7 +25,8 @@ test("all known business-code render points consume the shared display helpers",
     readFile(new URL("../app/ManagementCockpit.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/DifferenceAgingAnalysis.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(cockpit, /formatFollowupStatusLabel\(r\.followStatus\)/);
+  // The former Top10 card used `r.followStatus`; it was intentionally removed
+  // from ManagementCockpit. The remaining detail table is the live render point.
   assert.match(cockpit, /formatFollowupStatusLabel\(row\.followStatus\)/);
   assert.match(cockpit, /formatDifferenceCategoryLabel\(invoice\.category\)/);
   assert.doesNotMatch(cockpit, /<td>\{invoice\.category\}<\/td>/);
