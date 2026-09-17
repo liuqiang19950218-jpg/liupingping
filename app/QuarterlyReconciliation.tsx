@@ -2430,7 +2430,7 @@ export function QuarterlyReconciliation({
                 activeType={activeDifferenceType}
                 onOpen={setActiveDifferenceType}
               />
-              {mode !== "import" && currentPostgresQuarter() && apiIds[active] && <PreviousQuarterDifferenceTransferDrawer
+              {mode !== "import" && activeQuarter && apiIds[active] && <PreviousQuarterDifferenceTransferDrawer
                 quarter={activeQuarter}
                 reconciliationId={apiIds[active]}
                 accountSet={String(sheet.rows[active][accountIndex] ?? "")}
