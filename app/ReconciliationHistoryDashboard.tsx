@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as echarts from "echarts";
-import { historicalTrend, latestHistoricalPeriod, normalizeHistoricalSettlementPeriods } from "../lib/historical-settlement-dashboard.mjs";
+import { formatHistoricalTrendTooltip, historicalTrend, latestHistoricalPeriod, normalizeHistoricalSettlementPeriods } from "../lib/historical-settlement-dashboard.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import { isSettled, isUnsettled, settlementRate } from "../lib/reconciliation-settlement-status.mjs";
 import "./history-dashboard.css";
@@ -28,7 +28,7 @@ function UnreconciledRiskChart({ data, currentQuarter }: { data: TrendDataItem[]
     const dense = data.length > 7;
     chart.setOption({
       animationDuration: 260,
-      tooltip: { trigger: "axis", backgroundColor: "#fff", borderColor: "#dfe7f1", borderWidth: 1, textStyle: { color: "#34425e", fontSize: 13 }, formatter: (params: Array<{ axisValue: string; seriesName: string; value: unknown }>) => `${params[0]?.axisValue ?? ""}<br/>${params.map((item) => { const value = Number(item.value); const displayValue = Number.isFinite(value) ? value : 0; return `${item.seriesName}：${item.seriesName === "未对清客户数" ? `${displayValue}户` : `${displayValue.toFixed(2)}%`}`; }).join("<br/>")}` },
+      tooltip: { trigger: "axis", backgroundColor: "#fff", borderColor: "#dfe7f1", borderWidth: 1, textStyle: { color: "#34425e", fontSize: 13 }, formatter: formatHistoricalTrendTooltip },
       legend: { top: 2, left: "center", itemWidth: 14, itemHeight: 10, itemGap: 44, textStyle: { color: "#34425e", fontSize: 14 } },
       grid: { left: 54, right: 54, top: 64, bottom: 48 },
       xAxis: { type: "category", data: data.map((item) => item.quarter), axisTick: { show: false }, axisLine: { lineStyle: { color: "#d7dee9" } }, axisLabel: { interval: 0, color: "#34425e", fontSize: dense ? 11 : 13, margin: 16, formatter: (value: string) => value === currentQuarter ? `${value}\n{current|当前}` : value, rich: { current: { color: "#fff", backgroundColor: "#1267f4", padding: [3, 6], borderRadius: 4, fontSize: 11, lineHeight: 26 } } } },

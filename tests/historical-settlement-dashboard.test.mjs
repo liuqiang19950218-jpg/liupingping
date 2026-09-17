@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  formatHistoricalTrendTooltip,
   historicalTrend,
   latestHistoricalPeriod,
   normalizeHistoricalSettlementPeriods,
@@ -39,6 +40,15 @@ test("historical dashboard consumes seven sealed periods and source trend values
   assert.equal(trend[0].unsettledCustomers, 17, "2024 Q3 bar data comes from the sealed total");
   assert.equal(typeof trend[0].unsettledCustomers, "number");
   assert.equal(historicalTrend([{ ...periods[0], total: { ...periods[0].total, unsettledCount: null } }])[0].unsettledCustomers, 0, "zero remains a chart value");
+  const tooltip = formatHistoricalTrendTooltip([
+    { axisValue: "2024 Q3", seriesName: "未对清客户数", value: 17 },
+    { axisValue: "2024 Q3", seriesName: "对清率", value: 97.4045801526718 },
+  ]);
+  assert.match(tooltip, /未对清客户数：17户/);
+  assert.match(tooltip, /对清率：97\.40%/);
+  const safeTooltip = formatHistoricalTrendTooltip([{ axisValue: "2026 Q2", seriesName: "未对清客户数", value: undefined }]);
+  assert.match(safeTooltip, /未对清客户数：0户/);
+  assert.doesNotMatch(safeTooltip, /undefined|NaN/);
 });
 
 test("historical total is never recomputed from regions and NULL unsettled displays as zero", () => {
@@ -73,5 +83,5 @@ test("API route is a single read-only sealed snapshot query", () => {
   assert.match(component, /isLaterThanSnapshot/);
   assert.match(component, /unsettledCustomers/);
   assert.doesNotMatch(component, /unreconciledCustomers/);
-  assert.match(component, /Number\.isFinite\(value\) \? value : 0/);
+  assert.match(component, /formatter: formatHistoricalTrendTooltip/);
 });
