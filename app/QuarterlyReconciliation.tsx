@@ -21,6 +21,7 @@ import {
 } from "./quarter-storage";
 import { ImportDashboard } from "./ImportDashboard";
 import { DataImportCenter } from "./DataImportCenter";
+import { PreviousQuarterDifferenceTransferDrawer } from "./PreviousQuarterDifferenceTransferDrawer";
 import { recordImport } from "./import-history";
 import {
   reconciliationApi,
@@ -1789,6 +1790,22 @@ export function QuarterlyReconciliation({
     stopSolutionRecording();
     setActive(null);
   }
+  async function refreshTransferredDifferenceItems() {
+    if (active === null || !activeQuarter) return;
+    const reconciliationId = apiIds[active];
+    if (!reconciliationId) return;
+    const [{ items }, { reconciliations }, { material }, { items: quarterItems }] = await Promise.all([
+      reconciliationApi.listDifferenceItems(activeQuarter, reconciliationId),
+      reconciliationApi.list(activeQuarter),
+      reconciliationApi.getMaterialStatus(activeQuarter),
+      reconciliationApi.listQuarterDifferenceItems(activeQuarter),
+    ]);
+    setApiDifferenceItems((current) => ({ ...current, [reconciliationId]: items }));
+    setSheet(apiSheet(activeQuarter, reconciliations, material, quarterItems));
+    setForm((current) => formFromDifferenceItems(current, items));
+    setMessage("已按服务端确认结果刷新差额明细。");
+    window.dispatchEvent(new Event("reconciliation-dashboard-updated"));
+  }
 
   const company = num(form.companyAmount);
   const difference = company - num(form.customerAmount);
@@ -2413,6 +2430,13 @@ export function QuarterlyReconciliation({
                 activeType={activeDifferenceType}
                 onOpen={setActiveDifferenceType}
               />
+              {mode !== "import" && currentPostgresQuarter() && apiIds[active] && <PreviousQuarterDifferenceTransferDrawer
+                quarter={activeQuarter}
+                reconciliationId={apiIds[active]}
+                accountSet={String(sheet.rows[active][accountIndex] ?? "")}
+                customer={String(sheet.rows[active][customerIndex] ?? "")}
+                onTransferred={refreshTransferredDifferenceItems}
+              />}
               <div className="amount-bar evidence">
                 <span>
                   {T.total}

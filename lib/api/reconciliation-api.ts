@@ -19,6 +19,16 @@ export type DifferenceItem = {
   differenceDescription: string | null; verificationStatus: "not_applicable" | "pending" | "matched" | "mismatched";
   attachmentKeys: string[];
 };
+export type PreviousQuarterTransferCandidate = { id: string; sequence: string | null; region: string | null; timepoint: string | null; companyReceivable: string | null; customerBookAmount: string | null };
+export type PreviousQuarterTransferItem = Pick<DifferenceItem, "id" | "category" | "invoiceNo" | "invoiceDate" | "differenceAmount" | "differenceDescription"> & { transferStatus: "AVAILABLE" | "ALREADY_TRANSFERRED" | "CURRENT_INVOICE_EXISTS" };
+export type PreviousQuarterTransferPreview = {
+  matchStatus: "ZERO_MATCH" | "MULTI_MATCH" | "READY";
+  target: { id: string; quarter: string; previousQuarter: string; accountSet: string; customer: string };
+  source?: PreviousQuarterTransferCandidate;
+  candidates: PreviousQuarterTransferCandidate[];
+  items: PreviousQuarterTransferItem[];
+  previewToken: string | null;
+};
 type DifferenceItemWrite = Omit<DifferenceItem, "id" | "verificationStatus"> & {
   verificationStatus?: DifferenceItem["verificationStatus"];
 };
@@ -195,6 +205,8 @@ export const reconciliationApi = {
   patch: (quarter: string, id: string, body: Partial<Pick<Reconciliation, "customerBookAmount" | "reconciliationStatus" | "badDebtAmount" | "badDebtReason" | "adjustmentAmount" | "adjustmentReason" | "solution" | "solutionDate" | "ownerName" | "manualResolutionStatus" | "financeAttention">>) => request<{ quarter: string; reconciliation: Reconciliation }>(base(quarter, id), { method: "PATCH", body: JSON.stringify(body) }),
   listDifferenceItems: (quarter: string, id: string, signal?: AbortSignal) => request<{ items: DifferenceItem[] }>(`${base(quarter, id)}/difference-items`, {}, signal),
   createDifferenceItem: (quarter: string, id: string, body: DifferenceItemWrite) => request<{ item: DifferenceItem }>(`${base(quarter, id)}/difference-items`, { method: "POST", body: JSON.stringify(body) }),
+  previewPreviousQuarterDifferenceItems: (quarter: string, id: string, sourceReconciliationId?: string) => request<PreviousQuarterTransferPreview>(`${base(quarter, id)}/difference-items/transfer-previous-quarter/preview`, { method: "POST", body: JSON.stringify(sourceReconciliationId ? { sourceReconciliationId } : {}) }),
+  executePreviousQuarterDifferenceItems: (quarter: string, id: string, previewToken: string, sourceDifferenceItemIds: string[]) => request<{ batchId: string; targetQuarter: string; sourceQuarter: string; insertedCount: number; targetDifferenceItemIds: string[] }>(`${base(quarter, id)}/difference-items/transfer-previous-quarter/execute`, { method: "POST", body: JSON.stringify({ previewToken, sourceDifferenceItemIds }) }),
   patchDifferenceItem: (quarter: string, id: string, itemId: string, body: Partial<DifferenceItemWrite>) => request<{ item: DifferenceItem }>(`${base(quarter, id)}/difference-items/${encodeURIComponent(itemId)}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteDifferenceItem: (quarter: string, id: string, itemId: string) => request(`${base(quarter, id)}/difference-items/${encodeURIComponent(itemId)}`, { method: "DELETE" }),
   getFollowups: (quarter: string, id: string) => request<{ followups: Followup[] }>(`${base(quarter, id)}/followups`),
