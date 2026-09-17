@@ -48,6 +48,14 @@ export type LedgerVerificationResult = {
   matchCount: number;
 };
 
+export type LedgerInvoiceResolution = {
+  invoiceNumber: string;
+  status: "resolved" | "ambiguous" | "not_found";
+  invoiceDate: string | null;
+  invoiceAmount: string | null;
+  candidateDates: string[];
+};
+
 export type LedgerDatasetInfo = {
   id: string;
   datasetType: string;
@@ -208,6 +216,53 @@ export async function verifyLedgerInvoice(
     invoiceAmount: probe.amountCents,
     matchCount: res.rowCount ?? 1,
   };
+}
+
+// This is the read-only counterpart of the established invoice/date/amount
+// verification path. It uses exactly the same active-dataset scope; it never
+// creates an invoice, draft, audit row, or temporary database record.
+export async function resolveLedgerInvoices(
+  client: SqlClient,
+  quarterCode: string,
+  invoiceNumbers: unknown,
+): Promise<LedgerInvoiceResolution[]> {
+  if (!Array.isArray(invoiceNumbers) || invoiceNumbers.length > 50) {
+    throw invalidInput("一次最多解析 50 个发票号");
+  }
+  const normalized = [...new Set(invoiceNumbers.map((value) => normalizeInvoice(value)).filter(Boolean))] as string[];
+  if (!normalized.length) return [];
+  const quarterId = await getQuarterIdByCode(client, quarterCode);
+  if (!quarterId) throw notFound(`季度 ${quarterCode} 不存在`);
+  const res = await client.query(
+    `SELECT e.invoice_no_normalized, e.invoice_date::text AS invoice_date,
+            e.invoice_amount::text AS invoice_amount
+       FROM recon.ledger_verification_entries e
+       JOIN recon.ledger_datasets d ON d.id = e.dataset_id
+      WHERE e.invoice_no_normalized = ANY($1::text[])
+        AND d.is_active = true
+        AND (d.dataset_type = 'HISTORICAL_BASE'
+          OR (d.dataset_type = 'CURRENT_YEAR_QUARTER' AND d.quarter_id = $2))
+      ORDER BY e.invoice_no_normalized, e.invoice_date, e.invoice_amount`,
+    [normalized, quarterId],
+  );
+  const byInvoice = new Map<string, { dates: Set<string>; amounts: Set<string> }>();
+  for (const row of res.rows) {
+    const invoice = String(row.invoice_no_normalized);
+    const current = byInvoice.get(invoice) ?? { dates: new Set<string>(), amounts: new Set<string>() };
+    current.dates.add(String(row.invoice_date));
+    current.amounts.add(String(row.invoice_amount));
+    byInvoice.set(invoice, current);
+  }
+  return normalized.map((invoiceNumber) => {
+    const current = byInvoice.get(invoiceNumber);
+    if (!current) return { invoiceNumber, status: "not_found" as const, invoiceDate: null, invoiceAmount: null, candidateDates: [] };
+    const dates = [...current.dates].sort();
+    const amounts = [...current.amounts].sort();
+    // The previous client-side lookup only auto-filled where one amount was
+    // authoritative. Preserve that rule; never guess among multiple amounts.
+    if (amounts.length !== 1) return { invoiceNumber, status: "ambiguous" as const, invoiceDate: null, invoiceAmount: null, candidateDates: dates };
+    return { invoiceNumber, status: dates.length === 1 ? "resolved" as const : "ambiguous" as const, invoiceDate: dates.length === 1 ? dates[0] : null, invoiceAmount: amounts[0], candidateDates: dates };
+  });
 }
 
 // ---------------------------------------------------------------------------

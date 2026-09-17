@@ -22,6 +22,7 @@ import {
 import { ImportDashboard } from "./ImportDashboard";
 import { DataImportCenter } from "./DataImportCenter";
 import { PreviousQuarterDifferenceTransferDrawer } from "./PreviousQuarterDifferenceTransferDrawer";
+import { BatchInvoiceScreenshotDrawer } from "./BatchInvoiceScreenshotDrawer";
 import { recordImport } from "./import-history";
 import {
   reconciliationApi,
@@ -2827,6 +2828,7 @@ function DifferenceDetailDrawer({
   const subtotal = meaningfulEntries.reduce((total, entry) => total + num(entry.amount), 0);
   const [ocrStatus, setOcrStatus] = useState("");
   const [ocrRecognizing, setOcrRecognizing] = useState(false);
+  const [screenshotOpen, setScreenshotOpen] = useState(false);
   const [verificationResults, setVerificationResults] = useState<Record<number, "matched" | "not_found" | "pending">>({});
   const verifyRequest = useRef<AbortController | null>(null);
   const setEntries = (next: InvoiceEntry[] | OtherEntry[]) =>
@@ -2873,6 +2875,15 @@ function DifferenceDetailDrawer({
         return normalizedInvoice ? { ...current, invoice: normalizedInvoice } : blankInvoice();
       }) as InvoiceEntry[],
     );
+  };
+  const resolveInvoice = async (index: number) => {
+    const invoice = (entries[index] as InvoiceEntry | undefined)?.invoice.trim();
+    if (!invoice || !quarter) return;
+    try {
+      const result = (await reconciliationApi.resolveLedgerInvoices(quarter, [invoice])).results[0];
+      if (!result || result.invoiceNumber !== invoice || result.status !== "resolved") return;
+      setEntries(entries.map((entry, entryIndex) => entryIndex === index && (entry as InvoiceEntry).invoice.trim() === invoice ? { ...entry, date: result.invoiceDate ?? "", amount: result.invoiceAmount ?? "" } : entry) as InvoiceEntry[] & OtherEntry[]);
+    } catch { /* retain the established incomplete-row behavior on lookup failure */ }
   };
   const fillRecognizedInvoices = (invoiceNumbers: string[]) => {
     const invoiceEntries = entries as InvoiceEntry[];
@@ -2972,20 +2983,9 @@ function DifferenceDetailDrawer({
       <div className="drawer-tools">
         <button type="button" onClick={add}>＋ 新增一行</button>
         <button type="button" onClick={batchAdd}>▣ 批量录入</button>
-        {meta.invoice && <label className="drawer-ocr-button">
-          {ocrRecognizing ? "OCR识别中…" : "OCR发票识别"}
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            disabled={ocrRecognizing}
-            onChange={(event) => {
-              void recognizeInvoices(event.target.files);
-              event.target.value = "";
-            }}
-          />
-        </label>}
+        {meta.invoice && <button type="button" onClick={() => setScreenshotOpen(true)}>批量识别发票号</button>}
       </div>
+      {screenshotOpen && meta.invoice && <BatchInvoiceScreenshotDrawer quarter={quarter} entries={entries as InvoiceEntry[]} onAppend={(next) => setEntries(next)} onClose={() => setScreenshotOpen(false)} />}
       {meta.invoice && ocrStatus && <p className="drawer-ocr-status" role="status">{ocrStatus}</p>}
       <div className="difference-drawer-table-wrap">
         <table className="difference-drawer-table">
@@ -3004,7 +3004,7 @@ function DifferenceDetailDrawer({
             {entries.map((entry, index) => (
               <tr key={index}>
                 <td>{index + 1}</td>
-                {meta.invoice && <><td><input type="date" value={(entry as InvoiceEntry).date} disabled={!hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "date", event.target.value)} /></td><td><input value={(entry as InvoiceEntry).invoice} onChange={(event) => updateInvoice(index, event.target.value)} placeholder="填写发票号码" /></td></>}
+                {meta.invoice && <><td><input type="date" value={(entry as InvoiceEntry).date} disabled={!hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "date", event.target.value)} /></td><td><input value={(entry as InvoiceEntry).invoice} onChange={(event) => updateInvoice(index, event.target.value)} onBlur={() => void resolveInvoice(index)} placeholder="填写发票号码" /></td></>}
                 <td><input type="number" step="0.01" value={entry.amount} disabled={meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "amount", event.target.value)} placeholder="填写金额" /></td>
                 <td><input value={entry.note} disabled={meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "note", event.target.value)} placeholder="填写差额说明" /></td>
                 {meta.invoice && (() => {

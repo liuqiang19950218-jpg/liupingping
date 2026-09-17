@@ -55,6 +55,7 @@ export type LedgerVerificationResult = {
   invoiceAmount: string | null;
   matchCount: number;
 };
+export type LedgerInvoiceResolution = { invoiceNumber: string; status: "resolved" | "ambiguous" | "not_found"; invoiceDate: string | null; invoiceAmount: string | null; candidateDates: string[] };
 export type QuarterLedgerImportResult = {
   quarter: string;
   status: "IMPORTED";
@@ -220,6 +221,7 @@ export const reconciliationApi = {
   listQuarterFollowups: (quarter: string, signal?: AbortSignal) => request<{ quarter: string; count: number; eventCount: number; items: QuarterFollowupItem[] }>(`/api/quarter/${encodeURIComponent(quarter)}/followups`, {}, signal),
   getSpdDashboard: (quarter: string, signal?: AbortSignal) => request<SpdDashboardData>(`/api/quarter/${encodeURIComponent(quarter)}/spd-dashboard`, {}, signal),
   verifyLedgerInvoice: (quarter: string, body: { invoiceNo?: string; invoiceDate?: string; amount?: string }, signal?: AbortSignal) => request<LedgerVerificationResult>(`/api/quarter/${encodeURIComponent(quarter)}/ledger/verify`, { method: "POST", body: JSON.stringify(body) }, signal),
+  resolveLedgerInvoices: (quarter: string, invoiceNumbers: string[], signal?: AbortSignal) => request<{ results: LedgerInvoiceResolution[] }>(`/api/quarter/${encodeURIComponent(quarter)}/ledger/resolve`, { method: "POST", body: JSON.stringify({ invoiceNumbers }) }, signal),
   importQuarterLedger: (quarter: string, body: { sourceFiles: LedgerSourceFileInput[] }) => request<QuarterLedgerImportResult>(`/api/quarter/${encodeURIComponent(quarter)}/ledger/import`, { method: "POST", body: JSON.stringify(body) }),
   upsertMaterialStatus: (quarter: string, body: Omit<MaterialStatus, "id">, id?: string) => request(id ? `${base(quarter, id)}/material-status` : `/api/quarter/${encodeURIComponent(quarter)}/material-status`, { method: id ? "POST" : "PUT", body: JSON.stringify(body) }),
   updateMaterialStatus: (quarter: string, materialId: string, body: Partial<MaterialStatus>, id?: string) => request(id ? `${base(quarter, id)}/material-status/${encodeURIComponent(materialId)}` : `/api/quarter/${encodeURIComponent(quarter)}/material-status/${encodeURIComponent(materialId)}`, { method: "PATCH", body: JSON.stringify(body) }),
