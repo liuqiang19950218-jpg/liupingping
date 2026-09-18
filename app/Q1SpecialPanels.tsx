@@ -335,15 +335,15 @@ function VerticalScrollList({ children, label }: { children: ReactNode; label: s
   return <div className="special-scroll-shell">
     <div className="special-scroll-list" ref={listRef}>{children}</div>
     <div className="special-scroll-actions" aria-label={`${label}\u4e0a\u4e0b\u6eda\u52a8`}>
-      <button type="button" onClick={() => scroll(-180)} aria-label="\u5411\u4e0a\u6eda\u52a8">⌃</button>
-      <button type="button" onClick={() => scroll(180)} aria-label="\u5411\u4e0b\u6eda\u52a8">⌄</button>
+      <button type="button" onClick={() => scroll(-180)} aria-label="向上滚动">⌃</button>
+      <button type="button" onClick={() => scroll(180)} aria-label="向下滚动">⌄</button>
     </div>
   </div>;
 }
 
 function CollectionOverviewCard({ rows, onDrilldown }: { rows: CollectionRow[]; onDrilldown: (material: MaterialDefinition) => void }) {
   return <article className="collection-card overview-card">
-    <header className="collection-card-head"><h3>{S.overview} <InfoTip text="\u5c55\u793a\u5404\u7c7b\u8d44\u6599\u7684\u6536\u96c6\u5b8c\u6210\u60c5\u51b5\u53ca\u9700\u91cd\u70b9\u8ddf\u8fdb\u533a\u57df\u3002" /></h3></header>
+    <header className="collection-card-head"><h3>{S.overview} <InfoTip text="展示各类资料的收集完成情况及需重点跟进区域。" /></h3></header>
     <div className="collection-table-wrap"><table className="collection-overview-table"><thead><tr><th>{S.materialType}</th><th>{S.collected}</th><th>{S.rate}</th><th>{S.followRegions}</th></tr></thead>
       <tbody>{rows.length ? rows.map((item) => <tr key={item.name} className="collection-drill-row" tabIndex={0} onClick={() => onDrilldown(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onDrilldown(item); } }}>
         <td><div className="collection-material-name"><MaterialIcon kind={item.kind} /><span>{item.name}</span></div></td>
@@ -357,7 +357,7 @@ function CollectionOverviewCard({ rows, onDrilldown }: { rows: CollectionRow[]; 
 
 function ReplyRateCard({ rows, onDrilldown }: { rows: ReplyRateRow[]; onDrilldown: (region: string) => void }) {
   return <article className="collection-card reply-card">
-    <header className="collection-card-head"><h3>{S.effectiveReply} <InfoTip text="\u6709\u6548\u56de\u51fd\u7387 = \u5df2\u6709\u6548\u56de\u51fd\u5ba2\u6237\u6570 \u00f7 \u5df2\u5bf9\u8d26\u5ba2\u6237\u6570\u3002" /></h3></header>
+    <header className="collection-card-head"><h3>{S.effectiveReply} <InfoTip text="有效回函率 = 已有效回函客户数 ÷ 已对账客户数。" /></h3></header>
     <div className="reply-rate-list">{rows.length ? rows.map((item, index) => <button className="reply-rate-row" type="button" key={item.name} title={`${item.name}${formatPercent(item.rate)}`} onClick={() => onDrilldown(item.name)}>
       <ReplyLevelDot rank={index + 1} rate={item.rate} /><strong>{item.name}</strong><span className="reply-count">{item.replied} / {item.total}</span><b>{formatPercent(item.rate)}</b>
     </button>) : <p className="collection-empty">{S.noData}</p>}</div>
