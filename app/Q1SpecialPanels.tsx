@@ -21,6 +21,7 @@ type CollectionDrillRow = {
   region: string;
   customer: string;
   materialStatus: string;
+  displayMaterialStatus: string;
   reconciliationStatus: string;
   companyReceivable: string;
   customerBookAmount: string;
@@ -32,6 +33,8 @@ type CollectionDrilldown = {
   rows: CollectionDrillRow[];
   positiveStatus: string;
   negativeStatus: string;
+  isSpd: boolean;
+  statusColumnLabel: string;
 };
 type CollectionDrillSelection =
   | { type: "material"; material: MaterialDefinition }
@@ -248,6 +251,7 @@ function toCollectionDrillRow(
     region: displayValue(cell(row, headers, "\u533a\u57df")),
     customer: displayValue(cell(row, headers, "\u5ba2\u6237\u540d\u79f0")),
     materialStatus,
+    displayMaterialStatus: materialStatus,
     reconciliationStatus: displayValue(reconciliationStatus(row, headers)),
     companyReceivable: displayValue(cell(row, headers, "\u516c\u53f8\u5e94\u6536")),
     customerBookAmount: displayValue(cell(row, headers, "\u5ba2\u6237\u8d26\u9762\u91d1\u989d")),
@@ -279,6 +283,8 @@ function buildCollectionDrilldown(
       rows,
       positiveStatus: "\u6709\u6548\u56de\u51fd",
       negativeStatus: "\u672a\u6709\u6548\u56de\u51fd",
+      isSpd: false,
+      statusColumnLabel: "\u8d44\u6599\u72b6\u6001",
     };
   }
 
@@ -294,15 +300,17 @@ function buildCollectionDrilldown(
       );
   const aliases = fromSpd ? spdFieldAliases(material) : material.aliases;
   const rows = population.map((row, index) => {
+    const sourceStatus = materialCell(row, headers, aliases);
     const collected = fromSpd
-      ? isSpdCollected(materialCell(row, headers, aliases))
-      : isCollected(material.name, materialCell(row, headers, aliases));
-    return toCollectionDrillRow(
+      ? isSpdCollected(sourceStatus)
+      : isCollected(material.name, sourceStatus);
+    const drillRow = toCollectionDrillRow(
       row,
       headers,
       collected ? "\u5df2\u6536\u96c6" : "\u672a\u6536\u96c6",
       index,
     );
+    return fromSpd ? { ...drillRow, displayMaterialStatus: displayValue(sourceStatus) } : drillRow;
   });
   return {
     title: `${material.name}\u6536\u96c6\u660e\u7ec6`,
@@ -312,6 +320,8 @@ function buildCollectionDrilldown(
     rows,
     positiveStatus: "\u5df2\u6536\u96c6",
     negativeStatus: "\u672a\u6536\u96c6",
+    isSpd: fromSpd,
+    statusColumnLabel: material.kind === "spd" ? "SPD\u786e\u8ba4\u72b6\u6001" : material.kind === "stock" ? "SPD\u5e93\u5b58\u786e\u8ba4\u72b6\u6001" : "\u8d44\u6599\u72b6\u6001",
   };
 }
 
@@ -387,11 +397,15 @@ function CollectionDrilldownDialog({ data, onClose }: { data: CollectionDrilldow
       </div>
       <div className="collection-drill-summary">当前分类共 <b>{rows.length}</b> 家客户，明细范围与来源看板保持一致。</div>
       <div className="collection-drill-table local-table">
-        <table><thead><tr><th>序号</th><th>账套</th><th>区域</th><th>客户名称</th><th>资料状态</th><th>对账状态</th><th>公司应收</th><th>客户账面金额</th><th>对账差额</th></tr></thead>
+        {data.isSpd ? <table className="spd-drilldown-table"><thead><tr><th>序号</th><th>账套</th><th>区域</th><th>客户名称</th><th>{data.statusColumnLabel}</th></tr></thead>
+          <tbody>{rows.length ? rows.map((row, index) => <tr key={row.id}>
+            <td>{index + 1}</td><td>{row.accountSet}</td><td>{row.region}</td><td className="collection-drill-customer">{row.customer}</td><td><span className={`collection-drill-status ${row.materialStatus.includes("\u672a") ? "pending" : "done"}`}>{row.displayMaterialStatus}</span></td>
+          </tr>) : <tr><td colSpan={5} className="table-empty">当前条件下暂无明细数据</td></tr>}</tbody>
+        </table> : <table><thead><tr><th>序号</th><th>账套</th><th>区域</th><th>客户名称</th><th>资料状态</th><th>对账状态</th><th>公司应收</th><th>客户账面金额</th><th>对账差额</th></tr></thead>
           <tbody>{rows.length ? rows.map((row, index) => <tr key={row.id} className={Math.abs(numberOf(row.differenceAmount)) > 0.000001 ? "has-difference" : ""}>
             <td>{index + 1}</td><td>{row.accountSet}</td><td>{row.region}</td><td className="collection-drill-customer">{row.customer}</td><td><span className={`collection-drill-status ${row.materialStatus.includes("\u672a") ? "pending" : "done"}`}>{row.materialStatus}</span></td><td>{row.reconciliationStatus}</td><td className="money-cell">{row.companyReceivable}</td><td className="money-cell">{row.customerBookAmount}</td><td className="money-cell difference-cell">{row.differenceAmount}</td>
           </tr>) : <tr><td colSpan={9} className="table-empty">当前条件下暂无明细数据</td></tr>}</tbody>
-        </table>
+        </table>}
       </div>
     </section>
   </div>;

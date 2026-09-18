@@ -33,3 +33,16 @@ test("material collection keeps independent SPD data separate and enables its ex
   assert.match(panel, /const aliases = fromSpd \? spdFieldAliases\(material\) : material\.aliases/);
   assert.match(panel, /isSpdCollected\(materialCell\(row, headers, aliases\)\)/);
 });
+
+test("SPD drilldowns use only independent SPD columns while ordinary material drilldowns retain reconciliation columns", () => {
+  const panel = readFileSync("app/Q1SpecialPanels.tsx", "utf8");
+  const dialog = panel.slice(panel.indexOf("function CollectionDrilldownDialog"), panel.indexOf("export function Q1SpecialPanels"));
+  const spdTable = dialog.match(/\{data\.isSpd \? <table className="spd-drilldown-table">[\s\S]*?<\/table> : <table>/)?.[0] ?? "";
+
+  assert.match(panel, /statusColumnLabel: material\.kind === "spd" \? "SPD\\u786e\\u8ba4\\u72b6\\u6001" : material\.kind === "stock" \? "SPD\\u5e93\\u5b58\\u786e\\u8ba4\\u72b6\\u6001"/);
+  assert.match(panel, /displayMaterialStatus: displayValue\(sourceStatus\)/);
+  assert.match(spdTable, /<th>序号<\/th><th>账套<\/th><th>区域<\/th><th>客户名称<\/th><th>\{data\.statusColumnLabel\}<\/th>/);
+  assert.match(spdTable, /displayMaterialStatus/);
+  assert.doesNotMatch(spdTable, /reconciliationStatus|companyReceivable|customerBookAmount|differenceAmount/);
+  assert.match(dialog, /: <table><thead><tr><th>序号<\/th><th>账套<\/th><th>区域<\/th><th>客户名称<\/th><th>资料状态<\/th><th>对账状态<\/th><th>公司应收<\/th><th>客户账面金额<\/th><th>对账差额<\/th>/);
+});
