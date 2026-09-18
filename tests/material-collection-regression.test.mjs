@@ -19,12 +19,17 @@ test("material and effective-reply drilldowns render Chinese static UI text inst
   assert.match(source, /negativeStatus: "\\u672a\\u6709\\u6548\\u56de\\u51fd"/);
 });
 
-test("material collection remains quarter-scoped and keeps independent SPD data separate", () => {
+test("material collection keeps independent SPD data separate and enables its existing SPD drilldown branch", () => {
   const provider = readFileSync("app/dashboard-postgres-data.tsx", "utf8");
   const panel = readFileSync("app/Q1SpecialPanels.tsx", "utf8");
+  const render = panel.slice(panel.indexOf("return <section className=\"q1-special\""));
 
   assert.match(provider, /getMaterialStatus\(quarterCode/);
   assert.match(provider, /getSpdDashboard\(quarterCode/);
   assert.match(panel, /const \{ quarter: selected, rows, materialStatus, spdDashboard/);
-  assert.match(panel, /if \(material\.kind !== "spd" && material\.kind !== "stock"\)/);
+  assert.match(render, /onDrilldown=\{\(material\) => setDrillSelection\(\{ type: "material", material \}\)\}/);
+  assert.doesNotMatch(render, /if \(material\.kind !== "spd" && material\.kind !== "stock"\)/);
+  assert.match(panel, /const sourceSheet = fromSpd \? spdSheet : sheet/);
+  assert.match(panel, /const aliases = fromSpd \? spdFieldAliases\(material\) : material\.aliases/);
+  assert.match(panel, /isSpdCollected\(materialCell\(row, headers, aliases\)\)/);
 });
