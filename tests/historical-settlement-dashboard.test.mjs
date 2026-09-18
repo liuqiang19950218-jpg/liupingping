@@ -6,6 +6,7 @@ import {
   historicalTrend,
   latestHistoricalPeriod,
   normalizeHistoricalSettlementPeriods,
+  sortHistoricalRegionsBySettlementRate,
 } from "../lib/historical-settlement-dashboard.mjs";
 
 const totals = [
@@ -65,6 +66,19 @@ test("historical total is never recomputed from regions and NULL unsettled displ
   assert.equal(q4.total.unclassifiedCount, 1);
 });
 
+test("regional history presentation sorts rate ascending, then unresolved descending, then region name", () => {
+  const source = [
+    { region: "无锡", settlementRate: 1, unsettledCount: 0 },
+    { region: "扬州", settlementRate: 0.5, unsettledCount: 3 },
+    { region: "南京", settlementRate: 0.5, unsettledCount: 10 },
+    { region: "常州", settlementRate: 0.5, unsettledCount: 10 },
+    { region: "苏州", settlementRate: 0.3, unsettledCount: 1 },
+  ];
+  const sorted = sortHistoricalRegionsBySettlementRate(source);
+  assert.deepEqual(sorted.map((item) => item.region), ["苏州", "常州", "南京", "扬州", "无锡"]);
+  assert.deepEqual(source.map((item) => item.region), ["无锡", "扬州", "南京", "常州", "苏州"], "source snapshot rows remain unchanged");
+});
+
 test("API route is a single read-only sealed snapshot query", () => {
   const route = readFileSync("app/api/historical-settlement-snapshots/route.ts", "utf8");
   const query = readFileSync("lib/server/recon/historical-settlement-snapshots.ts", "utf8");
@@ -84,4 +98,7 @@ test("API route is a single read-only sealed snapshot query", () => {
   assert.match(component, /unsettledCustomers/);
   assert.doesNotMatch(component, /unreconciledCustomers/);
   assert.match(component, /formatter: formatHistoricalTrendTooltip/);
+  assert.match(component, /sortHistoricalRegionsBySettlementRate\(activePeriod\.regions\)/);
+  assert.match(component, /ref=\{regionTableRef\}/);
+  assert.match(component, /scrollTo\(\{ top: 0 \}\)/);
 });

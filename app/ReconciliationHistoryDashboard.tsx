@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as echarts from "echarts";
-import { formatHistoricalTrendTooltip, historicalTrend, latestHistoricalPeriod, normalizeHistoricalSettlementPeriods } from "../lib/historical-settlement-dashboard.mjs";
+import { formatHistoricalTrendTooltip, historicalTrend, latestHistoricalPeriod, normalizeHistoricalSettlementPeriods, sortHistoricalRegionsBySettlementRate } from "../lib/historical-settlement-dashboard.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import { isSettled, isUnsettled, settlementRate } from "../lib/reconciliation-settlement-status.mjs";
 import "./history-dashboard.css";
@@ -54,6 +54,7 @@ export function ReconciliationHistoryDashboard() {
   const [activeLabel, setActiveLabel] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const regionTableRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
@@ -97,6 +98,11 @@ export function ReconciliationHistoryDashboard() {
     return isLaterThanSnapshot ? [...historical, realtimeTrend.trend] : historical;
   }, [historicalLatest, periods, realtimeTrend]);
   const activePeriod = periods.find((period) => period.label === activeLabel) ?? latestHistoricalPeriod(periods);
+  const sortedRegions = useMemo(
+    () => activePeriod ? sortHistoricalRegionsBySettlementRate(activePeriod.regions) : [],
+    [activePeriod],
+  );
+  useEffect(() => { regionTableRef.current?.scrollTo({ top: 0 }); }, [activePeriod?.label]);
   const latest = latestHistoricalPeriod(periods);
   const previous = periods.length > 1 ? periods.at(-2) : null;
   const unsettledDelta = latest && previous ? (latest.total.unsettledCount ?? 0) - (previous.total.unsettledCount ?? 0) : 0;
@@ -107,6 +113,6 @@ export function ReconciliationHistoryDashboard() {
   if (!periods.length || !activePeriod) return <section className="history-dashboard"><p className="history-empty">暂无已封存的历史季度快照</p></section>;
   return <section className="history-dashboard" aria-label="历史对账情况">
     <article className="history-card history-trend-card"><header className="history-card-header"><div className="history-title"><span className="history-icon">⌁</span><h2>历史季度对清趋势</h2></div><div className="history-tags"><span className={unsettledDelta > 0 ? "up" : "down"}>{unsettledDelta > 0 ? "↑" : "↓"} 较上季度{unsettledDelta > 0 ? "增加" : "减少"}{Math.abs(unsettledDelta)}户</span><span className={rateDelta >= 0 ? "stable" : "down"}>✓ 较上季度 {rateDelta >= 0 ? "+" : ""}{rateDelta.toFixed(2)}个百分点</span></div></header><UnreconciledRiskChart data={trend} currentQuarter={realtimeTrend?.trend.quarter ?? latest?.label ?? ""} /></article>
-    <article className="history-card history-region-card"><header className="history-card-header"><div className="history-title"><span className="history-icon">▦</span><h2>历史各区域对清情况</h2></div><label className="history-quarter-select">季度<select value={activePeriod.label} onChange={(event) => setActiveLabel(event.target.value)} aria-label="选择历史区域对清季度">{periods.map((period) => <option value={period.label} key={period.label}>{period.label}</option>)}</select></label></header><p className="history-summary">{activePeriod.label}：对账客户 <b>{activePeriod.total.customerTotal}</b> 户，已对清 <b>{activePeriod.total.settledCount}</b> 户，未对清 <b>{activePeriod.total.unsettledCount ?? 0}</b> 户，对清率 <strong>{(activePeriod.total.settlementRate * 100).toFixed(1)}%</strong></p><div className="history-table"><table><thead><tr><th scope="col">区域</th><th scope="col">对账客户</th><th scope="col">已对清</th><th scope="col">未对清</th><th scope="col">对清率</th></tr></thead><tbody>{activePeriod.regions.map((item) => <tr key={`${activePeriod.label}-${item.sourceRow}`}><td>{item.region}</td><td>{item.customerTotal}</td><td>{item.settledCount}</td><td className={item.unsettledCount ? "warn" : ""}>{item.unsettledCount}</td><td className="rate">{(item.settlementRate * 100).toFixed(1)}%</td></tr>)}</tbody></table></div></article>
+    <article className="history-card history-region-card"><header className="history-card-header"><div className="history-title"><span className="history-icon">▦</span><h2>历史各区域对清情况</h2></div><label className="history-quarter-select">季度<select value={activePeriod.label} onChange={(event) => setActiveLabel(event.target.value)} aria-label="选择历史区域对清季度">{periods.map((period) => <option value={period.label} key={period.label}>{period.label}</option>)}</select></label></header><p className="history-summary">{activePeriod.label}：对账客户 <b>{activePeriod.total.customerTotal}</b> 户，已对清 <b>{activePeriod.total.settledCount}</b> 户，未对清 <b>{activePeriod.total.unsettledCount ?? 0}</b> 户，对清率 <strong>{(activePeriod.total.settlementRate * 100).toFixed(1)}%</strong></p><div className="history-table" ref={regionTableRef}><table><thead><tr><th scope="col">区域</th><th scope="col">对账客户</th><th scope="col">已对清</th><th scope="col">未对清</th><th scope="col">对清率</th></tr></thead><tbody>{sortedRegions.map((item) => <tr key={`${activePeriod.label}-${item.sourceRow}`}><td>{item.region}</td><td>{item.customerTotal}</td><td>{item.settledCount}</td><td className={item.unsettledCount ? "warn" : ""}>{item.unsettledCount}</td><td className="rate">{(item.settlementRate * 100).toFixed(1)}%</td></tr>)}</tbody></table></div></article>
   </section>;
 }
