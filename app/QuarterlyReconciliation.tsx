@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { updateDashboardSnapshot } from "./cockpit-data";
 import {
   ensureArchiveFromActive,
@@ -78,6 +79,21 @@ type DifferenceType =
   | "instrument"
   | "otherInvoice"
   | "other";
+
+function GlobalSaveErrorNotification({ message, onClose }: { message: string; onClose: () => void }) {
+  if (!message || typeof document === "undefined") return null;
+  return createPortal(
+    <section className="global-save-error-notification" role="alert" aria-live="assertive">
+      <span className="global-save-error-icon" aria-hidden="true">!</span>
+      <div className="global-save-error-content">
+        <strong>保存失败</strong>
+        <p>{message.replace(/^保存失败[：:；;]?\s*/, "")}</p>
+      </div>
+      <button type="button" className="global-save-error-close" aria-label="关闭保存失败提示" onClick={onClose}>×</button>
+    </section>,
+    document.body,
+  );
+}
 type DetailForm = {
   companyAmount: string;
   customerAmount: string;
@@ -646,6 +662,7 @@ export function QuarterlyReconciliation({
   const [sheet, setSheet] = useState<LocalSheet | null>(null);
   const [region, setRegion] = useState(T.all);
   const [message, setMessage] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [active, setActive] = useState<number | null>(null);
   const [form, setForm] = useState<DetailForm>(empty());
   const [activeDifferenceType, setActiveDifferenceType] =
@@ -1723,11 +1740,12 @@ export function QuarterlyReconciliation({
           setApiIds(reconciliations.map((item) => item.id));
           setApiDifferenceItems((currentItems) => ({ ...currentItems, [reconciliationId]: items }));
           setMessage("已保存到 PostgreSQL。显示内容已按服务端确认结果刷新。");
+          setSaveError("");
           stopSolutionRecording();
           setActive(null);
         }
       } catch (error) {
-        if (mutationSequence.current.get(mutationKey) === sequence) setMessage(error instanceof Error ? `保存失败：${error.message}。未使用本地数据回退。` : "保存失败；未使用本地数据回退。");
+        if (mutationSequence.current.get(mutationKey) === sequence) setSaveError(error instanceof Error ? `保存失败：${error.message}。未使用本地数据回退。` : "保存失败；未使用本地数据回退。");
       } finally {
         if (mutationSequence.current.get(mutationKey) === sequence) setSaving(false);
       }
@@ -1823,6 +1841,7 @@ export function QuarterlyReconciliation({
 
   return (
     <>
+      <GlobalSaveErrorNotification message={saveError} onClose={() => setSaveError("")} />
       <section
         className={`local-tool ${mode === "import" ? "data-import-tool" : "detail-table-tool"}`}
       >
