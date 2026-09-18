@@ -377,20 +377,20 @@ function CollectionDrilldownDialog({ data, onClose }: { data: CollectionDrilldow
   return <div className="collection-drill-mask" role="presentation" onMouseDown={onClose}>
     <section className="collection-drill-dialog detail-table-tool" role="dialog" aria-modal="true" aria-label={data.title} onMouseDown={(event) => event.stopPropagation()}>
       <header className="collection-drill-head">
-        <div><p>\u8d44\u6599\u6536\u96c6\u4e0e\u672a\u5bf9\u8d26\u5ba2\u6237</p><h2>{data.title}</h2><span>{data.description}</span></div>
-        <button type="button" aria-label="\u5173\u95ed\u660e\u7ec6" onClick={onClose}>×</button>
+        <div><p>资料收集与未对账客户</p><h2>{data.title}</h2><span>{data.description}</span></div>
+        <button type="button" aria-label="关闭明细" onClick={onClose}>×</button>
       </header>
-      <div className="collection-drill-tabs" role="tablist" aria-label="\u660e\u7ec6\u5206\u7c7b">
-        <button type="button" role="tab" aria-selected={category === "all"} className={category === "all" ? "active" : ""} onClick={() => setCategory("all")}>\u5168\u90e8 <b>{data.rows.length}</b></button>
+      <div className="collection-drill-tabs" role="tablist" aria-label="明细分类">
+        <button type="button" role="tab" aria-selected={category === "all"} className={category === "all" ? "active" : ""} onClick={() => setCategory("all")}>全部 <b>{data.rows.length}</b></button>
         <button type="button" role="tab" aria-selected={category === "positive"} className={category === "positive" ? "active" : ""} onClick={() => setCategory("positive")}>{data.positiveStatus} <b>{categoryCount(data.positiveStatus)}</b></button>
         <button type="button" role="tab" aria-selected={category === "negative"} className={category === "negative" ? "active" : ""} onClick={() => setCategory("negative")}>{data.negativeStatus} <b>{categoryCount(data.negativeStatus)}</b></button>
       </div>
-      <div className="collection-drill-summary">\u5f53\u524d\u5206\u7c7b\u5171 <b>{rows.length}</b> \u5bb6\u5ba2\u6237\uff0c\u660e\u7ec6\u8303\u56f4\u4e0e\u6765\u6e90\u770b\u677f\u4fdd\u6301\u4e00\u81f4\u3002</div>
+      <div className="collection-drill-summary">当前分类共 <b>{rows.length}</b> 家客户，明细范围与来源看板保持一致。</div>
       <div className="collection-drill-table local-table">
-        <table><thead><tr><th>\u5e8f\u53f7</th><th>\u8d26\u5957</th><th>\u533a\u57df</th><th>\u5ba2\u6237\u540d\u79f0</th><th>\u8d44\u6599\u72b6\u6001</th><th>\u5bf9\u8d26\u72b6\u6001</th><th>\u516c\u53f8\u5e94\u6536</th><th>\u5ba2\u6237\u8d26\u9762\u91d1\u989d</th><th>\u5bf9\u8d26\u5dee\u989d</th></tr></thead>
+        <table><thead><tr><th>序号</th><th>账套</th><th>区域</th><th>客户名称</th><th>资料状态</th><th>对账状态</th><th>公司应收</th><th>客户账面金额</th><th>对账差额</th></tr></thead>
           <tbody>{rows.length ? rows.map((row, index) => <tr key={row.id} className={Math.abs(numberOf(row.differenceAmount)) > 0.000001 ? "has-difference" : ""}>
             <td>{index + 1}</td><td>{row.accountSet}</td><td>{row.region}</td><td className="collection-drill-customer">{row.customer}</td><td><span className={`collection-drill-status ${row.materialStatus.includes("\u672a") ? "pending" : "done"}`}>{row.materialStatus}</span></td><td>{row.reconciliationStatus}</td><td className="money-cell">{row.companyReceivable}</td><td className="money-cell">{row.customerBookAmount}</td><td className="money-cell difference-cell">{row.differenceAmount}</td>
-          </tr>) : <tr><td colSpan={9} className="table-empty">\u5f53\u524d\u6761\u4ef6\u4e0b\u6682\u65e0\u660e\u7ec6\u6570\u636e</td></tr>}</tbody>
+          </tr>) : <tr><td colSpan={9} className="table-empty">当前条件下暂无明细数据</td></tr>}</tbody>
         </table>
       </div>
     </section>
