@@ -48,7 +48,7 @@ const TABLE_FILTER_COLUMNS = [
   { key: "stage", label: "问题处理阶段" },
 ] as const;
 type TableFilterKey = (typeof TABLE_FILTER_COLUMNS)[number]["key"];
-type Item = {
+export type FollowupTrackerItem = {
   id: string;
   reconciliationId: string;
   followupId?: string;
@@ -66,6 +66,7 @@ type Item = {
   financeAttention: Finance;
   processStage: Exclude<ProcessStage, "已关闭"> | null;
 };
+type Item = FollowupTrackerItem;
 
 type DashboardMetricFilter =
   | ""
@@ -95,11 +96,14 @@ const money = (value: number) =>
   value === 0
     ? "0"
     : value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
-const latest = (item: Item) =>
+export const latestFollowupAt = (item: Item) =>
   normalizeDateOnly([...item.followUps]
     .reverse()
     .find((entry) => entry.time.trim())
     ?.time.trim() || item.firstTime);
+const latest = latestFollowupAt;
+export const latestFollowupContent = (item: Item) =>
+  [...item.followUps].reverse().find((entry) => entry.solution.trim())?.solution.trim() || item.firstSolution;
 const dayDistance = (value: string) => businessDayDistance(value);
 const text = (item: Item) =>
   [item.firstSolution, ...item.followUps.map((entry) => entry.solution)].join(
@@ -107,7 +111,7 @@ const text = (item: Item) =>
   );
 const financeOf = (item: Item): Finance => item.financeAttention;
 const financeLabel = (value: Finance) => value === "none" ? "未设置" : value;
-const stageOf = (item: Item): ProcessStage => {
+export const followupStage = (item: Item): ProcessStage => {
   if (item.resolved) return "已关闭";
   if (item.processStage) return item.processStage;
   const content = `${item.firstSolution} ${text(item)}`;
@@ -116,7 +120,8 @@ const stageOf = (item: Item): ProcessStage => {
   if (content.includes("申请")) return "待销售走申请";
   return "待核查";
 };
-const matchesDashboardMetric = (item: Item, filter: DashboardMetricFilter) => {
+const stageOf = followupStage;
+export const matchesFollowupDashboardMetric = (item: Item, filter: DashboardMetricFilter) => {
   const daysSinceFollowUp = dayDistance(latest(item)) ?? 0;
   switch (filter) {
     case "overdue":
@@ -199,6 +204,54 @@ export function toItems(quarter: string, rows: Map<string, Reconciliation>, foll
       resolved: legacyTrackerTab(row.manualResolutionStatus) === "resolved",
     }];
   }).filter((item) => item.customer);
+}
+
+/**
+ * The canonical read-only mapping for filters sent by ProblemDashboard.
+ * Both the secondary drawer and the formal tracker use this same function so
+ * a drill-down cannot silently grow or shrink its customer set.
+ */
+export function filterFollowupTrackerItems(items: Item[], filters: Record<string, string> = {}) {
+  const filter = (filters.filter ?? "") as DashboardMetricFilter;
+  const stage = filters.stage ?? "";
+  const query = (filters.owner || filters.customer || "").trim().toLocaleLowerCase();
+  return filterFollowupTrackerItemsByState(items, {
+    tab: stage === "已关闭" ? "resolved" : "pending",
+    region: filters.region ?? ALL,
+    search: query,
+    risk: "全部",
+    finance: "全部",
+    processStage: stage || "全部",
+    dashboardMetricFilter: filter,
+    tableFilters: {},
+  });
+}
+
+export type FollowupTrackerFilterState = {
+  tab: "pending" | "resolved";
+  region: string;
+  search: string;
+  risk: string;
+  finance: string;
+  processStage: string;
+  dashboardMetricFilter: DashboardMetricFilter;
+  tableFilters: Partial<Record<string, string>>;
+};
+
+/** The single predicate used by the formal tracker and dashboard drawer. */
+export function filterFollowupTrackerItemsByState(items: Item[], state: FollowupTrackerFilterState) {
+  return items.filter((item) =>
+    (state.tab === "resolved" ? item.resolved : !item.resolved) &&
+    (state.region === ALL || item.region === state.region) &&
+    (!state.search || [item.customer, item.owner, item.region, item.accountSet].join(" ").toLocaleLowerCase().includes(state.search)) &&
+    (state.risk === "全部" || riskOf(item) === state.risk) &&
+    (state.finance === "全部" || financeOf(item) === state.finance) &&
+    (state.processStage === "全部" || state.processStage === "已关闭" || followupStage(item) === state.processStage) &&
+    matchesFollowupDashboardMetric(item, state.dashboardMetricFilter) &&
+    Object.entries(state.tableFilters).every(([key, value]) =>
+      !value || tableFilterValue(item, key as TableFilterKey).toLocaleLowerCase().includes(value.trim().toLocaleLowerCase()),
+    ),
+  );
 }
 
 function Badge({
@@ -295,29 +348,9 @@ export function UnresolvedFollowupDashboard() {
     () => items.filter((item) => item.resolved),
     [items],
   );
-  const base = tab === "pending" ? pending : resolved;
   const visible = useMemo(
-    () =>
-      base.filter(
-        (item) =>
-          (region === ALL || item.region === region) &&
-          (!search ||
-            [item.customer, item.owner, item.region, item.accountSet]
-              .join(" ")
-              .toLocaleLowerCase()
-              .includes(search)) &&
-          (risk === "全部" || riskOf(item) === risk) &&
-          (finance === "全部" || financeOf(item) === finance) &&
-          (processStage === "全部" || stageOf(item) === processStage) &&
-          matchesDashboardMetric(item, dashboardMetricFilter) &&
-          Object.entries(tableFilters).every(([key, filter]) =>
-            !filter ||
-            tableFilterValue(item, key as TableFilterKey)
-              .toLocaleLowerCase()
-              .includes(filter.trim().toLocaleLowerCase()),
-          ),
-      ),
-    [base, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters],
+    () => filterFollowupTrackerItemsByState(items, { tab, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters }),
+    [items, tab, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters],
   );
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const rows = visible.slice((page - 1) * pageSize, page * pageSize);
