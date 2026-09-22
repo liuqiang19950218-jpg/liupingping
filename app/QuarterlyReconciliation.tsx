@@ -40,6 +40,7 @@ import {
   toApiDifferenceCategory,
   toFormDifferenceCategory,
 } from "../lib/difference-category-adapter.mjs";
+import { MAX_IMAGE_BYTES as MAX_ATTACHMENT_IMAGE_BYTES, prepareAttachmentImage } from "../lib/attachment-image-optimization.mjs";
 import "./reconciliation.css";
 import "./reconciliation-writeoff-section.css";
 
@@ -2985,13 +2986,16 @@ function DifferenceDetailDrawer({
       setOcrRecognizing(false);
     }
   };
-  const addImage = (index: number, file?: File) => {
+  const addImage = async (index: number, file?: File) => {
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { window.alert('仅支持 JPG、PNG、WEBP 图片。'); return; }
     if (!file.size) { window.alert('图片文件不能为空。'); return; }
-    if (file.size > 10 * 1024 * 1024) { window.alert('图片大小不能超过 10MB。'); return; }
-    const previewUrl = URL.createObjectURL(file);
-    setEntries(entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, pendingImage: file, previewUrl, removeImage: false } : entry) as OtherEntry[]);
+    if (file.size > MAX_ATTACHMENT_IMAGE_BYTES) { window.alert('图片文件过大，请选择20MB以内的图片。'); return; }
+    try {
+      const prepared = await prepareAttachmentImage(file);
+      const previewUrl = URL.createObjectURL(prepared.file);
+      setEntries(entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, pendingImage: prepared.file, previewUrl, removeImage: false } : entry) as OtherEntry[]);
+    } catch (error) { window.alert(error instanceof Error ? error.message : '图片优化失败，请重新选择图片。'); }
   };
   useEffect(() => {
     const candidates = entries.map((entry, index) => ({ entry: entry as InvoiceEntry, index })).filter(({ entry }) => meta.invoice && hasInvoiceNumber(entry) && entry.invoice && entry.date && entry.amount !== "");
@@ -3443,7 +3447,7 @@ function OtherGroup({
         ? [blankOther()]
         : entries.filter((_, i) => i !== index),
     );
-  const addImage = (index: number, file?: File) => {
+  const addImage = async (index: number, file?: File) => {
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       window.alert("仅支持 JPG、PNG、WEBP 图片。");
@@ -3453,12 +3457,15 @@ function OtherGroup({
       window.alert("图片文件不能为空。");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      window.alert("图片大小不能超过 10MB。");
+    if (file.size > MAX_ATTACHMENT_IMAGE_BYTES) {
+      window.alert("图片文件过大，请选择20MB以内的图片。");
       return;
     }
-    const previewUrl = URL.createObjectURL(file);
-    setEntries(entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, pendingImage: file, previewUrl, removeImage: false } : entry));
+    try {
+      const prepared = await prepareAttachmentImage(file);
+      const previewUrl = URL.createObjectURL(prepared.file);
+      setEntries(entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, pendingImage: prepared.file, previewUrl, removeImage: false } : entry));
+    } catch (error) { window.alert(error instanceof Error ? error.message : "图片优化失败，请重新选择图片。"); }
   };
   const [expanded, setExpanded] = useState(true);
   return (

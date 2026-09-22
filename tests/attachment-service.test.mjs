@@ -38,7 +38,11 @@ test("attachment service writes, reads, deletes, and reports health", async (t) 
   const { baseUrl, request } = await fixture(t);
   const health = await fetch(`${baseUrl}/health`);
   assert.equal(health.status, 200);
-  assert.deepEqual(await health.json(), { ok: true, storageWritable: true });
+  const healthBody = await health.json();
+  assert.equal(healthBody.ok, true);
+  assert.equal(healthBody.storageWritable, true);
+  assert.equal(healthBody.attachmentCount, 0);
+  assert.equal(healthBody.storageLevel, "normal");
 
   for (const [bytes, type, extension] of [[jpeg, "image/jpeg", "jpg"], [png, "image/png", "png"], [webp, "image/webp", "webp"]]) {
     const response = await upload(request, bytes, type);
@@ -65,5 +69,24 @@ test("attachment service rejects unauthenticated, unsafe, oversized, and spoofed
   assert.equal((await upload(request, Buffer.alloc(0), "image/jpeg")).status, 400);
   assert.equal((await upload(request, Buffer.from("not a jpeg"), "image/jpeg")).status, 400);
   assert.equal((await upload(request, jpeg, "text/plain")).status, 400);
-  assert.equal((await upload(request, Buffer.concat([jpeg, Buffer.alloc(10 * 1024 * 1024)]), "image/jpeg")).status, 400);
+  assert.equal((await upload(request, Buffer.concat([jpeg, Buffer.alloc(20 * 1024 * 1024)]), "image/jpeg")).status, 400);
+});
+
+test("blocked storage rejects uploads while warning and critical capacity remain writable", async (t) => {
+  const fakeStorage = (storageLevel) => ({
+    health: async () => true,
+    metrics: async () => ({ attachmentCount: 0, attachmentBytes: 0, diskTotalBytes: 100, diskFreeBytes: 10, diskUsedBytes: 90, diskUsedPercent: 90, storageLevel }),
+    capacity: async () => ({ storageLevel }),
+    save: async () => "2026/09/00000000-0000-4000-8000-000000000000.jpg",
+  });
+  for (const [level, expected] of [["warning", 201], ["critical", 201], ["blocked", 400]]) {
+    const server = createAttachmentService({ root: "unused", token, storage: fakeStorage(level) });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    t.after(() => new Promise((resolve) => server.close(resolve)));
+    const { port } = server.address();
+    const body = new FormData();
+    body.append("file", new File([jpeg], "image.jpg", { type: "image/jpeg" }));
+    const response = await fetch(`http://127.0.0.1:${port}/internal/attachments`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body });
+    assert.equal(response.status, expected);
+  }
 });

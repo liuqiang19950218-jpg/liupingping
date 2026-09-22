@@ -1,6 +1,6 @@
 import path from "node:path";
 
-export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 export const KEY_PATTERN = /^\d{4}\/\d{2}\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/;
 
 const signatures = [
@@ -14,7 +14,7 @@ export class AttachmentValidationError extends Error {}
 export function validateImage(contentType, bytes) {
   if (!signatures.some((item) => item.contentType === contentType)) throw new AttachmentValidationError("仅支持 JPG、PNG、WEBP 图片。");
   if (!bytes.length) throw new AttachmentValidationError("图片文件不能为空。");
-  if (bytes.length > MAX_IMAGE_BYTES) throw new AttachmentValidationError("图片大小不能超过 10MB。");
+  if (bytes.length > MAX_IMAGE_BYTES) throw new AttachmentValidationError("图片文件过大，请选择20MB以内的图片。");
   const detected = signatures.find((item) => item.valid(bytes));
   if (!detected || detected.contentType !== contentType) throw new AttachmentValidationError("图片内容校验失败，请选择真实 JPG、PNG 或 WEBP 图片。");
   return detected;

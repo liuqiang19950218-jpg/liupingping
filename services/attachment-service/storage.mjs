@@ -1,12 +1,32 @@
-import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, opendir, readFile, stat, statfs, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { contentTypeForKey, resolveSafeAttachmentPath } from "./validation.mjs";
+import { DEFAULT_STORAGE_THRESHOLDS, storageMetrics } from "./metrics.mjs";
 
 export class AttachmentNotFoundError extends Error {}
 
-export function createAttachmentStorage(root) {
+async function attachmentUsage(directory) {
+  let attachmentCount = 0;
+  let attachmentBytes = 0;
+  const entries = await opendir(directory);
+  for await (const entry of entries) {
+    const target = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      const child = await attachmentUsage(target);
+      attachmentCount += child.attachmentCount;
+      attachmentBytes += child.attachmentBytes;
+    } else if (entry.isFile()) {
+      const file = await stat(target);
+      attachmentCount += 1;
+      attachmentBytes += file.size;
+    }
+  }
+  return { attachmentCount, attachmentBytes };
+}
+
+export function createAttachmentStorage(root, { thresholds = DEFAULT_STORAGE_THRESHOLDS, statfsImpl = statfs } = {}) {
   if (!root) throw new Error("ATTACHMENT_STORAGE_ROOT 未配置。");
   const resolvedRoot = path.resolve(root);
   const pathFor = (key) => resolveSafeAttachmentPath(resolvedRoot, key);
@@ -19,6 +39,16 @@ export function createAttachmentStorage(root) {
       } catch {
         return false;
       }
+    },
+    async capacity() {
+      const info = await statfsImpl(resolvedRoot);
+      const diskTotalBytes = Number(info.blocks) * Number(info.bsize);
+      const diskFreeBytes = Number(info.bavail ?? info.bfree) * Number(info.bsize);
+      return storageMetrics({ attachmentCount: 0, attachmentBytes: 0, diskTotalBytes, diskFreeBytes }, thresholds);
+    },
+    async metrics() {
+      const [capacity, usage] = await Promise.all([this.capacity(), attachmentUsage(resolvedRoot)]);
+      return { ...capacity, ...usage };
     },
     async save(bytes, extension) {
       const now = new Date();

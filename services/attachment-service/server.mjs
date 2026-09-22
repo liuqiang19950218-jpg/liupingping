@@ -2,6 +2,7 @@ import http from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { createAttachmentStorage, AttachmentNotFoundError } from "./storage.mjs";
 import { AttachmentValidationError, MAX_IMAGE_BYTES, validateImage } from "./validation.mjs";
+import { DEFAULT_STORAGE_THRESHOLDS } from "./metrics.mjs";
 
 const MAX_REQUEST_BYTES = MAX_IMAGE_BYTES + 64 * 1024;
 
@@ -24,12 +25,12 @@ function authorized(request, token) {
 
 async function readBody(request) {
   const declared = Number(request.headers["content-length"] ?? 0);
-  if (Number.isFinite(declared) && declared > MAX_REQUEST_BYTES) throw new AttachmentValidationError("图片大小不能超过 10MB。");
+  if (Number.isFinite(declared) && declared > MAX_REQUEST_BYTES) throw new AttachmentValidationError("图片文件过大，请选择20MB以内的图片。");
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > MAX_REQUEST_BYTES) throw new AttachmentValidationError("图片大小不能超过 10MB。");
+    if (size > MAX_REQUEST_BYTES) throw new AttachmentValidationError("图片文件过大，请选择20MB以内的图片。");
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);
@@ -52,13 +53,14 @@ function uploadedFile(request, body) {
   return { contentType: fileContentType, bytes: body.subarray(headersEnd + 4, fileEnd) };
 }
 
-export function createAttachmentService({ root, token }) {
-  const storage = createAttachmentStorage(root);
+export function createAttachmentService({ root, token, thresholds = DEFAULT_STORAGE_THRESHOLDS, storage }) {
+  const attachmentStorage = storage ?? createAttachmentStorage(root, { thresholds });
   return http.createServer(async (request, response) => {
     const requestUrl = new URL(request.url ?? "/", "http://attachment-service.internal");
     if (request.method === "GET" && requestUrl.pathname === "/health") {
-      const storageWritable = await storage.health();
-      return json(response, storageWritable ? 200 : 503, { ok: storageWritable, storageWritable });
+      const storageWritable = await attachmentStorage.health();
+      const metrics = storageWritable ? await attachmentStorage.metrics() : null;
+      return json(response, storageWritable ? 200 : 503, { ok: storageWritable, storageWritable, ...(metrics ?? {}) });
     }
     if (!requestUrl.pathname.startsWith("/internal/attachments")) return json(response, 404, { error: "未找到接口。" });
     if (!authorized(request, token)) return json(response, 401, { error: "内部服务鉴权失败。" });
@@ -67,16 +69,17 @@ export function createAttachmentService({ root, token }) {
       if (request.method === "POST" && requestUrl.pathname === "/internal/attachments") {
         const uploaded = uploadedFile(request, await readBody(request));
         const detected = validateImage(uploaded.contentType, uploaded.bytes);
-        const savedKey = await storage.save(uploaded.bytes, detected.extension);
+        if ((await attachmentStorage.capacity()).storageLevel === "blocked") throw new AttachmentValidationError("服务器附件存储空间不足，请联系管理员处理。");
+        const savedKey = await attachmentStorage.save(uploaded.bytes, detected.extension);
         return json(response, 201, { key: savedKey, contentType: detected.contentType, size: uploaded.bytes.length });
       }
       if (request.method === "GET" && requestUrl.pathname === "/internal/attachments") {
-        const image = await storage.read(key);
+        const image = await attachmentStorage.read(key);
         response.writeHead(200, { "content-type": image.contentType, "content-length": image.bytes.length, "cache-control": "private, max-age=3600", "x-content-type-options": "nosniff" });
         return response.end(image.bytes);
       }
       if (request.method === "DELETE" && requestUrl.pathname === "/internal/attachments") {
-        await storage.remove(key);
+        await attachmentStorage.remove(key);
         response.writeHead(204);
         return response.end();
       }
@@ -93,6 +96,12 @@ export function startAttachmentService(config = {
   token: process.env.ATTACHMENT_SERVICE_TOKEN,
   host: process.env.ATTACHMENT_SERVICE_HOST || "127.0.0.1",
   port: Number(process.env.ATTACHMENT_SERVICE_PORT || "18081"),
+  thresholds: {
+    warningPercent: Number(process.env.ATTACHMENT_WARNING_PERCENT || DEFAULT_STORAGE_THRESHOLDS.warningPercent),
+    criticalPercent: Number(process.env.ATTACHMENT_CRITICAL_PERCENT || DEFAULT_STORAGE_THRESHOLDS.criticalPercent),
+    blockPercent: Number(process.env.ATTACHMENT_BLOCK_PERCENT || DEFAULT_STORAGE_THRESHOLDS.blockPercent),
+    minFreeBytes: Number(process.env.ATTACHMENT_MIN_FREE_BYTES || DEFAULT_STORAGE_THRESHOLDS.minFreeBytes),
+  },
 }) {
   if (!config.root) throw new Error("ATTACHMENT_STORAGE_ROOT 未配置。");
   if (!config.token) throw new Error("ATTACHMENT_SERVICE_TOKEN 未配置。");

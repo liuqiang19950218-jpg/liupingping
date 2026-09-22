@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const KEY_PATTERN = /^\d{4}\/\d{2}\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/;
 const signatures = [
   { contentType: "image/jpeg", extension: "jpg", valid: (b: Uint8Array) => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     if (!(file instanceof File)) return Response.json({ error: "请选择图片文件。" }, { status: 400 });
     if (!signatures.some((item) => item.contentType === file.type)) return Response.json({ error: "仅支持 JPG、PNG、WEBP 图片。" }, { status: 415 });
     if (!file.size) return Response.json({ error: "图片文件不能为空。" }, { status: 400 });
-    if (file.size > MAX_IMAGE_BYTES) return Response.json({ error: "图片大小不能超过 10MB。" }, { status: 413 });
+    if (file.size > MAX_IMAGE_BYTES) return Response.json({ error: "图片文件过大，请选择20MB以内的图片。" }, { status: 413 });
     const bytes = new Uint8Array(await file.arrayBuffer());
     const detected = signatures.find((item) => item.valid(bytes));
     if (!detected || detected.contentType !== file.type) return Response.json({ error: "图片内容校验失败，请选择真实 JPG、PNG 或 WEBP 图片。" }, { status: 415 });
