@@ -9,6 +9,7 @@
     "dev": "node scripts/run-vinext.mjs dev",
     "build": "node scripts/run-vinext.mjs build",
     "start": "node scripts/run-vinext.mjs start",
+    "attachment-service": "node services/attachment-service/server.mjs",
     "test": "npm run build && node --test tests/rendered-html.test.mjs tests/spd-dashboard.test.mjs",
     "lint": "eslint app scripts tests eslint.config.mjs",
     "db:generate": "drizzle-kit generate"

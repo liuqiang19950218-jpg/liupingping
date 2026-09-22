@@ -17,14 +17,15 @@ test("only no-invoice other rows expose a single-image draft uploader", () => {
   assert.match(page, /attachmentKeysToDelete\.map\(\(key\) => differenceAttachmentApi\.remove\(key\)\)/);
 });
 
-test("image route validates bytes and prevents arbitrary object keys", () => {
+test("Worker attachment route proxies the internal filesystem service and prevents arbitrary keys", () => {
   const route = readFileSync("app/api/attachments/images/route.ts", "utf8");
   assert.match(route, /MAX_IMAGE_BYTES = 10 \* 1024 \* 1024/);
   assert.match(route, /image\/jpeg.*image\/png.*image\/webp/s);
   assert.match(route, /item\.valid\(bytes\)/);
-  assert.match(route, /crypto\.randomUUID\(\)/);
+  assert.match(route, /ATTACHMENT_SERVICE_URL/);
+  assert.match(route, /ATTACHMENT_SERVICE_TOKEN/);
+  assert.match(route, /proxy\("\/internal\/attachments"/);
+  assert.doesNotMatch(route, /env\.FILES|R2Bucket|site-creator-r2/);
   assert.match(route, /KEY_PATTERN/);
-  assert.match(route, /bucket\(\)\.put/);
-  assert.match(route, /bucket\(\)\.get/);
-  assert.match(route, /bucket\(\)\.delete/);
+  assert.match(route, /proxy\(`\/internal\/attachments\?key=/);
 });

@@ -1,20 +1,49 @@
 import { env } from "cloudflare:workers";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const PREFIX = "difference-attachments/";
-const KEY_PATTERN = /^difference-attachments\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/;
+const KEY_PATTERN = /^\d{4}\/\d{2}\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/;
 const signatures = [
   { contentType: "image/jpeg", extension: "jpg", valid: (b: Uint8Array) => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
   { contentType: "image/png", extension: "png", valid: (b: Uint8Array) => b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 && b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a },
   { contentType: "image/webp", extension: "webp", valid: (b: Uint8Array) => b.length >= 12 && String.fromCharCode(...b.slice(0, 4)) === "RIFF" && String.fromCharCode(...b.slice(8, 12)) === "WEBP" },
 ] as const;
 
-const bucket = () => {
-  if (!env.FILES) throw new Error("附件存储暂不可用，请稍后重试。");
-  return env.FILES;
-};
 const keyFrom = (request: Request) => new URL(request.url).searchParams.get("key") ?? "";
-const safeKey = (key: string) => KEY_PATTERN.test(key) && key.startsWith(PREFIX);
+const safeKey = (key: string) => KEY_PATTERN.test(key);
+
+function attachmentService() {
+  const url = env.ATTACHMENT_SERVICE_URL;
+  const token = env.ATTACHMENT_SERVICE_TOKEN;
+  if (typeof url !== "string" || !url || typeof token !== "string" || !token) {
+    throw new Error("附件存储服务暂不可用，请联系管理员配置。");
+  }
+  const target = new URL(url);
+  if (target.protocol !== "http:" && target.protocol !== "https:") throw new Error("附件存储服务地址无效。");
+  return { url: target, token };
+}
+
+async function proxy(path: string, init: RequestInit = {}) {
+  const service = attachmentService();
+  const target = new URL(path, service.url);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await fetch(target, {
+      ...init,
+      headers: { ...init.headers, authorization: `Bearer ${service.token}` },
+      signal: controller.signal,
+    });
+  } catch {
+    throw new Error("附件存储服务连接失败，请稍后重试。");
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function errorFrom(response: Response, fallback: string) {
+  const payload = await response.json().catch(() => ({})) as { error?: unknown };
+  return typeof payload.error === "string" ? payload.error : fallback;
+}
 
 export async function POST(request: Request) {
   try {
@@ -27,10 +56,13 @@ export async function POST(request: Request) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const detected = signatures.find((item) => item.valid(bytes));
     if (!detected || detected.contentType !== file.type) return Response.json({ error: "图片内容校验失败，请选择真实 JPG、PNG 或 WEBP 图片。" }, { status: 415 });
-    const now = new Date();
-    const key = `${PREFIX}${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${crypto.randomUUID()}.${detected.extension}`;
-    await bucket().put(key, bytes.buffer, { httpMetadata: { contentType: detected.contentType } });
-    return Response.json({ key, contentType: detected.contentType, size: bytes.byteLength }, { status: 201 });
+    const body = new FormData();
+    body.append("file", new File([bytes], "image", { type: detected.contentType }));
+    const response = await proxy("/internal/attachments", { method: "POST", body });
+    if (!response.ok) return Response.json({ error: await errorFrom(response, "图片上传失败，请重试。") }, { status: response.status === 401 ? 503 : response.status });
+    const payload = await response.json() as { key: string; contentType: string; size: number };
+    if (!safeKey(payload.key) || payload.contentType !== detected.contentType || payload.size !== bytes.byteLength) throw new Error("附件存储服务返回无效结果。");
+    return Response.json(payload, { status: 201 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "图片上传失败，请重试。" }, { status: 500 });
   }
@@ -40,9 +72,12 @@ export async function GET(request: Request) {
   const key = keyFrom(request);
   if (!safeKey(key)) return Response.json({ error: "附件引用无效。" }, { status: 400 });
   try {
-    const object = await bucket().get(key);
-    if (!object) return Response.json({ error: "图片不存在。" }, { status: 404 });
-    return new Response(object.body, { headers: { "content-type": object.httpMetadata?.contentType || "application/octet-stream", "cache-control": "private, max-age=3600", "x-content-type-options": "nosniff" } });
+    const response = await proxy(`/internal/attachments?key=${encodeURIComponent(key)}`);
+    if (!response.ok) return Response.json({ error: await errorFrom(response, "图片读取失败。") }, { status: response.status === 401 ? 503 : response.status });
+    const headers: Record<string, string> = { "content-type": response.headers.get("content-type") || "application/octet-stream", "cache-control": "private, max-age=3600", "x-content-type-options": "nosniff" };
+    const contentLength = response.headers.get("content-length");
+    if (contentLength) headers["content-length"] = contentLength;
+    return new Response(response.body, { headers });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "图片读取失败。" }, { status: 500 });
   }
@@ -51,6 +86,10 @@ export async function GET(request: Request) {
 export async function DELETE(request: Request) {
   const key = keyFrom(request);
   if (!safeKey(key)) return Response.json({ error: "附件引用无效。" }, { status: 400 });
-  try { await bucket().delete(key); return Response.json({ ok: true }); }
+  try {
+    const response = await proxy(`/internal/attachments?key=${encodeURIComponent(key)}`, { method: "DELETE" });
+    if (!response.ok) return Response.json({ error: await errorFrom(response, "图片删除失败。") }, { status: response.status === 401 ? 503 : response.status });
+    return Response.json({ ok: true });
+  }
   catch (error) { return Response.json({ error: error instanceof Error ? error.message : "图片删除失败。" }, { status: 500 }); }
 }
