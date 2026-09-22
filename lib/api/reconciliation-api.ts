@@ -199,6 +199,21 @@ async function request<T>(path: string, init: RequestInit = {}, signal?: AbortSi
   if (!response.ok) throw new ReconciliationApiError(payload.code ?? "INTERNAL", payload.error ?? `请求失败（${response.status}）`);
   return payload;
 }
+
+export const differenceAttachmentApi = {
+  upload: async (file: File): Promise<{ key: string; contentType: string; size: number }> => {
+    const body = new FormData(); body.append("file", file);
+    const response = await fetch("/api/attachments/images", { method: "POST", body });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(typeof payload?.error === "string" ? payload.error : "图片上传失败，请重试。");
+    return payload;
+  },
+  url: (key: string) => `/api/attachments/images?key=${encodeURIComponent(key)}`,
+  remove: async (key: string) => {
+    const response = await fetch(`/api/attachments/images?key=${encodeURIComponent(key)}`, { method: "DELETE" });
+    if (!response.ok) throw new Error("图片删除失败。");
+  },
+};
 const base = (quarter: string, id?: string) => `/api/quarter/${encodeURIComponent(quarter)}/reconciliations${id ? `/${encodeURIComponent(id)}` : ""}`;
 export const reconciliationApi = {
   listQuarters: (signal?: AbortSignal) => request<{ quarters: Quarter[] }>("/api/quarters", {}, signal),

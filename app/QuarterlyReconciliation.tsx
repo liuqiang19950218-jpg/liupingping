@@ -27,6 +27,7 @@ import { BatchInvoiceScreenshotDrawer } from "./BatchInvoiceScreenshotDrawer";
 import { recordImport } from "./import-history";
 import {
   reconciliationApi,
+  differenceAttachmentApi,
   ReconciliationApiError,
   type DifferenceItem,
   type MaterialStatus,
@@ -71,7 +72,7 @@ declare global {
     webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
   }
 }
-type OtherEntry = { id?: string; verificationStatus?: DifferenceItem["verificationStatus"]; amount: string; note: string; image?: string };
+type OtherEntry = { id?: string; verificationStatus?: DifferenceItem["verificationStatus"]; amount: string; note: string; image?: string; pendingImage?: File; previewUrl?: string; removeImage?: boolean };
 type DifferenceType =
   | "transit"
   | "returned"
@@ -280,7 +281,7 @@ const formFromDifferenceItems = (base: DetailForm, items: DifferenceItem[]): Det
     next[category] = items.filter((item) => toFormDifferenceCategory(item.category) === category).map((item) => ({ id: item.id, verificationStatus: item.verificationStatus, date: item.invoiceDate ?? "", invoice: item.invoiceNo ?? "", amount: item.differenceAmount ?? "", note: item.differenceDescription ?? "" })) as InvoiceEntry[];
     if (!next[category].length) next[category] = [blankInvoice()];
   });
-  next.other = items.filter((item) => toFormDifferenceCategory(item.category) === 'other').map((item) => ({ id: item.id, verificationStatus: item.verificationStatus, amount: item.differenceAmount ?? "", note: item.differenceDescription ?? "", image: item.attachmentKeys.join(",") }));
+  next.other = items.filter((item) => toFormDifferenceCategory(item.category) === 'other').map((item) => ({ id: item.id, verificationStatus: item.verificationStatus, amount: item.differenceAmount ?? "", note: item.differenceDescription ?? "", image: item.attachmentKeys[0] ?? "" }));
   if (!next.other.length) next.other = [blankOther()];
   return next;
 };
@@ -1698,20 +1699,35 @@ export function QuarterlyReconciliation({
       const mutationKey = `reconciliation:${reconciliationId}`;
       const sequence = (mutationSequence.current.get(mutationKey) ?? 0) + 1;
       mutationSequence.current.set(mutationKey, sequence);
+      const uploadedAttachmentKeys: string[] = [];
+      let savedOtherEntries = form.other;
+      setSaving(true);
+      setMessage("正在上传图片…");
+      try {
+        savedOtherEntries = await Promise.all(form.other.map(async (entry) => {
+          if (!entry.pendingImage) return entry.removeImage ? { ...entry, image: "", removeImage: false } : entry;
+          const uploaded = await differenceAttachmentApi.upload(entry.pendingImage);
+          uploadedAttachmentKeys.push(uploaded.key);
+          return { ...entry, image: uploaded.key, pendingImage: undefined, previewUrl: undefined, removeImage: false };
+        }));
+      } catch (error) {
+        await Promise.allSettled(uploadedAttachmentKeys.map((key) => differenceAttachmentApi.remove(key)));
+        setSaveError(error instanceof Error ? `保存失败：${error.message}` : "保存失败：图片上传失败，请重试。");
+        if (mutationSequence.current.get(mutationKey) === sequence) setSaving(false);
+        return;
+      }
       const desired = (FORM_DIFFERENCE_CATEGORIES as DifferenceType[]).flatMap((category) => {
-        const entries = category === 'other' ? form.other : form[category] as InvoiceEntry[];
+        const entries = category === 'other' ? savedOtherEntries : form[category] as InvoiceEntry[];
         return entries.filter((entry) => category === 'other'
-          ? num(entry.amount) !== 0 || entry.note.trim() || Boolean((entry as OtherEntry).image)
+          ? num(entry.amount) !== 0 || entry.note.trim() || Boolean((entry as OtherEntry).image || (entry as OtherEntry).pendingImage)
           : hasInvoiceNumber(entry as InvoiceEntry)).map((entry) => ({
             id: entry.id, formCategory: category, category: toApiDifferenceCategory(category), invoiceNo: category === 'other' ? null : (entry as InvoiceEntry).invoice || null,
             invoiceDate: category === 'other' ? null : (entry as InvoiceEntry).date || null,
             differenceAmount: entry.amount || null, differenceDescription: entry.note || null,
-            // This UI only round-trips approved attachment keys. It never uploads or reads binary data.
-            attachmentKeys: category === 'other' ? String((entry as OtherEntry).image ?? '').split(',').map((key) => key.trim()).filter((key) => key && !key.startsWith('data:')) : [],
+            attachmentKeys: category === 'other' ? [String((entry as OtherEntry).image ?? '').trim()].filter(Boolean) : [],
           }));
       });
       try {
-        setSaving(true);
         setMessage("正在保存到 PostgreSQL…");
         const original = sheet.details?.[String(active)];
         const reconciliationPatch = {
@@ -1729,6 +1745,17 @@ export function QuarterlyReconciliation({
         for (const item of differenceMutations.patch) await reconciliationApi.patchDifferenceItem(activeQuarter, reconciliationId, item.id, item.body);
         for (const item of differenceMutations.delete) await reconciliationApi.deleteDifferenceItem(activeQuarter, reconciliationId, item);
         for (const item of differenceMutations.create) await reconciliationApi.createDifferenceItem(activeQuarter, reconciliationId, item);
+        const oldAttachmentById = new Map((apiDifferenceItems[reconciliationId] ?? []).map((item) => [item.id, item.attachmentKeys[0] ?? ""]));
+        const attachmentKeysToDelete = desired.filter((item) => item.formCategory === 'other' && item.id).flatMap((item) => {
+          const oldKey = oldAttachmentById.get(item.id!);
+          const nextKey = item.attachmentKeys[0] ?? "";
+          return oldKey && oldKey !== nextKey ? [oldKey] : [];
+        });
+        for (const id of differenceMutations.delete) {
+          const oldKey = oldAttachmentById.get(id);
+          if (oldKey) attachmentKeysToDelete.push(oldKey);
+        }
+        await Promise.allSettled(attachmentKeysToDelete.map((key) => differenceAttachmentApi.remove(key)));
         // The detail form owns reconciliation fields only. Followup items and
         // events are managed exclusively by the unresolved-followup dashboard.
         // Re-read confirmed server state; do not retain an optimistic local copy.
@@ -1745,6 +1772,7 @@ export function QuarterlyReconciliation({
           setActive(null);
         }
       } catch (error) {
+        await Promise.allSettled(uploadedAttachmentKeys.map((key) => differenceAttachmentApi.remove(key)));
         if (mutationSequence.current.get(mutationKey) === sequence) setSaveError(error instanceof Error ? `保存失败：${error.message}。未使用本地数据回退。` : "保存失败；未使用本地数据回退。");
       } finally {
         if (mutationSequence.current.get(mutationKey) === sequence) setSaving(false);
@@ -2802,7 +2830,7 @@ function DifferenceSummaryList({
         const meaningfulEntries = item.invoice
           ? meaningfulInvoiceEntries(entries as InvoiceEntry[])
           : (entries as OtherEntry[]).filter(
-              (entry) => num(entry.amount) !== 0 || entry.note.trim() || Boolean(entry.image),
+        (entry) => num(entry.amount) !== 0 || entry.note.trim() || Boolean(entry.image || entry.pendingImage),
             );
         const filled = meaningfulEntries.length;
         const subtotal = meaningfulEntries.reduce((total, entry) => total + num(entry.amount), 0);
@@ -2842,7 +2870,7 @@ function DifferenceDetailDrawer({
   const meaningfulEntries = meta.invoice
     ? meaningfulInvoiceEntries(entries as InvoiceEntry[])
     : (entries as OtherEntry[]).filter(
-        (entry) => num(entry.amount) !== 0 || entry.note.trim() || Boolean(entry.image),
+        (entry) => num(entry.amount) !== 0 || entry.note.trim() || Boolean(entry.image || entry.pendingImage),
       );
   const subtotal = meaningfulEntries.reduce((total, entry) => total + num(entry.amount), 0);
   const [ocrStatus, setOcrStatus] = useState("");
@@ -2958,15 +2986,12 @@ function DifferenceDetailDrawer({
     }
   };
   const addImage = (index: number, file?: File) => {
-    if (!file || !file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = () =>
-      setEntries(
-        entries.map((entry, entryIndex) =>
-          entryIndex === index ? { ...entry, image: String(reader.result ?? "") } : entry,
-        ) as OtherEntry[],
-      );
-    reader.readAsDataURL(file);
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { window.alert('仅支持 JPG、PNG、WEBP 图片。'); return; }
+    if (!file.size) { window.alert('图片文件不能为空。'); return; }
+    if (file.size > 10 * 1024 * 1024) { window.alert('图片大小不能超过 10MB。'); return; }
+    const previewUrl = URL.createObjectURL(file);
+    setEntries(entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, pendingImage: file, previewUrl, removeImage: false } : entry) as OtherEntry[]);
   };
   useEffect(() => {
     const candidates = entries.map((entry, index) => ({ entry: entry as InvoiceEntry, index })).filter(({ entry }) => meta.invoice && hasInvoiceNumber(entry) && entry.invoice && entry.date && entry.amount !== "");
@@ -3030,7 +3055,17 @@ function DifferenceDetailDrawer({
                   const result = verification(entry as InvoiceEntry, index);
                   return <td>{result && <span className={`drawer-verification ${result.kind}`}>{result.label}</span>}</td>;
                 })()}
-                {!meta.invoice && <td className="drawer-attachment"><input value={(entry as OtherEntry).image ?? ""} onChange={(event) => setEntries(entries.map((current, currentIndex) => currentIndex === index ? { ...current, image: event.target.value } : current) as OtherEntry[])} placeholder="附件 key（逗号分隔）" /><small>仅保存附件 key；本阶段不上传或读取文件。</small></td>}
+                {!meta.invoice && <td className="drawer-attachment">{(() => {
+                  const other = entry as OtherEntry;
+                  const imageUrl = other.previewUrl || (other.image && !other.removeImage ? differenceAttachmentApi.url(other.image) : '');
+                  const removeImage = () => setEntries(entries.map((current, currentIndex) => currentIndex === index ? { ...current, removeImage: true, pendingImage: undefined, previewUrl: undefined } : current) as OtherEntry[]);
+                  return imageUrl ? <div className="difference-attachment-control">
+                    <img src={imageUrl} alt="差额附件缩略图" className="difference-attachment-thumb" onClick={() => onPreview(imageUrl)} />
+                    <small>{other.pendingImage ? `待保存：${other.pendingImage.name}` : '已保存'}</small>
+                    <label><input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => addImage(index, event.target.files?.[0])} />更换图片</label>
+                    <button type="button" onClick={removeImage}>{other.pendingImage ? '移除' : '删除'}</button>
+                  </div> : other.removeImage ? <div className="difference-attachment-control"><small>待保存删除</small><button type="button" onClick={() => setEntries(entries.map((current, currentIndex) => currentIndex === index ? { ...current, removeImage: false } : current) as OtherEntry[])}>撤销删除</button></div> : <label><input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => addImage(index, event.target.files?.[0])} />＋ 上传图片</label>;
+                })()}</td>}
                 <td className="drawer-row-actions"><button type="button" onClick={() => copy(index)}>复制</button><button type="button" onClick={() => remove(index)}>删除</button></td>
               </tr>
             ))}
@@ -3408,19 +3443,22 @@ function OtherGroup({
         ? [blankOther()]
         : entries.filter((_, i) => i !== index),
     );
-  const addImage = async (index: number, file?: File) => {
+  const addImage = (index: number, file?: File) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      window.alert("请选择图片文件。");
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      window.alert("仅支持 JPG、PNG、WEBP 图片。");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      window.alert("图片不能超过 2MB。");
+    if (!file.size) {
+      window.alert("图片文件不能为空。");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => update(index, "image", String(reader.result ?? ""));
-    reader.readAsDataURL(file);
+    if (file.size > 10 * 1024 * 1024) {
+      window.alert("图片大小不能超过 10MB。");
+      return;
+    }
+    const previewUrl = URL.createObjectURL(file);
+    setEntries(entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, pendingImage: file, previewUrl, removeImage: false } : entry));
   };
   const [expanded, setExpanded] = useState(true);
   return (
@@ -3466,30 +3504,30 @@ function OtherGroup({
                 <span>图片附件</span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   onChange={(event) => {
                     void addImage(index, event.target.files?.[0]);
                     event.target.value = "";
                   }}
                 />
-                {entry.image && (
+                {(entry.previewUrl || (entry.image && !entry.removeImage)) && (
                   <div className="image-preview">
                     <button
                       type="button"
                       className="image-open"
-                      onClick={() => onPreview(entry.image!)}
+                      onClick={() => onPreview(entry.previewUrl || differenceAttachmentApi.url(entry.image!))}
                       aria-label={`查看其他（无发票）第 ${index + 1} 笔图片`}
                     >
                       <img
-                        src={entry.image}
+                        src={entry.previewUrl || differenceAttachmentApi.url(entry.image!)}
                         alt={`其他（无发票）第 ${index + 1} 笔附件`}
                       />
-                      <span>点击查看</span>
+                      <span>{entry.pendingImage ? `待保存：${entry.pendingImage.name}` : "点击查看"}</span>
                     </button>
                     <button
                       type="button"
                       className="remove-entry"
-                      onClick={() => update(index, "image", "")}
+                      onClick={() => setEntries(entries.map((current, currentIndex) => currentIndex === index ? { ...current, removeImage: true, pendingImage: undefined, previewUrl: undefined } : current))}
                     >
                       删除图片
                     </button>
