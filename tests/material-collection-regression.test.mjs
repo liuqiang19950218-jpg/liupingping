@@ -26,7 +26,7 @@ test("material collection keeps independent SPD data separate and enables its ex
 
   assert.match(provider, /getMaterialStatus\(quarterCode/);
   assert.match(provider, /getSpdDashboard\(quarterCode/);
-  assert.match(panel, /const \{ quarter: selected, rows, materialStatus, spdDashboard/);
+  assert.match(panel, /const \{ quarter: selected, rows, differenceItems, materialStatus, spdDashboard/);
   assert.match(render, /onDrilldown=\{\(material\) => setDrillSelection\(\{ type: "material", material \}\)\}/);
   assert.doesNotMatch(render, /if \(material\.kind !== "spd" && material\.kind !== "stock"\)/);
   assert.match(panel, /const sourceSheet = fromSpd \? spdSheet : sheet/);

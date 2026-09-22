@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useDashboardData } from "./dashboard-postgres-data";
-import type { MaterialStatus, Reconciliation, SpdDashboardData } from "../lib/api/reconciliation-api";
+import { differenceReasonsByReconciliation } from "../lib/difference-reason-summary.mjs";
+import type { MaterialStatus, QuarterDifferenceItem, Reconciliation, SpdDashboardData } from "../lib/api/reconciliation-api";
 import "./q1-special-panels.css";
 import "./q1-special-panels-layout-overrides.css";
 import "./q1-special-drilldown.css";
@@ -72,15 +73,16 @@ const MATERIALS: readonly MaterialDefinition[] = [
 
 const PG_HEADERS = ["账套", "区域", "客户名称", "公司应收", "客户账面金额", "对账差额", "是否对清", "差额原因备注", ...MATERIALS.map((item) => item.name)];
 const materialValue = (material: MaterialStatus | undefined) => material?.rawValue ?? (material?.provided ? "已提供" : "");
-function pgSheet(rows: Reconciliation[], materialStatus: MaterialStatus[]): SavedSheet {
+function pgSheet(rows: Reconciliation[], materialStatus: MaterialStatus[], differenceItems: QuarterDifferenceItem[], quarterCode: string): SavedSheet {
   const materialsByReconciliation = materialStatus.reduce((map, item) => {
     if (!item.reconciliationId) return map;
     const entries = map.get(item.reconciliationId) ?? new Map<string, MaterialStatus>();
     entries.set(item.materialType, item); map.set(item.reconciliationId, entries); return map;
   }, new Map<string, Map<string, MaterialStatus>>());
+  const reasonsByReconciliation = differenceReasonsByReconciliation(differenceItems, quarterCode);
   return { headers: PG_HEADERS, rows: rows.map((row) => {
     const materials = materialsByReconciliation.get(row.id);
-    return [row.accountSet ?? "", row.region ?? "", row.customer ?? "", row.companyReceivable ?? "", row.customerBookAmount ?? "", row.reconciliationDifference ?? "", row.reconciliationStatus ?? "", "", ...MATERIALS.map((definition) => materialValue(materials?.get(definition.name) ?? [...(materials?.values() ?? [])].find((item) => definition.aliases.includes(item.materialType))))];
+    return [row.accountSet ?? "", row.region ?? "", row.customer ?? "", row.companyReceivable ?? "", row.customerBookAmount ?? "", row.reconciliationDifference ?? "", row.reconciliationStatus ?? "", reasonsByReconciliation.get(row.id) ?? "", ...MATERIALS.map((definition) => materialValue(materials?.get(definition.name) ?? [...(materials?.values() ?? [])].find((item) => definition.aliases.includes(item.materialType))))];
   }) };
 }
 function pgSpdSheet(data: SpdDashboardData | null): SavedSheet {
@@ -412,11 +414,11 @@ function CollectionDrilldownDialog({ data, onClose }: { data: CollectionDrilldow
 }
 
 export function Q1SpecialPanels() {
-  const { quarter: selected, rows, materialStatus, spdDashboard, loading, error } = useDashboardData();
+  const { quarter: selected, rows, differenceItems, materialStatus, spdDashboard, loading, error } = useDashboardData();
   const [tab, setTab] = useState<"collection" | "unaccounted">("collection");
   const [drillSelection, setDrillSelection] = useState<CollectionDrillSelection | null>(null);
   const quarter = selected?.label ?? "";
-  const sheet = useMemo(() => pgSheet(rows, materialStatus), [rows, materialStatus]);
+  const sheet = useMemo(() => pgSheet(rows, materialStatus, differenceItems, selected?.code ?? ""), [rows, materialStatus, differenceItems, selected?.code]);
   const spdSheet = useMemo(() => pgSpdSheet(spdDashboard), [spdDashboard]);
   const data = useMemo(() => withSpdSummary(specialData(sheet, spdSheet), spdDashboard), [sheet, spdSheet, spdDashboard]);
   const drilldown = useMemo(
@@ -432,7 +434,7 @@ export function Q1SpecialPanels() {
       <button role="tab" aria-selected={tab === "unaccounted"} className={tab === "unaccounted" ? "active" : ""} onClick={() => setTab("unaccounted")}>{S.unaccounted}</button>
     </div></div>
     {tab === "collection" ? <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} onDrilldown={(material) => setDrillSelection({ type: "material", material })} /><ReplyRateCard rows={data.replyRates} onDrilldown={(region) => setDrillSelection({ type: "reply", region })} /></div>
-      : <div className="special-legacy-panel"><VerticalScrollList label={S.unaccounted}><table><thead><tr><th>{S.region}</th><th>{S.customer}</th><th>{S.note}</th></tr></thead><tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td>{item.note || "—"}</td></tr>) : <tr><td colSpan={3}>{S.unaccountedEmpty}</td></tr>}</tbody></table></VerticalScrollList></div>}
+      : <div className="special-legacy-panel"><VerticalScrollList label={S.unaccounted}><table><thead><tr><th>{S.region}</th><th>{S.customer}</th><th>{S.note}</th></tr></thead><tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td className="unaccounted-reason" title={item.note || undefined}>{item.note || "—"}</td></tr>) : <tr><td colSpan={3}>{S.unaccountedEmpty}</td></tr>}</tbody></table></VerticalScrollList></div>}
     {drilldown && <CollectionDrilldownDialog data={drilldown} onClose={() => setDrillSelection(null)} />}
   </section>;
 }
