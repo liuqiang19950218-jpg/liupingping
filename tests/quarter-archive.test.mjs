@@ -11,7 +11,6 @@ import { createQuarterArchiveHandler } from "../services/attachment-service/quar
 
 const token = "archive-test-token";
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const CFB = XLSX.default.CFB;
 
 function entries(buffer) {
   const end = buffer.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
@@ -43,7 +42,7 @@ test("quarter archive streams a complete zip, preserves the selected quarter, an
       { id: "follow-1", reconciliation_id: "recon-1", customer: "客户/A", region: "南京", owner_name: "销售甲", follow_status: "处理中", process_stage: "待销售处理", risk_level: "中", expected_complete_at: null, next_follow_up_at: null, latest_follow_up_at: null, closed_at: null, event_type: "跟进", content: "已电话沟通", occurred_at: "2026-09-20" },
       { id: "follow-1", reconciliation_id: "recon-1", customer: "客户/A", region: "南京", owner_name: "销售乙", follow_status: "处理中", process_stage: "待销售处理", risk_level: "中", expected_complete_at: null, next_follow_up_at: null, latest_follow_up_at: null, closed_at: null, event_type: "跟进", content: "客户等待财务确认", occurred_at: "2026-09-23" },
     ],
-    materials: [{ reconciliation_id: "recon-1", customer: "客户/A", region: "南京", material_type: "对账函", provided: true, raw_value: "是" }], spd: [{ reconciliation_id: "recon-1", spd_confirmation_raw: "已确认", spd_inventory_confirmation_raw: "库存已确认" }],
+    materials: [{ reconciliation_id: "recon-1", customer: "客户/A", region: "南京", material_type: "对账函", provided: true, raw_value: "是" }], spd: [{ source_row_number: 1, source_file_name: "Q2-SPD.xlsx", account_set_raw: "华东", region_raw: "南京", customer_name_raw: "独立SPD客户", spd_confirmation_raw: "已确认", spd_inventory_confirmation_raw: "库存已确认", remark: "独立来源" }],
   });
   const archiveHandler = createQuarterArchiveHandler({ databaseUrl: "postgres://test", storage, loadArchiveData });
   const server = createAttachmentService({ root, token, storage, archiveHandler });
@@ -65,17 +64,19 @@ test("quarter archive streams a complete zip, preserves the selected quarter, an
   assert.match(zipEntries.get("归档说明.txt").toString("utf8"), /2026-Q2/);
   assert.match(zipEntries.get("归档说明.txt").toString("utf8"), /缺失/);
   const workbook = XLSX.read(zipEntries.get(workbookName), { type: "buffer", raw: true });
-  const workbookPackage = CFB.read(zipEntries.get(workbookName), { type: "buffer" });
-  assert.match(Buffer.from(CFB.find(workbookPackage, "Root Entry/xl/worksheets/sheet1.xml").content).toString("utf8"), /state="frozen"/);
-  const spreadsheetRows = XLSX.utils.sheet_to_json(workbook.Sheets.季度完整表, { defval: "" });
-  assert.equal(spreadsheetRows.length, 1);
-  assert.match(spreadsheetRows[0].差额明细, /数据库差额原因/);
-  assert.match(spreadsheetRows[0].差额明细, /01234567890123456789/);
-  assert.match(spreadsheetRows[0].跟进历史, /已电话沟通/);
-  assert.match(spreadsheetRows[0].跟进历史, /客户等待财务确认/);
-  assert.equal(spreadsheetRows[0].资料收集状态, "对账函：是（是）");
-  assert.equal(spreadsheetRows[0].SPD确认, "已确认");
-  assert.equal(spreadsheetRows[0].图片附件, "附件缺失（1张）");
-  assert.equal(spreadsheetRows[0].附件文件夹, "0001_客户_A");
+  assert.deepEqual(workbook.SheetNames, ["季度对账完整表", "SPD明细"]);
+  const mainSheet = workbook.Sheets["季度对账完整表"];
+  assert.equal(XLSX.utils.decode_range(mainSheet["!ref"]).e.r, 1);
+  assert.match(mainSheet.J2.v, /数据库差额原因/);
+  assert.match(mainSheet.J2.v, /01234567890123456789/);
+  assert.match(mainSheet.O2.v, /已电话沟通/);
+  assert.match(mainSheet.O2.v, /客户等待财务确认/);
+  assert.equal(mainSheet.T2.v, "对账函：是（是）");
+  assert.equal(mainSheet.U2.v, "附件缺失（1张）");
+  assert.equal(mainSheet.V2.v, "0001_客户_A");
+  const spdSheet = workbook.Sheets["SPD明细"];
+  assert.equal(XLSX.utils.decode_range(spdSheet["!ref"]).e.r, 1);
+  assert.equal(spdSheet.F2.v, "独立SPD客户");
+  assert.equal(spdSheet.G2.v, "已确认");
   assert.equal((await fetch(`${base}/internal/quarter-archives?quarter=../2026-Q2`, { headers })).status, 400);
 });
