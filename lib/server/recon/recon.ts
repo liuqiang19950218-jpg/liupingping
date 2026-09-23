@@ -16,6 +16,8 @@ export type QuarterSummary = {
 export type ReconciliationRead = {
   id: string;
   sourceRowKey: string | null;
+  sourceSequence: string | null;
+  importOrder: number | null;
   quarterCode: string;
   region: string | null;
   accountSet: string | null;
@@ -189,6 +191,9 @@ export async function getReconciliations(code: string): Promise<ReconciliationRe
     const result = await client.query(
       `SELECT r.id::text,
               r.source_row_key,
+              r.legacy_id::text AS source_sequence,
+              CASE WHEN coalesce(r.source_payload->>'source_row_index', '') ~ '^[0-9]+$'
+                   THEN (r.source_payload->>'source_row_index')::integer END AS import_order,
               q.code AS quarter_code,
               reg.name AS region,
               a.name AS account_set,
@@ -214,12 +219,16 @@ export async function getReconciliations(code: string): Promise<ReconciliationRe
        JOIN recon.customers c ON c.id = r.customer_id
        LEFT JOIN recon.regions reg ON reg.id = c.region_id
        WHERE q.code = $1
-       ORDER BY r.source_row_key NULLS LAST, r.created_at ASC`,
+       ORDER BY CASE WHEN coalesce(r.source_payload->>'source_row_index', '') ~ '^[0-9]+$'
+                     THEN (r.source_payload->>'source_row_index')::integer END NULLS LAST,
+                r.created_at ASC, r.id ASC`,
       [code],
     );
     return result.rows.map((row) => ({
       id: row.id,
       sourceRowKey: row.source_row_key ?? null,
+      sourceSequence: row.source_sequence ?? null,
+      importOrder: row.import_order === null || row.import_order === undefined ? null : Number(row.import_order),
       quarterCode: row.quarter_code,
       region: row.region ?? null,
       accountSet: row.account_set ?? null,

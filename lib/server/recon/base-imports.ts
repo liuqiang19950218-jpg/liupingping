@@ -10,7 +10,7 @@ type Preview = { kind: BaseMode | "UPDATE_COMPANY_RECEIVABLE"; quarter: string; 
 const previews = new Map<string, Preview>();
 const AMOUNT = /^-?\d+(\.\d{1,2})?$/;
 
-type BaseRow = { sequence: string; timepoint: string | null; accountSet: string; region: string; ownerRaw: string | null; customer: string; companyReceivable: string | null; row: unknown[] };
+type BaseRow = { sequence: string; importOrder: number; timepoint: string | null; accountSet: string; region: string; ownerRaw: string | null; customer: string; companyReceivable: string | null; row: unknown[] };
 type UpdateRow = { sequence: string; timepoint: string; accountSet: string; region: string; customer: string; companyReceivable: string; row: unknown[] };
 
 function sha(payload: unknown) { return createHash("sha256").update(JSON.stringify(payload)).digest("hex"); }
@@ -39,7 +39,7 @@ function parseBase(payload: SourcePayload) {
   const at = exactIndexes(payload.headers, BASE_HEADERS); const rows: BaseRow[] = [];
   payload.rows.forEach((row, index) => { const n = index + 2; const sequence = cellToString(row[at[0]]); const accountSet = cellToString(row[at[2]]); const region = cellToString(row[at[3]]); const customer = cellToString(row[at[5]]);
     if (!sequence || !accountSet || !region || !customer) throw invalidInput(`第 ${n} 行序号/账套/区域/客户名称不能为空`);
-    const rawOwner = cellToString(row[at[4]]); rows.push({ sequence, timepoint: cellToString(row[at[1]]) || null, accountSet, region, ownerRaw: rawOwner || null, customer, companyReceivable: amount(row[at[6]], n, true), row: BASE_HEADERS.map((_, i) => row[at[i]] ?? null) });
+    const rawOwner = cellToString(row[at[4]]); rows.push({ sequence, importOrder: n, timepoint: cellToString(row[at[1]]) || null, accountSet, region, ownerRaw: rawOwner || null, customer, companyReceivable: amount(row[at[6]], n, true), row: BASE_HEADERS.map((_, i) => row[at[i]] ?? null) });
   }); if (!rows.length) throw invalidInput("没有可导入的数据行"); return rows;
 }
 function parseUpdates(payload: SourcePayload) {
@@ -64,7 +64,7 @@ async function resolveBaseRows(client: SqlClient, quarterId: string, rows: BaseR
   for (const name of new Set(rows.map(r=>r.region))) await client.query("INSERT INTO recon.regions(code,name) VALUES($1,$1) ON CONFLICT (code) DO NOTHING",[name]);
   const ids=await client.query("SELECT a.id::text aid,a.name account,g.id::text gid,g.name region FROM recon.account_sets a FULL JOIN recon.regions g ON false"); const account=new Map(ids.rows.filter(r=>r.account).map(r=>[String(r.account),String(r.aid)])); const region=new Map(ids.rows.filter(r=>r.region).map(r=>[String(r.region),String(r.gid)]));
   const customers=new Map<string,string>(); for (const r of rows) { const key=`${r.accountSet}\u001f${r.region}\u001f${r.customer}`; if (!customers.has(key)) { const c=await client.query("INSERT INTO recon.customers(external_code,name,region_id) VALUES(NULL,$1,$2) RETURNING id::text",[r.customer,region.get(r.region)]); customers.set(key,String(c.rows[0].id)); } }
-  for (const r of rows) { const key=`${r.accountSet}\u001f${r.region}\u001f${r.customer}`; const owner=(!r.ownerRaw||r.ownerRaw==="0")?null:r.ownerRaw; const payload=JSON.stringify({allowed_source_columns:BASE_HEADERS,row:r.row,source_sequence:r.sequence,timepoint:r.timepoint,owner_raw_name:r.ownerRaw}); const rowKey=`base:${createHash("sha256").update(JSON.stringify(r.row)).digest("hex").slice(0,24)}`; await client.query("INSERT INTO recon.reconciliations(legacy_id,quarter_id,account_set_id,customer_id,owner_id,company_receivable,customer_book_amount,reconciliation_difference,reconciliation_status,source_row_key,source_payload,owner_name) VALUES($1,$2,$3,$4,NULL,$5::numeric,NULL,NULL,NULL,$6,$7::jsonb,$8)",[r.sequence,quarterId,account.get(r.accountSet),customers.get(key),r.companyReceivable,rowKey,payload,owner]); }
+  for (const r of rows) { const key=`${r.accountSet}\u001f${r.region}\u001f${r.customer}`; const owner=(!r.ownerRaw||r.ownerRaw==="0")?null:r.ownerRaw; const payload=JSON.stringify({allowed_source_columns:BASE_HEADERS,row:r.row,source_sequence:r.sequence,source_row_index:r.importOrder,timepoint:r.timepoint,owner_raw_name:r.ownerRaw}); const rowKey=`base:${createHash("sha256").update(JSON.stringify(r.row)).digest("hex").slice(0,24)}`; await client.query("INSERT INTO recon.reconciliations(legacy_id,quarter_id,account_set_id,customer_id,owner_id,company_receivable,customer_book_amount,reconciliation_difference,reconciliation_status,source_row_key,source_payload,owner_name) VALUES($1,$2,$3,$4,NULL,$5::numeric,NULL,NULL,NULL,$6,$7::jsonb,$8)",[r.sequence,quarterId,account.get(r.accountSet),customers.get(key),r.companyReceivable,rowKey,payload,owner]); }
 }
 
 export async function executeBase(kind: BaseMode, quarterCode: string, input: SourcePayload & { previewToken:string }) { const rows=parseBase(input); const fileSha=sourceSha(input); verify(input.previewToken,kind,quarterCode,fileSha,sha(rows));

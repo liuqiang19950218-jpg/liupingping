@@ -26,6 +26,7 @@ import { QuarterArchiveDownload } from "./QuarterArchiveDownload";
 import { PreviousQuarterDifferenceTransferDrawer } from "./PreviousQuarterDifferenceTransferDrawer";
 import { BatchInvoiceScreenshotDrawer } from "./BatchInvoiceScreenshotDrawer";
 import { VoiceInputButton } from "./VoiceInputButton";
+import { preserveImportedOrder } from "../lib/reconciliation-import-order.mjs";
 import { recordImport } from "./import-history";
 import {
   reconciliationApi,
@@ -239,11 +240,11 @@ const summaryValuesFromDifferenceItems = (items: Array<Pick<DifferenceItem, "cat
 const apiSheet = (quarter: string, reconciliations: Reconciliation[], material: MaterialStatus[] = [], differenceItems: QuarterDifferenceItem[] = []): LocalSheet => ({
   headers: API_HEADERS,
   fileName: `${quarter}-PostgreSQL`,
-  rows: reconciliations.map((row, i) => {
+  rows: preserveImportedOrder(reconciliations).map((row) => {
     const byType = new Map(material.filter((item) => item.reconciliationId === row.id).map((item) => [item.materialType, item.rawValue ?? (item.provided ? "已提供" : "")]));
     const summary = summaryValuesFromDifferenceItems(differenceItems.filter((item) => item.reconciliationId === row.id));
     return [
-    i + 1, row.accountSet ?? "", row.region ?? "", row.ownerName ?? "", row.customer ?? "",
+      row.sourceSequence ?? "", row.accountSet ?? "", row.region ?? "", row.ownerName ?? "", row.customer ?? "",
     row.companyReceivable ?? "", row.customerBookAmount ?? "", row.reconciliationDifference ?? "",
     summary.amounts.transit || "", summary.amounts.returned || "", summary.amounts.lost || "", summary.amounts.instrument || "", summary.amounts.otherInvoice + summary.amounts.other || "", summary.note, row.badDebtAmount ?? "", row.adjustmentAmount ?? "",
     // The server owns this nullable status. Do not manufacture "未对账" for NULL.
@@ -251,7 +252,7 @@ const apiSheet = (quarter: string, reconciliations: Reconciliation[], material: 
     ...MATERIAL_HEADERS.map((header) => byType.get(header) ?? ""),
   ];
   }),
-  details: Object.fromEntries(reconciliations.map((row, i) => [String(i), {
+  details: Object.fromEntries(preserveImportedOrder(reconciliations).map((row, i) => [String(i), {
     ...empty(), companyAmount: row.companyReceivable ?? "", customerAmount: row.customerBookAmount ?? "",
     responsible: row.ownerName ?? "", badDebt: row.badDebtAmount ?? "", badDebtReason: row.badDebtReason ?? "",
     adjustment: row.adjustmentAmount ?? "", adjustmentReason: row.adjustmentReason ?? "",
@@ -699,7 +700,7 @@ export function QuarterlyReconciliation({
     // business imports must only refresh PostgreSQL-backed state, never seed it.
     if (mode !== "import") {
       setSheet(apiSheet(quarter, reconciliationResult.reconciliations, materialResult?.material ?? [], differenceResult.items));
-      setApiIds(reconciliationResult.reconciliations.map((item) => item.id));
+      setApiIds(preserveImportedOrder(reconciliationResult.reconciliations).map((item) => item.id));
       setApiDifferenceItems({});
       setRefreshNonce((current) => current + 1);
     }
@@ -818,7 +819,7 @@ export function QuarterlyReconciliation({
         if (controller.signal.aborted) return;
         setArchivedQuarters(options);
         setActiveQuarter(quarter);
-        setApiIds(reconciliations.map((item) => item.id));
+        setApiIds(preserveImportedOrder(reconciliations).map((item) => item.id));
         setApiDifferenceItems({});
         setSheet(apiSheet(quarter, reconciliations, material, differenceItems));
         setMessage("");
@@ -1690,7 +1691,7 @@ export function QuarterlyReconciliation({
         ]);
         if (mutationSequence.current.get(mutationKey) === sequence) {
           setSheet(apiSheet(activeQuarter, reconciliations, material, differenceItems));
-          setApiIds(reconciliations.map((item) => item.id));
+          setApiIds(preserveImportedOrder(reconciliations).map((item) => item.id));
           setApiDifferenceItems((currentItems) => ({ ...currentItems, [reconciliationId]: items }));
           setMessage("已保存到 PostgreSQL。显示内容已按服务端确认结果刷新。");
           setSaveError("");

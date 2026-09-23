@@ -1,6 +1,7 @@
 /** Browser client for the same-origin reconciliation runtime API. */
 export type Reconciliation = {
   id: string; sourceRowKey: string | null; quarterCode: string;
+  sourceSequence: string | null; importOrder: number | null;
   region: string | null; accountSet: string | null; customer: string | null;
   companyReceivable: string | null; customerBookAmount: string | null;
   reconciliationDifference: string | null; reconciliationStatus: string | null;
