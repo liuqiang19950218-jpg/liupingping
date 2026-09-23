@@ -1,5 +1,4 @@
 import { env } from "cloudflare:workers";
-import { readSession } from "../../../auth/session";
 import { isValidQuarterCode } from "../../../../../lib/server/recon/recon";
 
 export const runtime = "nodejs";
@@ -33,8 +32,6 @@ async function errorResponse(response: Response) {
 }
 
 export async function GET(request: Request, context: RouteContext) {
-  const user = await readSession(request.headers.get("cookie"));
-  if (user?.role !== "admin") return Response.json({ error: "仅管理员可下载季度完整归档。" }, { status: 403, headers: { "cache-control": "no-store" } });
   const { code } = await context.params;
   if (!isValidQuarterCode(code)) return Response.json({ error: "无效的季度代码。" }, { status: 400 });
   const download = new URL(request.url).searchParams.get("download") === "1";

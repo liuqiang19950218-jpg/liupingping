@@ -8,24 +8,20 @@ type ArchiveSummary = { quarter: string; reconciliations: number; differences: n
 export function QuarterArchiveDownload() {
   const [quarters, setQuarters] = useState<Quarter[]>([]);
   const [quarter, setQuarter] = useState("");
-  const [admin, setAdmin] = useState<boolean | null>(null);
   const [summary, setSummary] = useState<ArchiveSummary | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void (async () => {
-      const session = await fetch("/api/auth/me", { cache: "no-store" }).then((response) => response.json()).catch(() => ({ user: null }));
-      if (session.user?.role !== "admin") { setAdmin(false); return; }
       const payload = await fetch("/api/quarters", { cache: "no-store" }).then((response) => response.json()).catch(() => ({ quarters: [] }));
       const available = Array.isArray(payload.quarters) ? payload.quarters : [];
       setQuarters(available);
       setQuarter(available[0]?.code ?? "");
-      setAdmin(true);
     })();
   }, []);
 
-  const ready = useMemo(() => admin === true && Boolean(quarter), [admin, quarter]);
+  const ready = useMemo(() => Boolean(quarter), [quarter]);
   const preview = async () => {
     if (!ready) return;
     setBusy(true); setMessage(""); setSummary(null);
@@ -49,12 +45,12 @@ export function QuarterArchiveDownload() {
     window.setTimeout(() => setBusy(false), 4000);
   };
   return <section className="quarter-archive-download" aria-label="季度归档下载">
-    <div><p>管理员专属</p><h3>季度归档下载</h3><span>从当前季度数据库和已持久化图片附件生成完整只读 ZIP，不会写入业务数据。</span></div>
-    {admin === false ? <b className="archive-unavailable">当前会话不是管理员，归档下载不可用。</b> : <div className="archive-controls">
+    <div><h3>季度归档下载</h3><span>从当前季度数据库和已持久化图片附件生成完整只读 ZIP，不会写入业务数据。</span></div>
+    <div className="archive-controls">
       <select aria-label="归档季度" value={quarter} disabled={!ready || busy} onChange={(event) => { setQuarter(event.target.value); setSummary(null); }}><option value="">选择季度</option>{quarters.map((item) => <option key={item.code} value={item.code}>{item.code}</option>)}</select>
       <button type="button" disabled={!ready || busy} onClick={() => void preview()}>{busy ? "处理中…" : "预检归档内容"}</button>
       {summary && <button type="button" className="archive-download-button" disabled={busy} onClick={download}>下载完整归档 ZIP</button>}
-    </div>}
+    </div>
     {summary && <p className="archive-summary">{summary.quarter}：对账 {summary.reconciliations} 条 · 差额 {summary.differences} 条 · 发票明细 {summary.invoiceDifferences} 条 · 跟进 {summary.followups} 条 · 资料 {summary.materials} 条 · SPD {summary.spd} 条 · 图片附件 {summary.archivedAttachments}/{summary.attachments}{summary.missingAttachments ? `（缺失 ${summary.missingAttachments}）` : ""}</p>}
     {message && <p className="archive-message" role="status">{message}</p>}
   </section>;
