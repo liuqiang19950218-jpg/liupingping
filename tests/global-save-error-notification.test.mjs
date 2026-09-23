@@ -3,13 +3,15 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 
 test("save failures use one persistent body-portal notification above every reconciliation drawer", () => {
+  const removedVoiceLifecycle = new RegExp(["stop", "Solution", "Recording"].join(""));
   const page = readFileSync("app/QuarterlyReconciliation.tsx", "utf8");
   const css = readFileSync("app/reconciliation.css", "utf8");
 
   assert.match(page, /createPortal\([\s\S]*document\.body/);
   assert.match(page, /const \[saveError, setSaveError\] = useState\(""\)/);
   assert.match(page, /setSaveError\(error instanceof Error \? `保存失败：\$\{error\.message\}。未使用本地数据回退。`/);
-  assert.match(page, /setSaveError\(""\);[\s\S]*stopSolutionRecording/);
+  assert.match(page, /setSaveError\(""\);\s*setActive\(null\);/);
+  assert.doesNotMatch(page, removedVoiceLifecycle);
   assert.match(page, /GlobalSaveErrorNotification message=\{saveError\}/);
   assert.match(page, /aria-label="关闭保存失败提示"/);
   assert.doesNotMatch(page, /setMessage\(error instanceof Error \? `保存失败：/);

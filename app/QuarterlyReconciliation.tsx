@@ -1694,7 +1694,6 @@ export function QuarterlyReconciliation({
           setApiDifferenceItems((currentItems) => ({ ...currentItems, [reconciliationId]: items }));
           setMessage("已保存到 PostgreSQL。显示内容已按服务端确认结果刷新。");
           setSaveError("");
-          stopSolutionRecording();
           setActive(null);
         }
       } catch (error) {
@@ -1760,7 +1759,6 @@ export function QuarterlyReconciliation({
       },
     });
     setMessage(T.saved);
-    stopSolutionRecording();
     setActive(null);
   }
   async function refreshTransferredDifferenceItems() {
