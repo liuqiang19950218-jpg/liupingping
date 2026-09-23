@@ -25,6 +25,7 @@ import { DataImportCenter } from "./DataImportCenter";
 import { QuarterArchiveDownload } from "./QuarterArchiveDownload";
 import { PreviousQuarterDifferenceTransferDrawer } from "./PreviousQuarterDifferenceTransferDrawer";
 import { BatchInvoiceScreenshotDrawer } from "./BatchInvoiceScreenshotDrawer";
+import { VoiceInputButton } from "./VoiceInputButton";
 import { recordImport } from "./import-history";
 import {
   reconciliationApi,
@@ -54,26 +55,6 @@ type InvoiceEntry = {
   note: string;
 };
 type LedgerLookup = Record<string, { amount: number; dates: string[] }>;
-type BrowserSpeechRecognition = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start: () => void;
-  stop: () => void;
-  onresult: ((event: {
-    resultIndex: number;
-    results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
-  }) => void) | null;
-  onend: (() => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-};
-type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
-declare global {
-  interface Window {
-    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
-    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
-  }
-}
 type OtherEntry = { id?: string; verificationStatus?: DifferenceItem["verificationStatus"]; amount: string; note: string; image?: string; pendingImage?: File; previewUrl?: string; removeImage?: boolean };
 type DifferenceType =
   | "transit"
@@ -670,9 +651,6 @@ export function QuarterlyReconciliation({
   const [form, setForm] = useState<DetailForm>(empty());
   const [activeDifferenceType, setActiveDifferenceType] =
     useState<DifferenceType | null>(null);
-  const [speechRecording, setSpeechRecording] = useState(false);
-  const [speechMessage, setSpeechMessage] = useState("");
-  const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const [currentLedgerInfo, setCurrentLedgerInfo] =
     useState<LedgerUpload | null>(null);
   const [uploadingLedger, setUploadingLedger] = useState(false);
@@ -736,60 +714,6 @@ export function QuarterlyReconciliation({
           : [...columns, column],
       );
   };
-  const stopSolutionRecording = () => {
-    speechRecognitionRef.current?.stop();
-    speechRecognitionRef.current = null;
-    setSpeechRecording(false);
-  };
-  const toggleSolutionRecording = () => {
-    if (speechRecording) {
-      stopSolutionRecording();
-      return;
-    }
-    const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
-    if (!Recognition) {
-      setSpeechMessage("当前浏览器不支持语音转文字，请使用最新版 Chrome 或 Edge。");
-      return;
-    }
-    const recognition = new Recognition();
-    let transcript = "";
-    recognition.lang = "zh-CN";
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.onresult = (event) => {
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        if (event.results[index].isFinal) transcript += event.results[index][0].transcript;
-      }
-    };
-    recognition.onerror = (event) => {
-      const errorMessages: Record<string, string> = {
-        "not-allowed": "麦克风权限未开启，请允许浏览器使用麦克风后重试。",
-        "no-speech": "未识别到语音，请重新开始录音。",
-        "network": "语音识别服务连接失败，请检查网络后重试。",
-      };
-      setSpeechMessage(errorMessages[event.error] ?? "语音转文字失败，请重试。");
-    };
-    recognition.onend = () => {
-      if (transcript.trim()) {
-        setForm((current) => ({
-          ...current,
-          resolutionSolution: `${current.resolutionSolution}${current.resolutionSolution.trim() ? "；" : ""}${transcript.trim()}`,
-        }));
-        setSpeechMessage("\u8bed\u97f3\u5185\u5bb9\u5df2\u8ffd\u52a0\u5230\u89e3\u51b3\u65b9\u6848\u3002");
-      }
-      speechRecognitionRef.current = null;
-      setSpeechRecording(false);
-    };
-    try {
-      recognition.start();
-      speechRecognitionRef.current = recognition;
-      setSpeechRecording(true);
-      setSpeechMessage("正在录音，请说出解决方案；再次点击即可结束并转为文字。");
-    } catch {
-      setSpeechMessage("录音启动失败，请稍后重试。");
-    }
-  };
-
   useEffect(() => {
     if (mode !== "import") {
       setViewReady(true);
@@ -2426,7 +2350,6 @@ export function QuarterlyReconciliation({
                 className="modal-close"
                 aria-label="关闭销售填写"
                 onClick={() => {
-                  stopSolutionRecording();
                   setActiveDifferenceType(null);
                   setActive(null);
                 }}
@@ -2515,12 +2438,12 @@ export function QuarterlyReconciliation({
                   type="number"
                   onChange={(value) => setForm({ ...form, adjustment: value })}
                 />
-                <TextField
+                <VoiceTextField
                   label="呆账原因"
                   value={form.badDebtReason}
                   onChange={(value) => setForm({ ...form, badDebtReason: value })}
                 />
-                <TextField
+                <VoiceTextField
                   label="调账原因"
                   value={form.adjustmentReason}
                   onChange={(value) => setForm({ ...form, adjustmentReason: value })}
@@ -2533,29 +2456,13 @@ export function QuarterlyReconciliation({
                     setForm({ ...form, resolutionTime: value })
                   }
                 />
-                <div className="solution-field-with-speech">
-                  <TextField
+                <VoiceTextField
                     label={"\u89e3\u51b3\u65b9\u6848"}
                     value={form.resolutionSolution}
                     onChange={(value) =>
                       setForm({ ...form, resolutionSolution: value })
                     }
-                  />
-                  <button
-                    type="button"
-                    className={`speech-record-button${speechRecording ? " is-recording" : ""}`}
-                    onClick={toggleSolutionRecording}
-                    aria-pressed={speechRecording}
-                  >
-                    <span aria-hidden="true">{speechRecording ? "\u25cf" : "\u25c9"}</span>
-                    {speechRecording ? "\u7ed3\u675f\u5f55\u97f3" : "\u8bed\u97f3\u8f6c\u6587\u5b57"}
-                  </button>
-                  {speechMessage && (
-                    <p className="speech-record-hint" role="status">
-                      {speechMessage}
-                    </p>
-                  )}
-                </div>
+                />
               </section>
             </div>
           </section>
@@ -2793,6 +2700,10 @@ function TextField({
       />
     </label>
   );
+}
+
+function VoiceTextField(props: { label: string; value: string; onChange: (value: string) => void }) {
+  return <div className="voice-text-field"><label className="field"><span>{props.label}</span><textarea value={props.value} onChange={(event) => props.onChange(event.target.value)} /></label><VoiceInputButton value={props.value} onChange={props.onChange} /></div>;
 }
 
 const DIFFERENCE_SUMMARIES: Array<{
@@ -3056,7 +2967,7 @@ function DifferenceDetailDrawer({
                 <td>{index + 1}</td>
                 {meta.invoice && <><td><input type="date" value={(entry as InvoiceEntry).date} disabled={!hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "date", event.target.value)} /></td><td><input value={(entry as InvoiceEntry).invoice} onChange={(event) => updateInvoice(index, event.target.value)} onBlur={() => void resolveInvoice(index)} placeholder="填写发票号码" /></td></>}
                 <td><input type="number" step="0.01" value={entry.amount} disabled={meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "amount", event.target.value)} placeholder="填写金额" /></td>
-                <td><input value={entry.note} disabled={meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "note", event.target.value)} placeholder="填写差额说明" /></td>
+                <td><div className="difference-note-with-voice"><textarea value={entry.note} disabled={meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "note", event.target.value)} placeholder="填写差额说明" /><VoiceInputButton value={entry.note} onChange={(value) => update(index, "note", value)} /></div></td>
                 {meta.invoice && (() => {
                   const result = verification(entry as InvoiceEntry, index);
                   return <td>{result && <span className={`drawer-verification ${result.kind}`}>{result.label}</span>}</td>;
@@ -3401,7 +3312,7 @@ function InvoiceGroup({
                     ))}
                   </div>
                 )}
-                <TextField
+                <VoiceTextField
                   label={T.reason}
                   value={entry.note}
                   onChange={(value) => update(index, "note", value)}
@@ -3504,7 +3415,7 @@ function OtherGroup({
                 type="number"
                 onChange={(value) => update(index, "amount", value)}
               />
-              <TextField
+              <VoiceTextField
                 label={T.reason}
                 value={entry.note}
                 onChange={(value) => update(index, "note", value)}

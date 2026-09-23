@@ -26,9 +26,10 @@ test("the restored section has six always-rendered two-column fields", () => {
   assert.match(page, /writeoff-adjustment-section/);
   for (const label of ["呆账金额", "调账金额", "呆账原因", "调账原因", "解决时间", "解决方案"]) assert.match(page, new RegExp(label));
 });
-test("solution time remains a date input and the speech button stays with solution", () => {
+test("solution time remains a date input and solution uses the shared voice field", () => {
   assert.match(page, /resolutionTime[\s\S]{0,500}type="date"/);
-  assert.match(page, /solution-field-with-speech[\s\S]{0,800}speech-record-button/);
+  assert.match(page, /VoiceTextField[\s\S]{0,800}resolutionSolution/);
+  assert.match(page, /VoiceInputButton/);
 });
 test("detail form excludes followup controls", () => {
   assert.doesNotMatch(page, /aria-label="跟进记录"/);

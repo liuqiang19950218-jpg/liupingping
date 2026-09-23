@@ -142,6 +142,18 @@
 .speech-record-button:hover { border-color: #1677ff; background: #eaf3ff; }
 .speech-record-button.is-recording { border-color: #ef6a5b; background: #fff2f0; color: #df3f31; }
 .speech-record-hint { margin: 5px 0 0; color: #6b7a90; font-size: 11px; line-height: 1.45; }
+.voice-text-field { position: relative; min-width: 0; }
+.voice-text-field .field { margin: 0; }
+.voice-text-field .field > span { display: block; min-height: 24px; padding-right: 82px; }
+.voice-text-field textarea { box-sizing: border-box; width: 100%; min-height: 72px; padding: 8px; border: 1px solid #d7e3ef; border-radius: 6px; color: #263c59; font: inherit; resize: vertical; }
+.voice-input-control { display: inline-grid; gap: 4px; }
+.voice-text-field > .voice-input-control { position: absolute; top: 0; right: 0; }
+.voice-input-button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; width: auto; min-height: 24px; margin: 0; padding: 3px 7px; border: 1px solid #b8d7ff; border-radius: 6px; background: #f4f9ff; color: #1677ff; font: inherit; font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; cursor: pointer; }
+.voice-input-button:hover { border-color: #1677ff; background: #eaf3ff; }
+.voice-input-button.is-recording { border-color: #ef6a5b; background: #fff2f0; color: #df3f31; }
+.voice-input-hint { color: #6b7a90; font-size: 11px; line-height: 1.4; }
+.difference-note-with-voice { display: grid; grid-template-columns: minmax(110px, 1fr) auto; align-items: start; gap: 5px; }
+.difference-drawer-table textarea { box-sizing: border-box; width: 100%; min-height: 42px; padding: 5px 7px; border: 1px solid #d7e3ef; border-radius: 5px; color: #263c59; font: inherit; resize: vertical; }
 .top-save-button { width: 100%; min-height: 42px; margin: 0; align-self: end; background: #e6f1f8; color: #125c89; }
 .local-tool .file-button, .local-tool .fill-button, .sales-modal .save-button { background: #e6f1f8 !important; color: #125c89 !important; }
 .invoice-choices { background: #eef6ff; color: #125c89; }

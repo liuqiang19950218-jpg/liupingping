@@ -5,6 +5,7 @@ import { reconciliationApi, type QuarterFollowupItem, type Reconciliation } from
 import { isLegacyTrackerItem, legacyTrackerTab } from "../lib/followup-tracker-routing.mjs";
 import { businessDayDistance, normalizeDateOnly } from "../lib/date-only.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
+import { VoiceInputButton } from "./VoiceInputButton";
 import "./unresolved-followup.css";
 import "./unresolved-followup-layout-overrides.css";
 
@@ -1156,14 +1157,17 @@ export function UnresolvedFollowupDashboard() {
                 onChange={(event) => setFollowTime(event.target.value)}
               />
             </label>
-            <label>
+            <div className="uf-voice-field">
+              <label>
               跟进解决方案
               <textarea
                 value={followSolution}
                 placeholder="填写本次跟进处理过程与下一步动作"
                 onChange={(event) => setFollowSolution(event.target.value)}
               />
-            </label>
+              </label>
+              <VoiceInputButton value={followSolution} onChange={setFollowSolution} />
+            </div>
             <button className="uf-primary" onClick={submitFollowUp}>
               保存本次跟进
             </button>

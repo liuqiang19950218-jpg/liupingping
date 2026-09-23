@@ -34,7 +34,7 @@ test("Q1 no-op contract has 752 forms and no followup writes", () => {
 test("detail form has solution fields only and writes no followup", async () => {
   const page = await read("app/QuarterlyReconciliation.tsx");
   assert.match(page, /resolutionTime[\s\S]{0,450}type="date"/);
-  assert.match(page, /resolutionSolution[\s\S]{0,800}speech-record-button/);
+  assert.match(page, /VoiceTextField[\s\S]{0,800}resolutionSolution/);
   assert.doesNotMatch(page, /aria-label="跟进记录"/);
   assert.doesNotMatch(page, /followup-resolved-toggle/);
   assert.doesNotMatch(page, /新增跟进/);
