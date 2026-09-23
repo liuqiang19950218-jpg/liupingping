@@ -22,6 +22,7 @@ import {
 } from "./quarter-storage";
 import { ImportDashboard } from "./ImportDashboard";
 import { DataImportCenter } from "./DataImportCenter";
+import { QuarterArchiveDownload } from "./QuarterArchiveDownload";
 import { PreviousQuarterDifferenceTransferDrawer } from "./PreviousQuarterDifferenceTransferDrawer";
 import { BatchInvoiceScreenshotDrawer } from "./BatchInvoiceScreenshotDrawer";
 import { recordImport } from "./import-history";
@@ -2028,6 +2029,7 @@ export function QuarterlyReconciliation({
                 往来明细、资料提供、SPD 和历史往来底库维持各自既有导入流程；季度基础表与公司应收更新请使用上方新中心。
               </span>
             </div>
+            <QuarterArchiveDownload />
             <ImportDashboard ledger={currentLedgerInfo} />
           </>
         ) : !sheet ? (

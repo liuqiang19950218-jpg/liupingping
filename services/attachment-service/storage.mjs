@@ -1,7 +1,7 @@
 import { access, mkdir, opendir, readFile, stat, statfs, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { constants } from "node:fs";
+import { constants, createReadStream } from "node:fs";
 import { contentTypeForKey, resolveSafeAttachmentPath } from "./validation.mjs";
 import { DEFAULT_STORAGE_THRESHOLDS, storageMetrics } from "./metrics.mjs";
 
@@ -71,6 +71,20 @@ export function createAttachmentStorage(root, { thresholds = DEFAULT_STORAGE_THR
         if (error && typeof error === "object" && error.code === "ENOENT") throw new AttachmentNotFoundError();
         throw error;
       }
+    },
+    async inspect(key) {
+      const target = pathFor(key);
+      try {
+        const file = await stat(target);
+        if (!file.isFile()) throw new AttachmentNotFoundError();
+        return { size: file.size, contentType: contentTypeForKey(key) };
+      } catch (error) {
+        if (error instanceof AttachmentNotFoundError || (error && typeof error === "object" && error.code === "ENOENT")) throw new AttachmentNotFoundError();
+        throw error;
+      }
+    },
+    createReadStream(key) {
+      return createReadStream(pathFor(key));
     },
     async remove(key) {
       const target = pathFor(key);

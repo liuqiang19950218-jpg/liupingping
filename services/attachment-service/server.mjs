@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { createAttachmentStorage, AttachmentNotFoundError } from "./storage.mjs";
 import { AttachmentValidationError, MAX_IMAGE_BYTES, validateImage } from "./validation.mjs";
 import { DEFAULT_STORAGE_THRESHOLDS } from "./metrics.mjs";
+import { createQuarterArchiveHandler } from "./quarter-archive.mjs";
 
 const MAX_REQUEST_BYTES = MAX_IMAGE_BYTES + 64 * 1024;
 
@@ -12,7 +13,7 @@ const json = (response, status, payload) => {
   response.end(body);
 };
 
-const errorStatus = (error) => error instanceof AttachmentValidationError ? 400 : 500;
+const errorStatus = (error) => error instanceof AttachmentValidationError ? 400 : (typeof error?.status === "number" ? error.status : 500);
 
 function authorized(request, token) {
   const supplied = request.headers.authorization;
@@ -53,8 +54,9 @@ function uploadedFile(request, body) {
   return { contentType: fileContentType, bytes: body.subarray(headersEnd + 4, fileEnd) };
 }
 
-export function createAttachmentService({ root, token, thresholds = DEFAULT_STORAGE_THRESHOLDS, storage }) {
+export function createAttachmentService({ root, token, databaseUrl, thresholds = DEFAULT_STORAGE_THRESHOLDS, storage, archiveHandler }) {
   const attachmentStorage = storage ?? createAttachmentStorage(root, { thresholds });
+  const archive = archiveHandler ?? (databaseUrl ? createQuarterArchiveHandler({ databaseUrl, storage: attachmentStorage }) : null);
   return http.createServer(async (request, response) => {
     const requestUrl = new URL(request.url ?? "/", "http://attachment-service.internal");
     if (request.method === "GET" && requestUrl.pathname === "/health") {
@@ -62,9 +64,16 @@ export function createAttachmentService({ root, token, thresholds = DEFAULT_STOR
       const metrics = storageWritable ? await attachmentStorage.metrics() : null;
       return json(response, storageWritable ? 200 : 503, { ok: storageWritable, storageWritable, ...(metrics ?? {}) });
     }
-    if (!requestUrl.pathname.startsWith("/internal/attachments")) return json(response, 404, { error: "未找到接口。" });
+    if (!requestUrl.pathname.startsWith("/internal/attachments") && !requestUrl.pathname.startsWith("/internal/quarter-archives")) return json(response, 404, { error: "未找到接口。" });
     if (!authorized(request, token)) return json(response, 401, { error: "内部服务鉴权失败。" });
     try {
+      if (requestUrl.pathname === "/internal/quarter-archives") {
+        if (!archive) return json(response, 503, { error: "季度归档服务未配置。" });
+        if (request.method !== "GET") return json(response, 405, { error: "不支持的请求方法。" });
+        const result = await archive({ quarter: requestUrl.searchParams.get("quarter") ?? "", download: requestUrl.searchParams.get("download") === "1", request, response });
+        if (result) return json(response, result.status, result.body);
+        return undefined;
+      }
       const key = requestUrl.searchParams.get("key") ?? "";
       if (request.method === "POST" && requestUrl.pathname === "/internal/attachments") {
         const uploaded = uploadedFile(request, await readBody(request));
@@ -94,6 +103,7 @@ export function createAttachmentService({ root, token, thresholds = DEFAULT_STOR
 export function startAttachmentService(config = {
   root: process.env.ATTACHMENT_STORAGE_ROOT,
   token: process.env.ATTACHMENT_SERVICE_TOKEN,
+  databaseUrl: process.env.DATABASE_URL,
   host: process.env.ATTACHMENT_SERVICE_HOST || "127.0.0.1",
   port: Number(process.env.ATTACHMENT_SERVICE_PORT || "18081"),
   thresholds: {
