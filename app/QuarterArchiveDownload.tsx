@@ -29,7 +29,8 @@ export function QuarterArchiveDownload() {
       const response = await fetch(`/api/quarter/${encodeURIComponent(quarter)}/archive`, { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "归档预检失败。");
-      setSummary(payload);
+      if (!payload.summary || typeof payload.summary !== "object") throw new Error("归档预检返回格式无效。");
+      setSummary(payload.summary as ArchiveSummary);
     } catch (error) { setMessage(error instanceof Error ? error.message : "归档预检失败。"); }
     finally { setBusy(false); }
   };
@@ -48,7 +49,7 @@ export function QuarterArchiveDownload() {
     <div><h3>季度归档下载</h3><span>从当前季度数据库和已持久化图片附件生成完整只读 ZIP，不会写入业务数据。</span></div>
     <div className="archive-controls">
       <select aria-label="归档季度" value={quarter} disabled={!ready || busy} onChange={(event) => { setQuarter(event.target.value); setSummary(null); }}><option value="">选择季度</option>{quarters.map((item) => <option key={item.code} value={item.code}>{item.code}</option>)}</select>
-      <button type="button" disabled={!ready || busy} onClick={() => void preview()}>{busy ? "处理中…" : "预检归档内容"}</button>
+      <button type="button" disabled={!ready || busy} onClick={() => void preview()}>{busy ? "正在读取归档内容…" : "预览归档内容"}</button>
       {summary && <button type="button" className="archive-download-button" disabled={busy} onClick={download}>下载完整归档 ZIP</button>}
     </div>
     {summary && <p className="archive-summary">{summary.quarter}：对账 {summary.reconciliations} 条 · 差额 {summary.differences} 条 · 发票明细 {summary.invoiceDifferences} 条 · 跟进 {summary.followups} 条 · 资料 {summary.materials} 条 · SPD {summary.spd} 条 · 图片附件 {summary.archivedAttachments}/{summary.attachments}{summary.missingAttachments ? `（缺失 ${summary.missingAttachments}）` : ""}</p>}
