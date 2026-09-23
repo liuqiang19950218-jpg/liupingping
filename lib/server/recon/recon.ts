@@ -191,7 +191,31 @@ export async function getReconciliations(code: string): Promise<ReconciliationRe
     const result = await client.query(
       `SELECT r.id::text,
               r.source_row_key,
-              r.legacy_id::text AS source_sequence,
+              COALESCE(
+                NULLIF(
+                  CASE
+                    WHEN jsonb_typeof(r.source_payload->'row') = 'object'
+                      THEN r.source_payload->'row'->>'序号'
+                    WHEN jsonb_typeof(r.source_payload->'row') = 'array'
+                      THEN r.source_payload->'row'->>(
+                          SELECT header.ordinality::integer - 1
+                          FROM jsonb_array_elements_text(
+                            CASE
+                              WHEN jsonb_typeof(r.source_payload->'headers') = 'array'
+                                THEN r.source_payload->'headers'
+                              WHEN jsonb_typeof(r.source_payload->'allowed_source_columns') = 'array'
+                                THEN r.source_payload->'allowed_source_columns'
+                              ELSE '[]'::jsonb
+                            END
+                          ) WITH ORDINALITY AS header(name, ordinality)
+                          WHERE header.name = '序号'
+                          LIMIT 1
+                      )
+                  END,
+                  ''
+                ),
+                NULLIF(r.source_payload->>'source_sequence', '')
+              ) AS source_sequence,
               CASE WHEN coalesce(r.source_payload->>'source_row_index', '') ~ '^[0-9]+$'
                    THEN (r.source_payload->>'source_row_index')::integer END AS import_order,
               q.code AS quarter_code,
