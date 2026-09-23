@@ -2,6 +2,8 @@ import archiver from "archiver";
 import { Client } from "pg";
 import * as XLSX from "xlsx";
 
+const CFB = XLSX.default.CFB;
+
 const QUARTER_PATTERN = /^20\d{2}-Q[1-4]$/;
 const ARCHIVE_TIMEOUT_MS = 2 * 60 * 1000;
 
@@ -13,14 +15,35 @@ const spreadsheetValue = (value) => {
 const amount = (value) => value == null || value === "" ? "" : Number(value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const safeName = (value) => text(value).replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").slice(0, 80) || "未命名客户";
 
+function freezeHeaderRow(buffer) {
+  const packageFiles = CFB.read(buffer, { type: "buffer" });
+  const sheet = CFB.find(packageFiles, "Root Entry/xl/worksheets/sheet1.xml");
+  if (!sheet) return buffer;
+  const xml = Buffer.from(sheet.content).toString("utf8");
+  sheet.content = Buffer.from(xml.replace(/<sheetView([^>]*)\/>/, '<sheetView$1><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView>'));
+  return CFB.write(packageFiles, { type: "buffer", fileType: "zip" });
+}
+
 function workbookBuffer(sheetName, headers, rows) {
   const workbook = XLSX.utils.book_new();
   const values = [headers, ...rows.map((row) => row.map(spreadsheetValue))];
   const sheet = XLSX.utils.aoa_to_sheet(values);
-  sheet["!cols"] = headers.map((header, index) => ({ wch: Math.min(42, Math.max(12, String(header).length * 2 + (index === 0 ? 4 : 2))) }));
+  const longTextColumns = new Set([9, 13, 14, 19, 20, 21]);
+  sheet["!cols"] = headers.map((header, index) => ({ wch: longTextColumns.has(index) ? 42 : Math.min(24, Math.max(12, String(header).length * 2 + (index === 0 ? 4 : 2))) }));
   sheet["!autofilter"] = { ref: `A1:${XLSX.utils.encode_col(Math.max(0, headers.length - 1))}${Math.max(1, values.length)}` };
+  sheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+  sheet["!rows"] = values.map((row, rowIndex) => ({ hpt: rowIndex === 0 ? 22 : Math.min(90, Math.max(20, ...row.map((value) => String(value ?? "").split("\n").length * 16))) }));
+  for (let rowIndex = 0; rowIndex < values.length; rowIndex += 1) {
+    for (let columnIndex = 0; columnIndex < headers.length; columnIndex += 1) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex })];
+      if (!cell) continue;
+      cell.s = rowIndex === 0
+        ? { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "1F4E78" } }, alignment: { horizontal: "center", vertical: "center", wrapText: true } }
+        : { alignment: { vertical: "top", wrapText: longTextColumns.has(columnIndex) } };
+    }
+  }
   XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
-  return XLSX.write(workbook, { bookType: "xlsx", type: "buffer", compression: true });
+  return freezeHeaderRow(XLSX.write(workbook, { bookType: "xlsx", type: "buffer", compression: true, cellStyles: true }));
 }
 
 async function queryArchiveData(databaseUrl, quarter) {
@@ -47,11 +70,11 @@ async function queryArchiveData(databaseUrl, quarter) {
         FROM recon.followup_items f JOIN recon.reconciliations r ON r.id=f.reconciliation_id JOIN recon.quarters q ON q.id=r.quarter_id
         JOIN recon.customers c ON c.id=r.customer_id LEFT JOIN recon.regions reg ON reg.id=c.region_id
         LEFT JOIN recon.followup_events e ON e.followup_item_id=f.id WHERE q.code=$1 ORDER BY f.created_at ASC,f.id ASC,e.occurred_at ASC,e.id ASC`, [quarter]),
-      client.query(`SELECT c.name AS customer, reg.name AS region, m.material_type,m.provided,m.raw_value
+      client.query(`SELECT m.reconciliation_id::text AS reconciliation_id, c.name AS customer, reg.name AS region, m.material_type,m.provided,m.raw_value
         FROM recon.material_status m JOIN recon.reconciliations r ON r.id=m.reconciliation_id JOIN recon.quarters q ON q.id=m.quarter_id
         JOIN recon.customers c ON c.id=r.customer_id LEFT JOIN recon.regions reg ON reg.id=c.region_id
         WHERE q.code=$1 ORDER BY c.name,m.material_type,m.id`, [quarter]),
-      client.query(`SELECT s.source_row_number,s.account_set_raw,s.region_raw,s.customer_name_raw,s.spd_confirmation_raw,s.spd_inventory_confirmation_raw
+      client.query(`SELECT s.reconciliation_id::text AS reconciliation_id,s.source_row_number,s.account_set_raw,s.region_raw,s.customer_name_raw,s.spd_confirmation_raw,s.spd_inventory_confirmation_raw
         FROM recon.spd_dashboard_rows s JOIN recon.quarters q ON q.id=s.quarter_id WHERE q.code=$1 ORDER BY s.source_row_number ASC,s.id ASC`, [quarter]),
     ]);
     return { reconciliations: reconciliations.rows, differences: differences.rows, followups: followups.rows, materials: materials.rows, spd: spd.rows };
@@ -88,23 +111,36 @@ function summaryOf(quarter, data, attachments) {
 function appendWorkbook(archive, filename, sheetName, headers, rows) { archive.append(workbookBuffer(sheetName, headers, rows), { name: filename }); }
 
 function appendArchiveContent(archive, quarter, data, attachments, summary) {
-  appendWorkbook(archive, "01_季度对账总表.xlsx", "季度对账总表", ["原始行号", "账套", "区域", "客户名称", "公司应收", "客户账面金额", "对账差额", "对账状态", "坏账金额", "坏账原因", "调账金额", "调账原因", "解决方案", "解决日期", "负责人", "人工解决状态", "财务关注"], data.reconciliations.map((r) => [r.source_row_key, r.account_set, r.region, r.customer, amount(r.company_receivable), amount(r.customer_book_amount), amount(r.reconciliation_difference), r.reconciliation_status, amount(r.bad_debt_amount), r.bad_debt_reason, amount(r.adjustment_amount), r.adjustment_reason, r.solution, r.solution_date, r.owner_name, r.manual_resolution_status, r.financial_attention]));
-  const differenceHeaders = ["差额ID", "客户名称", "账套", "区域", "差额分类", "发票号", "发票日期", "差额金额", "差额原因", "核验状态", "附件数量"];
-  const differenceRows = data.differences.map((r) => [r.id, r.customer, r.account_set, r.region, r.category, r.invoice_no, r.invoice_date, amount(r.difference_amount), r.difference_description, r.verification_status, Array.isArray(r.attachment_keys) ? r.attachment_keys.length : 0]);
-  appendWorkbook(archive, "02_差额明细.xlsx", "差额明细", differenceHeaders, differenceRows);
-  appendWorkbook(archive, "03_差额发票明细.xlsx", "差额发票明细", differenceHeaders, differenceRows.filter((row) => row[5] || row[6]));
-  appendWorkbook(archive, "04_客户跟进记录.xlsx", "客户跟进记录", ["客户名称", "区域", "负责人", "当前状态", "处理阶段", "风险等级", "预计完成", "下次跟进", "最新跟进", "关闭时间", "事件类型", "跟进内容", "事件时间"], data.followups.map((r) => [r.customer, r.region, r.owner_name, r.follow_status, r.process_stage, r.risk_level, r.expected_complete_at, r.next_follow_up_at, r.latest_follow_up_at, r.closed_at, r.event_type, r.content, r.occurred_at]));
-  appendWorkbook(archive, "05_资料收集情况.xlsx", "资料收集情况", ["客户名称", "区域", "资料类型", "已提供", "原始值"], data.materials.map((r) => [r.customer, r.region, r.material_type, r.provided ? "是" : "否", r.raw_value]));
-  if (data.spd.length) appendWorkbook(archive, "06_SPD资料.xlsx", "SPD资料", ["原始行号", "账套", "区域", "客户名称", "SPD确认函", "SPD库存确认函"], data.spd.map((r) => [r.source_row_number, r.account_set_raw, r.region_raw, r.customer_name_raw, r.spd_confirmation_raw, r.spd_inventory_confirmation_raw]));
-  appendWorkbook(archive, "07_附件清单.xlsx", "附件清单", ["客户名称", "差额ID", "附件键", "状态", "文件大小(字节)", "内容类型"], attachments.map((r) => [r.customer, r.differenceId, r.key, r.status, r.size, r.contentType]));
+  const by = (rows, key) => rows.reduce((map, row) => { const list = map.get(row[key]) ?? []; list.push(row); map.set(row[key], list); return map; }, new Map());
+  const diffs = by(data.differences, "reconciliation_id"), follows = by(data.followups, "reconciliation_id"), materials = by(data.materials, "reconciliation_id"), spd = by(data.spd, "reconciliation_id"), attachmentByDiff = by(attachments, "differenceId");
+  const labels = { transit: "在途", returned_invoice: "退票", returned: "退票", lost_invoice: "丢票", lost: "丢票", equipment: "仪器设备", instrument: "仪器设备", other_with_invoice: "其他（有发票）", otherInvoice: "其他（有发票）", other_without_invoice: "其他（无发票及无法验证）", other: "其他（无发票及无法验证）" };
+  const headers = ["序号", "账套", "区域", "客户名称", "负责人", "公司应收金额", "客户账面金额", "差额金额", "对账状态", "差额明细", "当前处理阶段", "当前状态", "最新跟进时间", "最新跟进内容", "跟进历史", "解决方案", "解决时间", "人工解决状态", "财务关注", "资料收集状态", "SPD确认", "SPD库存确认", "图片附件", "附件文件夹"];
+  const folderByReconciliation = new Map(data.reconciliations.map((reconciliation, index) => [
+    reconciliation.id,
+    `${String(reconciliation.source_row_key || index + 1).padStart(4, "0")}_${safeName(reconciliation.customer)}`,
+  ]));
+  const rows = data.reconciliations.map((r, index) => {
+    const rd = diffs.get(r.id) ?? [], rf = follows.get(r.id) ?? [], rm = materials.get(r.id) ?? [], rs = spd.get(r.id) ?? [];
+    const detail = rd.map((d) => [labels[d.category] ?? d.category, d.invoice_date, d.invoice_no ? `发票号：${d.invoice_no}` : "", `金额：${amount(d.difference_amount)}`, d.difference_description ? `原因：${d.difference_description}` : ""].filter(Boolean).join("｜")).join("\n");
+    const history = rf.filter((f) => f.occurred_at || f.content).map((f) => [f.occurred_at, f.owner_name, f.content].filter(Boolean).join("｜")).join("\n");
+    const latest = rf.filter((f) => f.occurred_at || f.content).at(-1) ?? null;
+    const current = latest ?? rf.at(-1) ?? null;
+    const materialText = rm.map((m) => `${m.material_type}：${m.provided ? "是" : "否"}${m.raw_value ? `（${m.raw_value}）` : ""}`).join("\n");
+    const imageRows = rd.flatMap((d) => attachmentByDiff.get(d.id) ?? []); const available = imageRows.filter((a) => a.status === "已归档").length, missing = imageRows.filter((a) => a.status === "缺失").length;
+    const folder = folderByReconciliation.get(r.id);
+    return [r.source_row_key ?? index + 1, r.account_set, r.region, r.customer, r.owner_name, amount(r.company_receivable), amount(r.customer_book_amount), amount(r.reconciliation_difference), r.reconciliation_status, detail, current?.process_stage, current?.follow_status, latest?.occurred_at, latest?.content, history, r.solution, r.solution_date, r.manual_resolution_status, r.financial_attention, materialText, rs.map((s) => s.spd_confirmation_raw).filter(Boolean).join("\n"), rs.map((s) => s.spd_inventory_confirmation_raw).filter(Boolean).join("\n"), missing ? `附件缺失（${missing}张）` : available ? `有（${available}张）` : "—", available ? folder : ""];
+  });
+  appendWorkbook(archive, `${quarter}_季度对账完整表.xlsx`, "季度完整表", headers, rows);
   const usedNames = new Set();
   for (const item of attachments.filter((row) => row.status === "已归档")) {
     const ext = item.key.split(".").pop();
-    let basename = `${safeName(item.customer)}_${item.differenceId}.${ext}`;
+    const reconciliation = data.differences.find((difference) => difference.id === item.differenceId);
+    const folder = folderByReconciliation.get(reconciliation?.reconciliation_id) ?? `未关联_${safeName(item.customer)}`;
+    let basename = `${item.key.replaceAll("/", "_")}`;
     let attempt = 2;
     while (usedNames.has(basename)) basename = `${safeName(item.customer)}_${item.differenceId}_${attempt++}.${ext}`;
     usedNames.add(basename);
-    archive.append(item.streamFactory(), { name: `图片附件/${basename}` });
+    archive.append(item.streamFactory(), { name: `图片附件/${folder}/${basename}` });
   }
   const note = [`季度：${quarter}`, `生成时间：${summary.generatedAt}`, `对账记录：${summary.reconciliations} 条`, `差额明细：${summary.differences} 条`, `跟进记录：${summary.followups} 条`, `资料记录：${summary.materials} 条`, `SPD资料：${summary.spd} 条${summary.spd ? "" : "（当前季度无SPD资料，未生成06文件）"}`, `附件：${summary.archivedAttachments} 个已归档，${summary.missingAttachments} 个缺失`, "本归档仅包含所选季度的只读快照；附件缺失不影响其他文件生成。"].join("\n");
   archive.append(note, { name: "归档说明.txt" });
