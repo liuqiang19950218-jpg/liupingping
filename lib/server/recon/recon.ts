@@ -216,8 +216,12 @@ export async function getReconciliations(code: string): Promise<ReconciliationRe
                 ),
                 NULLIF(r.source_payload->>'source_sequence', '')
               ) AS source_sequence,
-              CASE WHEN coalesce(r.source_payload->>'source_row_index', '') ~ '^[0-9]+$'
-                   THEN (r.source_payload->>'source_row_index')::integer END AS import_order,
+              CASE
+                WHEN coalesce(r.source_payload->>'source_row_index', '') ~ '^[0-9]+$'
+                  THEN (r.source_payload->>'source_row_index')::integer
+                WHEN coalesce(r.source_payload->>'row_index', '') ~ '^[0-9]+$'
+                  THEN (r.source_payload->>'row_index')::integer
+              END AS import_order,
               q.code AS quarter_code,
               reg.name AS region,
               a.name AS account_set,
@@ -243,8 +247,12 @@ export async function getReconciliations(code: string): Promise<ReconciliationRe
        JOIN recon.customers c ON c.id = r.customer_id
        LEFT JOIN recon.regions reg ON reg.id = c.region_id
        WHERE q.code = $1
-       ORDER BY CASE WHEN coalesce(r.source_payload->>'source_row_index', '') ~ '^[0-9]+$'
-                     THEN (r.source_payload->>'source_row_index')::integer END NULLS LAST,
+       ORDER BY CASE
+                  WHEN coalesce(r.source_payload->>'source_row_index', '') ~ '^[0-9]+$'
+                    THEN (r.source_payload->>'source_row_index')::integer
+                  WHEN coalesce(r.source_payload->>'row_index', '') ~ '^[0-9]+$'
+                    THEN (r.source_payload->>'row_index')::integer
+                END NULLS LAST,
                 r.created_at ASC, r.id ASC`,
       [code],
     );

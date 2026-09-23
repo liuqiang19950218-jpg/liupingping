@@ -4,17 +4,31 @@ import test from "node:test";
 import { preserveImportedOrder } from "../lib/reconciliation-import-order.mjs";
 
 const imported = [
-  { id: "row-1", legacyId: "local-492", sourceSequence: "1", importOrder: 2 },
-  { id: "row-2", legacyId: "local-493", sourceSequence: "2", importOrder: 3 },
-  { id: "row-3", legacyId: "local-494", sourceSequence: "3", importOrder: 4 },
-  { id: "row-4", legacyId: "local-495", sourceSequence: "5", importOrder: 5 },
-  { id: "row-5", legacyId: "local-496", sourceSequence: "4", importOrder: 6 },
+  { id: "row-1", legacyId: "local-492", sourceSequence: "1", importOrder: 0 },
+  { id: "row-2", legacyId: "local-493", sourceSequence: "2", importOrder: 1 },
+  { id: "row-3", legacyId: "local-494", sourceSequence: "3", importOrder: 2 },
+  { id: "row-4", legacyId: "local-495", sourceSequence: "5", importOrder: 3 },
+  { id: "row-5", legacyId: "local-496", sourceSequence: "4", importOrder: 4 },
 ];
 const sequences = (rows) => rows.map((row) => row.sourceSequence);
 
 test("non-ascending imported sequences retain their original row order", () => {
   assert.deepEqual(sequences(preserveImportedOrder([...imported].reverse())), ["1", "2", "3", "5", "4"]);
-  assert.deepEqual(sequences(preserveImportedOrder([{ id: "a", sourceSequence: "1", importOrder: 2 }, { id: "b", sourceSequence: "2", importOrder: 3 }, { id: "c", sourceSequence: "5", importOrder: 4 }, { id: "d", sourceSequence: "8", importOrder: 5 }])), ["1", "2", "5", "8"]);
+  assert.deepEqual(sequences(preserveImportedOrder([{ id: "a", sourceSequence: "1", importOrder: 0 }, { id: "b", sourceSequence: "2", importOrder: 1 }, { id: "c", sourceSequence: "5", importOrder: 2 }, { id: "d", sourceSequence: "8", importOrder: 3 }])), ["1", "2", "5", "8"]);
+});
+
+test("legacy Q1 row_index and future source_row_index are zero-based, with source_row_index taking priority", () => {
+  const q1Rows = [{ id: "q1-second", sourceSequence: "2", importOrder: 1 }, { id: "q1-first", sourceSequence: "1", importOrder: 0 }];
+  const newRows = [{ id: "new-second", sourceSequence: "2", importOrder: 10 }, { id: "new-first", sourceSequence: "1", importOrder: 9 }];
+  assert.deepEqual(sequences(preserveImportedOrder(q1Rows)), ["1", "2"]);
+  assert.deepEqual(sequences(preserveImportedOrder(newRows)), ["1", "2"]);
+});
+
+test("Q2 recovered source indexes retain gaps rather than being renumbered", () => {
+  const q2Rows = [{ id: "after-gap", sourceSequence: "711", importOrder: 710 }, { id: "before-gap", sourceSequence: "709", importOrder: 708 }];
+  const ordered = preserveImportedOrder(q2Rows);
+  assert.deepEqual(sequences(ordered), ["709", "711"]);
+  assert.deepEqual(ordered.map((row) => row.importOrder), [708, 710]);
 });
 
 test("Excel sequence is displayed even when the obsolete legacy ID is local-N", () => {
@@ -52,6 +66,9 @@ test("API reads the original Excel sequence from payload and orders only by pers
   assert.match(read, /header\.name = '序号'/);
   assert.doesNotMatch(read, /r\.legacy_id::text AS source_sequence/);
   assert.match(read, /source_payload->>'source_row_index'/);
+  assert.match(read, /source_payload->>'row_index'/);
+  assert.match(read, /WHEN[\s\S]*source_row_index[\s\S]*WHEN[\s\S]*row_index/);
+  assert.match(read, /r\.created_at ASC, r\.id ASC/);
   assert.doesNotMatch(read, /ORDER BY r\.source_row_key/);
   assert.match(page, /row\.sourceSequence \?\? ""/);
   assert.match(page, /preserveImportedOrder\(reconciliations\)/);
