@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { differenceReasonsByReconciliation } from "../lib/difference-reason-summary.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import { filterFollowupTrackerItems, followupStage, toItems } from "./UnresolvedFollowupDashboard";
+import { currentOpenTrackerItems } from "../lib/current-open-problems.mjs";
 import "./problem-followup-drawer.css";
 
 type Props = { filterContext: Record<string, string>; onClose: () => void; onEnterFollowup: () => void };
@@ -19,8 +20,13 @@ export function ProblemFollowupDrawer({ filterContext, onClose, onEnterFollowup 
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({ key: "customer", direction: "asc" });
   const [page, setPage] = useState(1);
+  const archive = filterContext.stage === "已关闭";
   const contextLabels = Object.entries(filterContext).filter(([, value]) => Boolean(value)).map(([key, value]) => `${LABELS[key] ?? key}：${key === "filter" ? FILTER_LABELS[value] ?? value : value}`);
-  const items = useMemo(() => filterFollowupTrackerItems(toItems(quarter?.label ?? "", reconciliationById, followups), filterContext), [quarter, reconciliationById, followups, filterContext]);
+  const items = useMemo(() => {
+    const trackerItems = toItems(quarter?.label ?? "", reconciliationById, followups);
+    const source = archive ? trackerItems : currentOpenTrackerItems(trackerItems, reconciliationById.values());
+    return filterFollowupTrackerItems(source, filterContext);
+  }, [quarter, reconciliationById, followups, filterContext, archive]);
   const reasons = useMemo(() => differenceReasonsByReconciliation(differenceItems, quarter?.code ?? ""), [differenceItems, quarter]);
   const rows = useMemo(() => items.map((item) => ({ item, reason: reasons.get(item.reconciliationId) || "—", status: followupStage(item), solution: item.firstSolution || "—", solutionDate: item.firstTime || "—" })), [items, reasons]);
   const filtered = useMemo(() => {
@@ -37,7 +43,6 @@ export function ProblemFollowupDrawer({ filterContext, onClose, onEnterFollowup 
   const activePage = Math.min(page, pageCount);
   const displayed = filtered.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
   const amount = filtered.reduce((sum, { item }) => sum + Math.abs(item.amount), 0);
-  const archive = filterContext.stage === "已关闭";
   const setSortKey = (key: SortKey) => { setSort((current) => current.key === key ? { key, direction: current.direction === "asc" ? "desc" : "asc" } : { key, direction: "asc" }); setPage(1); };
   const sortLabel = (label: string, key: SortKey) => <button type="button" onClick={() => setSortKey(key)}>{label}{sort.key === key ? (sort.direction === "asc" ? " ↑" : " ↓") : ""}</button>;
 

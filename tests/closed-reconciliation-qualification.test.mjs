@@ -68,7 +68,7 @@ test("dashboard KPI, drill-down, and archive use the shared qualification", asyn
   ]);
   assert.match(dashboard, /isResolvedArchiveReconciliation/);
   assert.match(dashboard, /Boolean\(item\.customer\?\.trim\(\)\)/);
-  assert.match(tracker, /isFollowupTrackerReconciliation\(row\)/);
+  assert.match(tracker, /isCurrentOpenProblem\(row\)/);
   assert.match(tracker, /isResolvedArchiveReconciliation\(row\)/);
   assert.match(drawer, /toItems\(/);
 });

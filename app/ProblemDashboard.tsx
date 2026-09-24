@@ -14,6 +14,7 @@ import { ProblemStageDistribution } from "./ProblemStageDistribution";
 import { ProblemFollowupDrawer } from "./ProblemFollowupDrawer";
 import { followupStage, toItems } from "./UnresolvedFollowupDashboard";
 import { isResolvedArchiveReconciliation } from "../lib/closed-reconciliation-qualification.mjs";
+import { currentOpenTrackerItems } from "../lib/current-open-problems.mjs";
 import "./problem-dashboard.css";
 import "./problem-dashboard-layout.css";
 
@@ -44,7 +45,7 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
   // deliberately excluded from all current-problem metrics and Top5 counts.
   const currentOpenProblems = useMemo(() => {
     const followupByReconciliation = new Map(followups.map((item) => [item.reconciliationId, item]));
-    return toItems(quarter?.label ?? "", reconciliationById, followups).filter((item) => !item.resolved).map((item) => {
+    return currentOpenTrackerItems(toItems(quarter?.label ?? "", reconciliationById, followups), reconciliationById.values()).map((item) => {
     const followup = followupByReconciliation.get(item.reconciliationId);
     const rawRisk = followup?.riskLevel;
     const riskLevel = rawRisk === "high" ? "高风险" : rawRisk === "medium" ? "中风险" : rawRisk === "low" ? "低风险" : rawRisk as "高风险" | "中风险" | "低风险";

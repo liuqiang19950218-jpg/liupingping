@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { reconciliationApi, type QuarterFollowupItem, type Reconciliation } from "../lib/api/reconciliation-api";
 import {
-  isFollowupTrackerReconciliation,
   isResolvedArchiveReconciliation,
 } from "../lib/closed-reconciliation-qualification.mjs";
+import { isCurrentOpenProblem } from "../lib/current-open-problems.mjs";
 import { businessDayDistance, normalizeDateOnly } from "../lib/date-only.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import { VoiceInputButton } from "./VoiceInputButton";
@@ -186,7 +186,7 @@ export function toItems(quarter: string, rows: Map<string, Reconciliation>, foll
   return [...rows.values()].flatMap((row) => {
     const followup = followupByReconciliation.get(row.id);
     const firstTime = row.solutionDate?.trim() ?? "";
-    if (!isFollowupTrackerReconciliation(row)) return [];
+    if (!isCurrentOpenProblem(row) && !isResolvedArchiveReconciliation(row)) return [];
     return [{
       id: followup?.id ?? `solution:${row.id}`,
       reconciliationId: row.id,

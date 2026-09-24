@@ -48,7 +48,7 @@ test("legacy tracker uses persisted manual status and keeps later events separat
     read("app/UnresolvedFollowupDashboard.tsx"),
     read("lib/closed-reconciliation-qualification.mjs"),
   ]);
-  assert.match(page, /isFollowupTrackerReconciliation\(row\)/);
+  assert.match(page, /isCurrentOpenProblem\(row\)/);
   assert.match(page, /isResolvedArchiveReconciliation\(row\)/);
   assert.match(qualification, /legacyTrackerTab\(row\?\.manualResolutionStatus\)/);
   assert.doesNotMatch(page, /solutionFollowupBucket\(/);
