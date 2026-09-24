@@ -26,7 +26,9 @@ test("shared component owns native recognition, cleanup, and no save API", async
 test("all supported field locations reuse the component without field cross-wiring", async () => {
   const reconciliation = await readFile(new URL("../app/QuarterlyReconciliation.tsx", import.meta.url), "utf8");
   const followup = await readFile(new URL("../app/UnresolvedFollowupDashboard.tsx", import.meta.url), "utf8");
-  assert.match(reconciliation, /<VoiceTextField[\s\S]*label="呆账原因"/);
+  assert.match(reconciliation, /<VoiceTextField[\s\S]*label="死账原因"/);
+  assert.match(reconciliation, /label="死账原因"[\s\S]{0,200}value=\{form\.badDebtReason\}[\s\S]{0,200}badDebtReason/);
+  assert.doesNotMatch(reconciliation, /label="呆账原因"/);
   assert.match(reconciliation, /<VoiceTextField[\s\S]*label="调账原因"/);
   assert.match(reconciliation, /<VoiceInputButton value=\{entry\.note\} onChange=\{\(value\) => update\(index, "note", value\)\}/);
   assert.match(followup, /<VoiceInputButton value=\{followSolution\} onChange=\{setFollowSolution\}/);

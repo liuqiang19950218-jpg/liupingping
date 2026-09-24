@@ -2424,9 +2424,9 @@ export function QuarterlyReconciliation({
                   <strong>{money(Math.max(0, Math.abs(difference) - total))}</strong>
                 </span>
               </div>
-              <section className="writeoff-adjustment-section" aria-label="呆账、调账和解决信息">
+              <section className="writeoff-adjustment-section" aria-label="死账、调账和解决信息">
                 <TextField
-                  label="呆账金额"
+                  label="死账金额"
                   value={form.badDebt}
                   type="number"
                   onChange={(value) => setForm({ ...form, badDebt: value })}
@@ -2438,7 +2438,7 @@ export function QuarterlyReconciliation({
                   onChange={(value) => setForm({ ...form, adjustment: value })}
                 />
                 <VoiceTextField
-                  label="呆账原因"
+                  label="死账原因"
                   value={form.badDebtReason}
                   onChange={(value) => setForm({ ...form, badDebtReason: value })}
                 />

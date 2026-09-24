@@ -8,9 +8,9 @@ const read = await readFile(new URL("../lib/server/recon/recon.ts", import.meta.
 const write = await readFile(new URL("../lib/server/recon/write.ts", import.meta.url), "utf8");
 
 for (const [name, form, apiField, column] of [
-  ["呆账金额", "badDebt", "badDebtAmount", "bad_debt_amount"],
+  ["死账金额", "badDebt", "badDebtAmount", "bad_debt_amount"],
   ["调账金额", "adjustment", "adjustmentAmount", "adjustment_amount"],
-  ["呆账原因", "badDebtReason", "badDebtReason", "bad_debt_reason"],
+  ["死账原因", "badDebtReason", "badDebtReason", "bad_debt_reason"],
   ["调账原因", "adjustmentReason", "adjustmentReason", "adjustment_reason"],
   ["解决时间", "resolutionTime", "solutionDate", "solution_date"],
   ["解决方案", "resolutionSolution", "solution", "solution"],
@@ -24,7 +24,8 @@ for (const [name, form, apiField, column] of [
 }
 test("the restored section has six always-rendered two-column fields", () => {
   assert.match(page, /writeoff-adjustment-section/);
-  for (const label of ["呆账金额", "调账金额", "呆账原因", "调账原因", "解决时间", "解决方案"]) assert.match(page, new RegExp(label));
+  for (const label of ["死账金额", "调账金额", "死账原因", "调账原因", "解决时间", "解决方案"]) assert.match(page, new RegExp(label));
+  assert.doesNotMatch(page, /呆账金额|呆账原因/);
 });
 test("solution time remains a date input and solution uses the shared voice field", () => {
   assert.match(page, /resolutionTime[\s\S]{0,500}type="date"/);
