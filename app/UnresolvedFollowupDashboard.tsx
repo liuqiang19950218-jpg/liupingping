@@ -217,16 +217,17 @@ export function filterFollowupTrackerItems(items: Item[], filters: Record<string
   const filter = (filters.filter ?? "") as DashboardMetricFilter;
   const stage = filters.stage ?? "";
   const query = (filters.owner || filters.customer || "").trim().toLocaleLowerCase();
+  const salesGroup = stage === "等待销售处理";
   return filterFollowupTrackerItemsByState(items, {
     tab: stage === "已关闭" ? "resolved" : "pending",
     region: filters.region ?? ALL,
     search: query,
     risk: "全部",
     finance: "全部",
-    processStage: stage || "全部",
+    processStage: salesGroup ? "全部" : stage || "全部",
     dashboardMetricFilter: filter,
     tableFilters: {},
-  });
+  }).filter((item) => !salesGroup || followupStage(item) === "待销售走申请" || followupStage(item) === "待销售去医院处理");
 }
 
 export type FollowupTrackerFilterState = {

@@ -12,6 +12,7 @@ import {
 } from "./problem-dashboard-data";
 import { ProblemStageDistribution } from "./ProblemStageDistribution";
 import { ProblemFollowupDrawer } from "./ProblemFollowupDrawer";
+import { followupStage, toItems } from "./UnresolvedFollowupDashboard";
 import { isResolvedArchiveReconciliation } from "../lib/closed-reconciliation-qualification.mjs";
 import "./problem-dashboard.css";
 import "./problem-dashboard-layout.css";
@@ -38,19 +39,24 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
   const [exporting, setExporting] = useState(false);
   const [drawerFilterContext, setDrawerFilterContext] = useState<Record<string, string> | null>(null);
 
-  const allQuarterItems = useMemo(() => followups.map((followup) => {
-    const row = reconciliationById.get(followup.reconciliationId);
-    const stage = followup.closedAt || followup.followStatus === "closed" || followup.followStatus === "已解决" ? "已关闭" : followup.processStage === "待销售走申请" || followup.processStage === "待销售去医院处理" || followup.processStage === "待财务调账" || followup.processStage === "待核查" ? followup.processStage : "待核查";
-    const riskLevel = followup.riskLevel === "high" ? "高风险" : followup.riskLevel === "medium" ? "中风险" : followup.riskLevel === "low" ? "低风险" : followup.riskLevel as "高风险" | "中风险" | "低风险";
-    return { id: followup.id, quarter: quarter?.label ?? "", accountSet: row?.accountSet ?? "", region: row?.region ?? "未填写区域", customer: row?.customer ?? "", owner: row?.ownerName ?? "", difference: Number(row?.reconciliationDifference ?? 0), solution: row?.solution ?? "", cause: row?.solution ?? "", expectedDate: followup.expectedCompleteAt ?? "", latestFollowUpAt: followup.latestFollowUpAt ?? followup.latestEvent?.occurredAt ?? "", updatedAt: followup.updatedAt ?? "", followStatus: followup.followStatus, processStage: followup.processStage ?? "", financeAttention: "无需关注", riskLevel, stage, overdueDays: getOverdueDays(followup.expectedCompleteAt ?? "") } as unknown as DashboardIssue;
-  }), [followups, reconciliationById, quarter]);
-  const activeItems = useMemo(() => allQuarterItems.filter((item) => item.stage !== "已关闭"), [allQuarterItems]);
+  // This is the one live workload set for the process dashboard. `toItems`
+  // already applies the canonical closed qualification; resolved rows are
+  // deliberately excluded from all current-problem metrics and Top5 counts.
+  const currentOpenProblems = useMemo(() => {
+    const followupByReconciliation = new Map(followups.map((item) => [item.reconciliationId, item]));
+    return toItems(quarter?.label ?? "", reconciliationById, followups).filter((item) => !item.resolved).map((item) => {
+    const followup = followupByReconciliation.get(item.reconciliationId);
+    const rawRisk = followup?.riskLevel;
+    const riskLevel = rawRisk === "high" ? "高风险" : rawRisk === "medium" ? "中风险" : rawRisk === "low" ? "低风险" : rawRisk as "高风险" | "中风险" | "低风险";
+    return { id: item.id, quarter: item.quarter, accountSet: item.accountSet, region: item.region, customer: item.customer, owner: item.owner, difference: item.amount, solution: item.firstSolution, cause: item.firstSolution, expectedDate: followup?.expectedCompleteAt ?? item.expectedDate, latestFollowUpAt: followup?.latestFollowUpAt ?? followup?.latestEvent?.occurredAt ?? "", updatedAt: followup?.updatedAt ?? "", followStatus: followup?.followStatus ?? "pending", processStage: item.processStage ?? "", financeAttention: "无需关注", riskLevel, stage: followupStage(item), overdueDays: getOverdueDays(followup?.expectedCompleteAt ?? item.expectedDate) } as unknown as DashboardIssue;
+    });
+  }, [followups, reconciliationById, quarter]);
   const closedReconciliations = useMemo(
     () => [...reconciliationById.values()].filter((item) => Boolean(item.customer?.trim()) && isResolvedArchiveReconciliation(item)),
     [reconciliationById],
   );
   const currentFilters = { ...filters, quarter: quarter?.label ?? "" };
-  const items = useMemo(() => filterProblemItemList(activeItems, currentFilters), [activeItems, currentFilters]);
+  const items = useMemo(() => filterProblemItemList(currentOpenProblems, currentFilters), [currentOpenProblems, currentFilters]);
   const closedCount = useMemo(() => {
     if (filters.stage !== "全部" && filters.stage !== "已关闭") return 0;
     return closedReconciliations.filter((item) =>
@@ -59,9 +65,9 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
     ).length;
   }, [closedReconciliations, filters]);
   const dashboard = useMemo(() => buildProblemDashboard(items, closedCount), [items, closedCount]);
-  const regions = useMemo(() => [...new Set(allQuarterItems.map((item) => item.region))], [allQuarterItems]);
-  const owners = useMemo(() => [...new Set(allQuarterItems.map((item) => item.owner).filter(Boolean))], [allQuarterItems]);
-  const causes = useMemo(() => [...new Set(allQuarterItems.map((item) => item.cause).filter(Boolean))], [allQuarterItems]);
+  const regions = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.region))], [currentOpenProblems]);
+  const owners = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.owner).filter(Boolean))], [currentOpenProblems]);
+  const causes = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.cause).filter(Boolean))], [currentOpenProblems]);
   const change = (key: keyof ProblemFilters, value: string) => setFilters((current) => ({ ...current, [key]: value }));
   // Preserve the exact legacy navigation context; navigation now happens only
   // after the user explicitly chooses it in the secondary drawer.
