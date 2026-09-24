@@ -3,25 +3,46 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   closedReconciliationIds,
-  hasExistingResolvedQualification,
+  hasManualResolvedQualification,
+  hasSolutionDate,
+  hasSolutionOnlyResolvedQualification,
   hasValidSolution,
   isClosedReconciliation,
+  isFollowupTrackerReconciliation,
+  isResolvedArchiveReconciliation,
+  isUnresolvedFollowupReconciliation,
 } from "../lib/closed-reconciliation-qualification.mjs";
 
 const ids = (rows) => [...closedReconciliationIds(rows)].sort();
 
-test("existing manual-resolved records remain closed", () => {
+test("manual-resolved records close only when their solution date exists", () => {
   const row = { id: "legacy", solution: "", solutionDate: "2026-09-01", manualResolutionStatus: "resolved" };
-  assert.equal(hasExistingResolvedQualification(row), true);
+  assert.equal(hasManualResolvedQualification(row), true);
   assert.equal(isClosedReconciliation(row), true);
+  assert.equal(isResolvedArchiveReconciliation(row), true);
+  assert.equal(isUnresolvedFollowupReconciliation(row), false);
+  assert.equal(isFollowupTrackerReconciliation(row), true);
 });
 
-test("a nonblank solution closes a record without generating a solution date", () => {
+test("a nonblank solution without a date closes and does not generate one", () => {
   for (const solutionDate of [null, ""]) {
     const row = { id: `solution-${String(solutionDate)}`, solution: "已经与客户确认", solutionDate, manualResolutionStatus: null };
     assert.equal(hasValidSolution(row), true);
+    assert.equal(hasSolutionDate(row), false);
+    assert.equal(hasSolutionOnlyResolvedQualification(row), true);
     assert.equal(isClosedReconciliation(row), true);
+    assert.equal(isUnresolvedFollowupReconciliation(row), false);
     assert.equal(row.solutionDate, solutionDate);
+  }
+});
+
+test("a dated solution remains unresolved until the sales user confirms completion", () => {
+  for (const manualResolutionStatus of [null, "reopened"]) {
+    const row = { id: String(manualResolutionStatus), solution: "预计月底处理", solutionDate: "2026-09-30", manualResolutionStatus };
+    assert.equal(isResolvedArchiveReconciliation(row), false);
+    assert.equal(isClosedReconciliation(row), false);
+    assert.equal(isUnresolvedFollowupReconciliation(row), true);
+    assert.equal(isFollowupTrackerReconciliation(row), true);
   }
 });
 
@@ -45,8 +66,8 @@ test("dashboard KPI, drill-down, and archive use the shared qualification", asyn
     readFile(new URL("../app/UnresolvedFollowupDashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/ProblemFollowupDrawer.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(dashboard, /isClosedReconciliation/);
-  assert.match(tracker, /isClosedReconciliation\(row\)/);
-  assert.match(tracker, /hasValidSolution\(row\)/);
+  assert.match(dashboard, /isResolvedArchiveReconciliation/);
+  assert.match(tracker, /isFollowupTrackerReconciliation\(row\)/);
+  assert.match(tracker, /isResolvedArchiveReconciliation\(row\)/);
   assert.match(drawer, /toItems\(/);
 });

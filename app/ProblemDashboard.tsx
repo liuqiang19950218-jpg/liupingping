@@ -12,7 +12,7 @@ import {
 } from "./problem-dashboard-data";
 import { ProblemStageDistribution } from "./ProblemStageDistribution";
 import { ProblemFollowupDrawer } from "./ProblemFollowupDrawer";
-import { isClosedReconciliation } from "../lib/closed-reconciliation-qualification.mjs";
+import { isResolvedArchiveReconciliation } from "../lib/closed-reconciliation-qualification.mjs";
 import "./problem-dashboard.css";
 import "./problem-dashboard-layout.css";
 
@@ -46,7 +46,7 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
   }), [followups, reconciliationById, quarter]);
   const activeItems = useMemo(() => allQuarterItems.filter((item) => item.stage !== "已关闭"), [allQuarterItems]);
   const closedReconciliations = useMemo(
-    () => [...reconciliationById.values()].filter(isClosedReconciliation),
+    () => [...reconciliationById.values()].filter(isResolvedArchiveReconciliation),
     [reconciliationById],
   );
   const currentFilters = { ...filters, quarter: quarter?.label ?? "" };

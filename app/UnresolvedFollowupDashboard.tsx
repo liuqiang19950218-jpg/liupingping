@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { reconciliationApi, type QuarterFollowupItem, type Reconciliation } from "../lib/api/reconciliation-api";
-import { isLegacyTrackerItem } from "../lib/followup-tracker-routing.mjs";
-import { hasValidSolution, isClosedReconciliation } from "../lib/closed-reconciliation-qualification.mjs";
+import {
+  isFollowupTrackerReconciliation,
+  isResolvedArchiveReconciliation,
+} from "../lib/closed-reconciliation-qualification.mjs";
 import { businessDayDistance, normalizeDateOnly } from "../lib/date-only.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import { VoiceInputButton } from "./VoiceInputButton";
@@ -184,10 +186,7 @@ export function toItems(quarter: string, rows: Map<string, Reconciliation>, foll
   return [...rows.values()].flatMap((row) => {
     const followup = followupByReconciliation.get(row.id);
     const firstTime = row.solutionDate?.trim() ?? "";
-    // Keep the historical date scope, and include the approved solution-only
-    // records so the archive, problem-dashboard closed KPI, and drill-down
-    // share one reconciliation-level qualification.
-    if (!isLegacyTrackerItem(row) && !hasValidSolution(row)) return [];
+    if (!isFollowupTrackerReconciliation(row)) return [];
     return [{
       id: followup?.id ?? `solution:${row.id}`,
       reconciliationId: row.id,
@@ -204,7 +203,7 @@ export function toItems(quarter: string, rows: Map<string, Reconciliation>, foll
       followUps: followup?.events.map((event) => ({ time: event.occurredAt, solution: event.content ?? "" })) ?? [],
       financeAttention: row.financeAttention ?? "none",
       processStage: followup?.processStage && followup.processStage !== "已关闭" ? followup.processStage as Exclude<ProcessStage, "已关闭"> : null,
-      resolved: isClosedReconciliation(row),
+      resolved: isResolvedArchiveReconciliation(row),
     }];
   }).filter((item) => item.customer);
 }
