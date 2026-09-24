@@ -44,9 +44,13 @@ test("detail form has solution fields only and writes no followup", async () => 
 });
 
 test("legacy tracker uses persisted manual status and keeps later events separate", async () => {
-  const page = await read("app/UnresolvedFollowupDashboard.tsx");
+  const [page, qualification] = await Promise.all([
+    read("app/UnresolvedFollowupDashboard.tsx"),
+    read("lib/closed-reconciliation-qualification.mjs"),
+  ]);
   assert.match(page, /isLegacyTrackerItem\(row\)/);
-  assert.match(page, /legacyTrackerTab\(row\.manualResolutionStatus\)/);
+  assert.match(page, /isClosedReconciliation\(row\)/);
+  assert.match(qualification, /legacyTrackerTab\(row\?\.manualResolutionStatus\)/);
   assert.doesNotMatch(page, /solutionFollowupBucket\(/);
   assert.match(page, /followUps: followup\?\.events/);
   assert.match(page, /else await reconciliationApi\.createFollowup/);

@@ -12,6 +12,7 @@ import {
 } from "./problem-dashboard-data";
 import { ProblemStageDistribution } from "./ProblemStageDistribution";
 import { ProblemFollowupDrawer } from "./ProblemFollowupDrawer";
+import { isClosedReconciliation } from "../lib/closed-reconciliation-qualification.mjs";
 import "./problem-dashboard.css";
 import "./problem-dashboard-layout.css";
 
@@ -44,12 +45,19 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
     return { id: followup.id, quarter: quarter?.label ?? "", accountSet: row?.accountSet ?? "", region: row?.region ?? "未填写区域", customer: row?.customer ?? "", owner: row?.ownerName ?? "", difference: Number(row?.reconciliationDifference ?? 0), solution: row?.solution ?? "", cause: row?.solution ?? "", expectedDate: followup.expectedCompleteAt ?? "", latestFollowUpAt: followup.latestFollowUpAt ?? followup.latestEvent?.occurredAt ?? "", updatedAt: followup.updatedAt ?? "", followStatus: followup.followStatus, processStage: followup.processStage ?? "", financeAttention: "无需关注", riskLevel, stage, overdueDays: getOverdueDays(followup.expectedCompleteAt ?? "") } as unknown as DashboardIssue;
   }), [followups, reconciliationById, quarter]);
   const activeItems = useMemo(() => allQuarterItems.filter((item) => item.stage !== "已关闭"), [allQuarterItems]);
+  const closedReconciliations = useMemo(
+    () => [...reconciliationById.values()].filter(isClosedReconciliation),
+    [reconciliationById],
+  );
   const currentFilters = { ...filters, quarter: quarter?.label ?? "" };
   const items = useMemo(() => filterProblemItemList(activeItems, currentFilters), [activeItems, currentFilters]);
   const closedCount = useMemo(() => {
     if (filters.stage !== "全部" && filters.stage !== "已关闭") return 0;
-    return allQuarterItems.filter((item) => item.stage === "已关闭" && (filters.region === "全部" || item.region === filters.region) && (filters.owner === "全部" || item.owner === filters.owner)).length;
-  }, [allQuarterItems, filters]);
+    return closedReconciliations.filter((item) =>
+      (filters.region === "全部" || item.region === filters.region) &&
+      (filters.owner === "全部" || item.ownerName === filters.owner),
+    ).length;
+  }, [closedReconciliations, filters]);
   const dashboard = useMemo(() => buildProblemDashboard(items, closedCount), [items, closedCount]);
   const regions = useMemo(() => [...new Set(allQuarterItems.map((item) => item.region))], [allQuarterItems]);
   const owners = useMemo(() => [...new Set(allQuarterItems.map((item) => item.owner).filter(Boolean))], [allQuarterItems]);
@@ -93,7 +101,11 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
     ["本周待办", dashboard.metrics.week, "✓", "blue", "week"],
   ] as const;
   const handleMetric = (key: string) => drill({ filter: key });
-  const selectStage = (stage: string) => drill({ stage });
+  const selectStage = (stage: string) => drill({
+    stage,
+    ...(filters.region === "全部" ? {} : { region: filters.region }),
+    ...(filters.owner === "全部" ? {} : { owner: filters.owner }),
+  });
 
   if (error) return <section className="pd-page"><p className="pd-empty">无法读取问题看板：{error}</p></section>;
   if (loading) return <section className="pd-page" aria-busy><p className="pd-empty">正在读取问题看板…</p></section>;
