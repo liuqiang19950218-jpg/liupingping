@@ -67,6 +67,7 @@ test("dashboard KPI, drill-down, and archive use the shared qualification", asyn
     readFile(new URL("../app/ProblemFollowupDrawer.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(dashboard, /isResolvedArchiveReconciliation/);
+  assert.match(dashboard, /Boolean\(item\.customer\?\.trim\(\)\)/);
   assert.match(tracker, /isFollowupTrackerReconciliation\(row\)/);
   assert.match(tracker, /isResolvedArchiveReconciliation\(row\)/);
   assert.match(drawer, /toItems\(/);

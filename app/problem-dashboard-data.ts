@@ -7,6 +7,7 @@ import {
   topPendingIssuesByDifference,
   type ReconciliationIssue,
 } from "./reconciliation-insights";
+import { PROCESS_MANAGEMENT_STAGES, processManagementStage } from "../lib/problem-process-stage.mjs";
 
 export type ProblemFilters = {
   quarter: string;
@@ -57,13 +58,28 @@ export function filterAllProblemItems(filters: ProblemFilters) {
   return filterItems(allIssuesForQuarter(filters.quarter), filters);
 }
 
+export function managementStageOf(item: Pick<ReconciliationIssue, "stage" | "overdueDays">) {
+  return processManagementStage({ processStage: item.stage, overdueDays: item.overdueDays });
+}
+
+export function buildManagementStageDistribution(items: ReconciliationIssue[], closedCount: number): StageItem[] {
+  const total = items.length + closedCount;
+  const colors: Record<string, string> = {
+    "待确认": "#20a8d8", "处理中": "#f6bd16", "等待客户反馈": "#25bda5", "超期跟进": "#ef6a6a", "已关闭": "#b8bfd8",
+  };
+  return PROCESS_MANAGEMENT_STAGES.map((name) => {
+    const count = name === "已关闭" ? closedCount : items.filter((item) => managementStageOf(item) === name).length;
+    return { name, count, ratio: total ? count / total : 0, color: colors[name] };
+  });
+}
+
 function filterItems(source: ReconciliationIssue[], filters: ProblemFilters) {
   return source.filter((item) => {
     if (filters.region !== "全部" && item.region !== filters.region) return false;
     if (filters.owner !== "全部" && item.owner !== filters.owner) return false;
     if (filters.risk !== "全部" && item.riskLevel !== filters.risk) return false;
     if (filters.cause !== "全部" && item.cause !== filters.cause) return false;
-    if (filters.stage !== "全部" && stageOf(item) !== filters.stage) return false;
+    if (filters.stage !== "全部" && stageOf(item) !== filters.stage && managementStageOf(item) !== filters.stage) return false;
     if (filters.follow !== "全部" && followStateOf(item) !== filters.follow) return false;
     if (filters.aging !== "全部") {
       const found = AGES.find(([name]) => name === filters.aging);
