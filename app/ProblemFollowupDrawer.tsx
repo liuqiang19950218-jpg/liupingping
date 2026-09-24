@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { differenceReasonsByReconciliation } from "../lib/difference-reason-summary.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
-import { filterFollowupTrackerItems, followupManagementStage, toItems } from "./UnresolvedFollowupDashboard";
+import { filterFollowupTrackerItems, followupStage, toItems } from "./UnresolvedFollowupDashboard";
 import "./problem-followup-drawer.css";
 
 type Props = { filterContext: Record<string, string>; onClose: () => void; onEnterFollowup: () => void };
@@ -22,7 +22,7 @@ export function ProblemFollowupDrawer({ filterContext, onClose, onEnterFollowup 
   const contextLabels = Object.entries(filterContext).filter(([, value]) => Boolean(value)).map(([key, value]) => `${LABELS[key] ?? key}：${key === "filter" ? FILTER_LABELS[value] ?? value : value}`);
   const items = useMemo(() => filterFollowupTrackerItems(toItems(quarter?.label ?? "", reconciliationById, followups), filterContext), [quarter, reconciliationById, followups, filterContext]);
   const reasons = useMemo(() => differenceReasonsByReconciliation(differenceItems, quarter?.code ?? ""), [differenceItems, quarter]);
-  const rows = useMemo(() => items.map((item) => ({ item, reason: reasons.get(item.reconciliationId) || "—", status: followupManagementStage(item), solution: item.firstSolution || "—", solutionDate: item.firstTime || "—" })), [items, reasons]);
+  const rows = useMemo(() => items.map((item) => ({ item, reason: reasons.get(item.reconciliationId) || "—", status: followupStage(item), solution: item.firstSolution || "—", solutionDate: item.firstTime || "—" })), [items, reasons]);
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     const result = !query ? rows : rows.filter(({ item, reason, status, solution, solutionDate }) => [item.customer, item.accountSet, item.region, item.owner, item.amount, reason, status, solution, solutionDate].join(" ").toLocaleLowerCase().includes(query));

@@ -14,7 +14,7 @@ test("drawer uses canonical followup filtering and difference descriptions", asy
   const drawer = await readFile(new URL("../app/ProblemFollowupDrawer.tsx", import.meta.url), "utf8");
   assert.match(drawer, /filterFollowupTrackerItems/);
   assert.match(drawer, /differenceReasonsByReconciliation/);
-  assert.match(drawer, /followupManagementStage/);
+  assert.match(drawer, /followupStage/);
   assert.match(drawer, /解决方案/);
   assert.match(drawer, /解决时间/);
   assert.doesNotMatch(drawer, /item\.solution/);

@@ -6,7 +6,6 @@ import {
   isFollowupTrackerReconciliation,
   isResolvedArchiveReconciliation,
 } from "../lib/closed-reconciliation-qualification.mjs";
-import { processManagementStage } from "../lib/problem-process-stage.mjs";
 import { businessDayDistance, normalizeDateOnly } from "../lib/date-only.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import { VoiceInputButton } from "./VoiceInputButton";
@@ -125,11 +124,6 @@ export const followupStage = (item: Item): ProcessStage => {
   if (content.includes("申请")) return "待销售走申请";
   return "待核查";
 };
-export const followupManagementStage = (item: Item) => processManagementStage({
-  isClosed: item.resolved,
-  processStage: followupStage(item),
-  overdueDays: dayDistance(item.expectedDate) ?? 0,
-});
 const stageOf = followupStage;
 export const matchesFollowupDashboardMetric = (item: Item, filter: DashboardMetricFilter) => {
   const daysSinceFollowUp = dayDistance(latest(item)) ?? 0;
@@ -223,21 +217,16 @@ export function filterFollowupTrackerItems(items: Item[], filters: Record<string
   const filter = (filters.filter ?? "") as DashboardMetricFilter;
   const stage = filters.stage ?? "";
   const query = (filters.owner || filters.customer || "").trim().toLocaleLowerCase();
-  const managementStage = ["待确认", "处理中", "等待客户反馈", "超期跟进", "已关闭"].includes(stage);
   return filterFollowupTrackerItemsByState(items, {
     tab: stage === "已关闭" ? "resolved" : "pending",
     region: filters.region ?? ALL,
     search: query,
     risk: "全部",
     finance: "全部",
-    processStage: managementStage ? "全部" : stage || "全部",
+    processStage: stage || "全部",
     dashboardMetricFilter: filter,
     tableFilters: {},
-  }).filter((item) =>
-    (!filters.owner || item.owner === filters.owner) &&
-    (!filters.customer || item.customer.includes(filters.customer)) &&
-    (!managementStage || followupManagementStage(item) === stage),
-  );
+  });
 }
 
 export type FollowupTrackerFilterState = {
