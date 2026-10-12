@@ -3,18 +3,31 @@ import { handleRouteError } from "../../../../lib/server/recon/errors";
 
 export const runtime = "nodejs";
 
-const labels: Record<string, string> = {
-  NEW_QUARTER_BASE: "新季度基础导入",
-  UPDATE_COMPANY_RECEIVABLE: "公司应收增量更新",
-};
-
 export async function GET() {
   try {
     const result = await withPostgresClient((client) => client.query(
-      "SELECT b.id::text, b.data_type, q.code quarter, b.original_file_name, b.source_sha256, b.imported_at, b.status, b.inserted_count, b.updated_count FROM recon.import_batches b JOIN recon.quarters q ON q.id=b.quarter_id WHERE b.data_type = ANY($1::text[]) ORDER BY b.imported_at DESC LIMIT 50",
-      [Object.keys(labels)],
+      `SELECT
+         b.id::text AS "id",
+         b.data_type AS "dataType",
+         q.code AS "quarter",
+         b.original_file_name AS "fileName",
+         b.source_sha256 AS "sourceSha256",
+         b.imported_at AS "importedAt",
+         u.display_name AS "operator",
+         b.valid_record_count AS "validRecordCount",
+         b.inserted_count AS "insertedCount",
+         b.updated_count AS "updatedCount",
+         b.skipped_count AS "skippedCount",
+         b.error_count AS "errorCount",
+         b.target_module AS "targetModule",
+         b.status AS "status",
+         b.details AS "details"
+       FROM recon.import_batches b
+       LEFT JOIN recon.quarters q ON q.id = b.quarter_id
+       LEFT JOIN recon.users u ON u.id = b.imported_by
+       ORDER BY b.imported_at DESC NULLS LAST, b.created_at DESC`,
     ));
-    return Response.json({ batches: result.rows.map((row) => ({ ...row, label: labels[String(row.data_type)] })) });
+    return Response.json({ batches: result.rows });
   } catch (error) {
     return handleRouteError(error, {});
   }

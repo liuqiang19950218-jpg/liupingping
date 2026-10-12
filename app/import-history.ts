@@ -19,13 +19,14 @@ export type ImportHistoryRecord = {
   id: string;
   fileName: string;
   importedAt?: string;
-  dataType: "reconciliation" | "ledger" | "materials" | "spd" | "companyReceivable";
+  dataType: string;
   description: string;
   recordCount?: number;
   targetStore: string;
   quarter?: string;
   operator: string;
   status: ImportStatus;
+  sourceSha256?: string;
   sourceKey?: string;
   isHistorical?: boolean;
   stats?: {
@@ -43,16 +44,21 @@ export type LedgerImportSnapshot = {
   updatedAt: string;
 };
 
-const labels: Record<ImportHistoryRecord["dataType"], string> = {
+const labels: Record<string, string> = {
   reconciliation: "对账表",
   ledger: "往来明细",
   materials: "资料提供情况",
   spd: "SPD 表",
   companyReceivable: "应收更新",
+  NEW_QUARTER_BASE: "新季度基础导入",
+  UPDATE_COMPANY_RECEIVABLE: "公司应收增量更新",
+  MATERIAL_STATUS_IMPORT: "资料提供情况",
+  INDEPENDENT_SPD_IMPORT: "SPD 表",
+  COMPANY_RECEIVABLE_UPDATE: "公司应收更新",
+  HISTORICAL_LEDGER_REPLACE: "历史往来底库替换",
 };
 
-export const importTypeLabel = (type: ImportHistoryRecord["dataType"]) =>
-  labels[type];
+export const importTypeLabel = (type: string) => labels[type] ?? type;
 
 export function readImportHistory(): ImportHistoryRecord[] {
   try {
@@ -73,13 +79,10 @@ export function recordImport(
     operator?: string;
   },
 ) {
-  const next: ImportHistoryRecord = {
-    ...record,
-    id: `import-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    operator: record.operator || "本机用户",
-  };
-  writeImportHistory([next, ...readImportHistory()]);
-  return next;
+  // Import batches are committed by the server.  Keep this compatibility hook
+  // only to refresh database-backed viewers after an existing import flow ends.
+  void record;
+  window.dispatchEvent(new Event(IMPORT_HISTORY_UPDATED));
 }
 
 /**

@@ -1953,7 +1953,7 @@ export function QuarterlyReconciliation({
               </span>
             </div>
             <QuarterArchiveDownload />
-            <ImportDashboard ledger={currentLedgerInfo} />
+            <ImportDashboard />
           </>
         ) : !sheet ? (
           <div className="local-empty">

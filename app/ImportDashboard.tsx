@@ -3,17 +3,53 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   IMPORT_HISTORY_UPDATED,
-  backfillImportHistory,
   formatImportTime,
   importStatusLabel,
   importTypeLabel,
-  readImportHistory,
   type ImportHistoryRecord,
-  type LedgerImportSnapshot,
 } from "./import-history";
 
-type Props = { ledger?: LedgerImportSnapshot | null };
 type Order = "desc" | "asc";
+
+type DatabaseImportBatch = {
+  id: string;
+  dataType: string;
+  quarter: string | null;
+  fileName: string | null;
+  sourceSha256: string | null;
+  importedAt: string | null;
+  operator: string | null;
+  validRecordCount: number | null;
+  insertedCount: number | null;
+  updatedCount: number | null;
+  skippedCount: number | null;
+  errorCount: number | null;
+  targetModule: string;
+  status: ImportHistoryRecord["status"];
+  details: { note?: unknown } | null;
+};
+
+const databaseRecord = (batch: DatabaseImportBatch): ImportHistoryRecord => ({
+  id: batch.id,
+  fileName: batch.fileName || "未记录文件名",
+  importedAt: batch.importedAt || undefined,
+  dataType: batch.dataType,
+  description: typeof batch.details?.note === "string"
+    ? batch.details.note
+    : `PostgreSQL 导入批次：${batch.targetModule}`,
+  recordCount: batch.validRecordCount ?? undefined,
+  targetStore: `PostgreSQL · ${batch.targetModule}`,
+  quarter: batch.quarter || undefined,
+  operator: batch.operator || "未记录",
+  status: batch.status,
+  sourceSha256: batch.sourceSha256 || undefined,
+  stats: {
+    inserted: batch.insertedCount ?? undefined,
+    updated: batch.updatedCount ?? undefined,
+    skipped: batch.skippedCount ?? undefined,
+    errors: batch.errorCount ?? undefined,
+  },
+});
 
 const isCompleted = (status: ImportHistoryRecord["status"]) =>
   status === "success" || status === "partial";
@@ -38,28 +74,36 @@ const previousDayKey = () => {
   return localDay(date.toISOString());
 };
 
-export function ImportDashboard({ ledger }: Props) {
+export function ImportDashboard() {
   const [records, setRecords] = useState<ImportHistoryRecord[]>([]);
+  const [loadError, setLoadError] = useState("");
   const [order, setOrder] = useState<Order>("desc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selected, setSelected] = useState<ImportHistoryRecord | null>(null);
 
   useEffect(() => {
-    const refresh = () => {
-      backfillImportHistory(ledger);
-      setRecords(readImportHistory());
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch("/api/imports/history", { cache: "no-store" });
+        const payload = await response.json() as { batches?: DatabaseImportBatch[]; error?: string };
+        if (!response.ok) throw new Error(payload.error || "读取导入历史失败");
+        if (!active) return;
+        setRecords((payload.batches ?? []).map(databaseRecord));
+        setLoadError("");
+      } catch (error) {
+        if (active) setLoadError(error instanceof Error ? error.message : "读取导入历史失败");
+      }
     };
-    refresh();
-    window.addEventListener(IMPORT_HISTORY_UPDATED, refresh);
-    window.addEventListener("reconciliation-quarter-updated", refresh);
-    window.addEventListener("reconciliation-spd-sheet-updated", refresh);
+    void refresh();
+    const refreshFromDatabase = () => void refresh();
+    window.addEventListener(IMPORT_HISTORY_UPDATED, refreshFromDatabase);
     return () => {
-      window.removeEventListener(IMPORT_HISTORY_UPDATED, refresh);
-      window.removeEventListener("reconciliation-quarter-updated", refresh);
-      window.removeEventListener("reconciliation-spd-sheet-updated", refresh);
+      active = false;
+      window.removeEventListener(IMPORT_HISTORY_UPDATED, refreshFromDatabase);
     };
-  }, [ledger]);
+  }, []);
 
   const sorted = useMemo(
     () =>
@@ -98,6 +142,7 @@ export function ImportDashboard({ ledger }: Props) {
           <p>按文件命名展示每次导入记录、数据库更新情况。</p>
         </div>
       </div>
+      {loadError && <p className="import-history-empty" role="alert">导入历史读取失败：{loadError}</p>}
       <div className="import-kpi-grid">
         <article className="import-kpi-card">
           <i className="import-kpi-icon upload" aria-hidden="true">↑</i>
@@ -140,7 +185,7 @@ export function ImportDashboard({ ledger }: Props) {
         </div>
       </article>
 
-      {selected && <div className="import-drawer-backdrop" onMouseDown={() => setSelected(null)}><aside className="import-detail-drawer" role="dialog" aria-modal="true" aria-label="导入记录详情" onMouseDown={(event) => event.stopPropagation()}><header><div><p>导入记录详情</p><h2>{selected.fileName}</h2></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header><section><h3>基本信息</h3><dl><dt>文件名称</dt><dd>{selected.fileName}</dd><dt>导入时间</dt><dd>{formatImportTime(selected.importedAt)}</dd><dt>所属季度</dt><dd>{selected.quarter || "历史版本未记录"}</dd><dt>数据类型</dt><dd>{importTypeLabel(selected.dataType)}</dd><dt>记录数</dt><dd>{typeof selected.recordCount === "number" ? selected.recordCount.toLocaleString() : "历史版本未记录"}</dd><dt>导入人</dt><dd>{selected.operator}</dd><dt>状态</dt><dd><span className={`import-status-badge ${selected.status}`}>{importStatusLabel(selected.status)}</span></dd></dl></section><section><h3>数据更新信息</h3><dl><dt>更新目标表 / 数据库</dt><dd>{selected.targetStore}</dd><dt>新增记录数</dt><dd>{selected.stats?.inserted?.toLocaleString() ?? "历史版本未记录"}</dd><dt>更新记录数</dt><dd>{selected.stats?.updated?.toLocaleString() ?? "历史版本未记录"}</dd><dt>跳过记录数</dt><dd>{selected.stats?.skipped?.toLocaleString() ?? "历史版本未记录"}</dd><dt>异常记录数</dt><dd>{selected.stats?.errors?.toLocaleString() ?? "历史版本未记录"}</dd>{selected.stats?.note && <><dt>说明</dt><dd>{selected.stats.note}</dd></>}</dl></section></aside></div>}
+      {selected && <div className="import-drawer-backdrop" onMouseDown={() => setSelected(null)}><aside className="import-detail-drawer" role="dialog" aria-modal="true" aria-label="导入记录详情" onMouseDown={(event) => event.stopPropagation()}><header><div><p>导入记录详情</p><h2>{selected.fileName}</h2></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header><section><h3>基本信息</h3><dl><dt>文件名称</dt><dd>{selected.fileName}</dd><dt>源文件 SHA256</dt><dd>{selected.sourceSha256 || "未记录"}</dd><dt>导入时间</dt><dd>{formatImportTime(selected.importedAt)}</dd><dt>所属季度</dt><dd>{selected.quarter || "未记录"}</dd><dt>数据类型</dt><dd>{importTypeLabel(selected.dataType)}</dd><dt>记录数</dt><dd>{typeof selected.recordCount === "number" ? selected.recordCount.toLocaleString() : "未记录"}</dd><dt>导入人</dt><dd>{selected.operator}</dd><dt>状态</dt><dd><span className={`import-status-badge ${selected.status}`}>{importStatusLabel(selected.status)}</span></dd></dl></section><section><h3>数据更新信息</h3><dl><dt>更新目标表 / 数据库</dt><dd>{selected.targetStore}</dd><dt>新增记录数</dt><dd>{selected.stats?.inserted?.toLocaleString() ?? "未记录"}</dd><dt>更新记录数</dt><dd>{selected.stats?.updated?.toLocaleString() ?? "未记录"}</dd><dt>跳过记录数</dt><dd>{selected.stats?.skipped?.toLocaleString() ?? "未记录"}</dd><dt>异常记录数</dt><dd>{selected.stats?.errors?.toLocaleString() ?? "未记录"}</dd>{selected.stats?.note && <><dt>说明</dt><dd>{selected.stats.note}</dd></>}</dl></section></aside></div>}
     </section>
   );
 }
