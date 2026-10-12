@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import { QuarterlyReconciliation } from "./QuarterlyReconciliation";
 import { ReconciliationHistoryDashboard } from "./ReconciliationHistoryDashboard";
-import { DashboardOverview } from "./DashboardOverview";
-import { Q1ActionPanel } from "./Q1ActionPanel";
 import { Q1SpecialPanels } from "./Q1SpecialPanels";
 import { UnresolvedFollowupDashboard } from "./UnresolvedFollowupDashboard";
 import { ManagementCockpit } from "./ManagementCockpit";
@@ -14,8 +12,9 @@ import { DashboardDataProvider, useDashboardData } from "./dashboard-postgres-da
 import "./app-shell.css";
 import "./shell-overrides.css";
 import "./problem-dashboard-header.css";
+import "./dashboard-cockpit.css";
 
-const T = { brand:"对账管理", sub:"季度对账与复核工具", history:"对账看板", current:"本季度对账详细情况", import:"数据导入", tracker:"未解决客户跟进", cockpit:"管理层驾驶舱", issue:"问题解决看板", local:"本机数据自动保存" };
+const T = { brand:"应收对账管理系统", sub:"AR RECONCILIATION MANAGEMENT", history:"对账看板", current:"本季度对账详细情况", import:"数据导入", tracker:"未解决客户跟进", cockpit:"管理层驾驶舱", issue:"问题解决看板", local:"自动保存：已保存" };
 type View = "history" | "current" | "import" | "tracker" | "cockpit" | "problem";
 
 function GlobalQuarterFilter() {
@@ -66,7 +65,7 @@ export default function Home() {
 
   return <DashboardDataProvider><main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
     <aside className="side-nav">
-      <div className="side-brand"><i>账</i><div><strong>{T.brand}</strong><span>{T.sub}</span></div></div>
+      <div className="side-brand"><i>◈</i><div><strong>{T.brand}</strong><span>{T.sub}</span></div></div>
       <nav>
         <button className={view === "history" ? "selected" : ""} onClick={() => setView("history")}><i>◈</i>{T.history}</button>
         <button className={view === "current" ? "selected" : ""} onClick={() => setView("current")}><i>≡</i>{T.current}</button>
@@ -76,13 +75,13 @@ export default function Home() {
         <button className={view === "import" ? "selected" : ""} onClick={() => setView("import")}><i>↑</i>{T.import}</button>
         <button onClick={() => setView("current")}><i>⚙</i>系统设置</button>
       </nav>
-      <div className="side-note"><b>使用说明</b><span>已解决客户会从待解决清单移出，并保留解决时间和方案供后续查看。</span></div>
+      <div className="side-note"><b>让对账更简单</b><span>让数据更有价值</span></div>
     </aside>
     <section className="work-area">
-      <header className="work-header"><div><h1>{title}</h1><p>{hint}</p></div>{view === "problem" ? <div className="problem-header-actions"><small>{`◷ 数据更新时间：${updatedAt}`}</small><button onClick={() => window.dispatchEvent(new Event("problem-dashboard-refresh"))}>↻ 刷新数据</button><button className="primary" onClick={() => openTracker()}>进入未解决客户跟进 ›</button></div> : <div className="header-status"><span>◷ {T.local}</span><small>{`更新时间：${updatedAt}`}</small></div>}</header>
+      <header className="work-header"><div><h1>{title}</h1><p>{hint}</p></div>{view === "problem" ? <div className="problem-header-actions"><small>{`◷ 数据更新时间：${updatedAt}`}</small><button onClick={() => window.dispatchEvent(new Event("problem-dashboard-refresh"))}>↻ 刷新数据</button><button className="primary" onClick={() => openTracker()}>进入未解决客户跟进 ›</button></div> : <div className="header-status"><span className="header-user">◉ 当前用户</span><small>{`数据更新时间：${updatedAt}`}</small><span>✓ {T.local}</span></div>}</header>
       <div className="work-content">
         {view !== "current" && view !== "import" && view !== "problem" && <GlobalQuarterFilter />}
-        {view === "history" ? <><CurrentYearLinkedSummary/><DashboardOverview/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>}
+        {view === "history" ? <><CurrentYearLinkedSummary/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>}
       </div>
     </section>
   </main></DashboardDataProvider>;
