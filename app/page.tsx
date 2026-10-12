@@ -10,7 +10,6 @@ import { UnresolvedFollowupDashboard } from "./UnresolvedFollowupDashboard";
 import { ManagementCockpit } from "./ManagementCockpit";
 import { ProblemDashboard } from "./ProblemDashboard";
 import { CurrentYearLinkedSummary } from "./CurrentYearLinkedSummary";
-import { ServerStateBridge } from "./ServerStateBridge";
 import { DashboardDataProvider, useDashboardData } from "./dashboard-postgres-data";
 import "./app-shell.css";
 import "./shell-overrides.css";
@@ -65,7 +64,7 @@ export default function Home() {
     return <main className="app-shell app-shell-loading" aria-busy="true"><div>正在加载本机对账数据…</div></main>;
   }
 
-  return <><ServerStateBridge /><DashboardDataProvider><main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
+  return <DashboardDataProvider><main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
     <aside className="side-nav">
       <div className="side-brand"><i>账</i><div><strong>{T.brand}</strong><span>{T.sub}</span></div></div>
       <nav>
@@ -86,5 +85,5 @@ export default function Home() {
         {view === "history" ? <><CurrentYearLinkedSummary/><DashboardOverview/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>}
       </div>
     </section>
-  </main></DashboardDataProvider></>;
+  </main></DashboardDataProvider>;
 }
