@@ -1,5 +1,3 @@
-import { type CockpitRow, cockpitRows, latestQuarterlyCockpitRows } from "./cockpit-data";
-
 export type RiskLevel = "高风险" | "中风险" | "低风险";
 export type IssueStage =
   | "待销售走申请"
@@ -8,7 +6,29 @@ export type IssueStage =
   | "待核查"
   | "已关闭";
 
-export type ReconciliationIssue = CockpitRow & {
+// Compatibility-only calculation helpers.  The caller owns data acquisition
+// and must pass PostgreSQL-backed rows explicitly.
+export type ReconciliationIssue = {
+  id: string;
+  quarter: string;
+  region: string;
+  owner: string;
+  customer: string;
+  difference: number;
+  cause: string;
+  solution: string;
+  expectedDate: string;
+  followStatus: string;
+  processStage?: string;
+  financeAttention?: "无需关注" | "一般关注" | "需财务复核";
+  transitInvoiceFail?: boolean;
+  returnInvoiceFail?: boolean;
+  lostInvoiceFail?: boolean;
+  instrumentInvoiceFail?: boolean;
+  otherInvoiceFail?: boolean;
+  duplicateInvoice?: boolean;
+  consecutiveUnclear?: boolean;
+} & {
   riskLevel: RiskLevel;
   stage: IssueStage;
   overdueDays: number;
@@ -52,19 +72,20 @@ export const issueRiskOf = (row: CockpitRow): RiskLevel => {
   return "低风险";
 };
 
-export function allIssuesForQuarter(quarter: string): ReconciliationIssue[] {
-  // The problem dashboard is a summary of the actual "待解决清单" rather
-  // than a separate issue source.  A customer first enters that list only
-  // after a first solution has been recorded, and leaves it once resolved.
-  const liveRows = latestQuarterlyCockpitRows();
-  const source = liveRows.length ? liveRows : cockpitRows;
+export function allIssuesForQuarter(
+  source: Array<Omit<ReconciliationIssue, "riskLevel" | "stage" | "overdueDays">>,
+  quarter: string,
+): ReconciliationIssue[] {
   return source
     .filter((row) => row.quarter === quarter && row.filled && row.difference !== 0 && row.solution.trim())
     .map((row) => ({ ...row, riskLevel: issueRiskOf(row), stage: issueStageOf(row), overdueDays: getOverdueDays(row.expectedDate) }));
 }
 
-export function issuesForQuarter(quarter: string): ReconciliationIssue[] {
-  return allIssuesForQuarter(quarter).filter((row) => row.followStatus !== "已解决");
+export function issuesForQuarter(
+  source: Array<Omit<ReconciliationIssue, "riskLevel" | "stage" | "overdueDays">>,
+  quarter: string,
+): ReconciliationIssue[] {
+  return allIssuesForQuarter(source, quarter).filter((row) => row.followStatus !== "已解决");
 }
 
 export const topPendingIssuesByDifference = (items: ReconciliationIssue[], limit = 5) =>

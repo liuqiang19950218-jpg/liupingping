@@ -1,13 +1,49 @@
-import {
-  formatMoney,
-  getOverdueDays,
-  allIssuesForQuarter,
-  issueSummary,
-  issuesForQuarter,
-  topPendingIssuesByDifference,
-  type ReconciliationIssue,
-} from "./reconciliation-insights";
 import { resolveProblemStage } from "../lib/problem-dashboard-stage.mjs";
+
+// This module is presentation-only.  Callers must supply the live
+// PostgreSQL-backed problem set; it never selects a browser snapshot itself.
+export type ReconciliationIssue = {
+  id: string;
+  quarter: string;
+  region: string;
+  owner: string;
+  difference: number;
+  cause: string;
+  solution: string;
+  expectedDate: string;
+  followStatus: string;
+  stage: string;
+  riskLevel: string;
+  overdueDays: number;
+  financeAttention?: string;
+};
+
+export const formatMoney = (value: number, unit: "元" | "万元" = "元") =>
+  unit === "万元"
+    ? `${(value / 10000).toLocaleString("zh-CN", { maximumFractionDigits: 1 })} 万`
+    : value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+
+export const getOverdueDays = (date: string) => {
+  const value = new Date(`${date}T00:00:00`).getTime();
+  return Number.isFinite(value) ? Math.max(0, Math.floor((Date.now() - value) / 86_400_000)) : 0;
+};
+
+const issueSummary = (items: ReconciliationIssue[]) => ({
+  totalAmount: items.reduce((sum, item) => sum + Math.abs(item.difference), 0),
+  overdue: items.filter((item) => item.overdueDays > 7),
+  untouched: items.filter((item) => item.overdueDays >= 7),
+  finance: items.filter((item) => item.financeAttention === "需财务复核"),
+  high: items.filter((item) => item.riskLevel === "高风险"),
+  blockers: [...items.reduce((map, item) => map.set(item.cause || "未填写差额原因", (map.get(item.cause || "未填写差额原因") ?? 0) + 1), new Map<string, number>())]
+    .map(([name, count]) => ({ name, count, ratio: items.length ? count / items.length : 0 }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5),
+});
+
+const topPendingIssuesByDifference = (items: ReconciliationIssue[], limit = 5) =>
+  [...items]
+    .sort((a, b) => b.difference - a.difference || b.overdueDays - a.overdueDays)
+    .slice(0, limit);
 
 export type ProblemFilters = {
   quarter: string;
@@ -46,16 +82,16 @@ const stageOf = (item: ReconciliationIssue) => resolveProblemStage(item).stageNa
 const followStateOf = (item: ReconciliationIssue) =>
   item.overdueDays > 7 ? "已超期" : item.overdueDays > 0 ? "待跟进" : "跟进中";
 
-export function filterProblemItems(filters: ProblemFilters) {
-  return filterItems(issuesForQuarter(filters.quarter), filters);
+export function filterProblemItems(source: ReconciliationIssue[], filters: ProblemFilters) {
+  return filterItems(source, filters);
 }
 
 export function filterProblemItemList(source: ReconciliationIssue[], filters: ProblemFilters) {
   return filterItems(source, filters);
 }
 
-export function filterAllProblemItems(filters: ProblemFilters) {
-  return filterItems(allIssuesForQuarter(filters.quarter), filters);
+export function filterAllProblemItems(source: ReconciliationIssue[], filters: ProblemFilters) {
+  return filterItems(source, filters);
 }
 
 function filterItems(source: ReconciliationIssue[], filters: ProblemFilters) {
@@ -147,4 +183,3 @@ export function buildProblemDashboard(items: ReconciliationIssue[], closedCount 
 export const issueTitle = (item: ReconciliationIssue) => item.cause || item.solution || "待核查对账差额";
 export const issueLatestAt = latestAt;
 export const issueFollowState = followStateOf;
-export { formatMoney, getOverdueDays };
