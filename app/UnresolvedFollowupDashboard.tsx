@@ -7,6 +7,7 @@ import {
 } from "../lib/closed-reconciliation-qualification.mjs";
 import { isCurrentOpenProblem } from "../lib/current-open-problems.mjs";
 import { businessDayDistance, normalizeDateOnly } from "../lib/date-only.mjs";
+import { matchesProblemDashboardStage, resolveProblemStage } from "../lib/problem-dashboard-stage.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import { VoiceInputButton } from "./VoiceInputButton";
 import "./unresolved-followup.css";
@@ -79,6 +80,8 @@ type DashboardMetricFilter =
   | "untouched"
   | "customer"
   | "internal"
+  | "finance_review"
+  | "leader_review"
   | "leader"
   | "week";
 
@@ -116,33 +119,16 @@ const text = (item: Item) =>
 const financeOf = (item: Item): Finance => item.financeAttention;
 const financeLabel = (value: Finance) => value === "none" ? "未设置" : value;
 export const followupStage = (item: Item): ProcessStage => {
-  if (item.resolved) return "已关闭";
-  if (item.processStage) return item.processStage;
-  const content = `${item.firstSolution} ${text(item)}`;
-  if (content.includes("调账") || content.includes("财务")) return "待财务调账";
-  if (content.includes("医院")) return "待销售去医院处理";
-  if (content.includes("申请")) return "待销售走申请";
-  return "待核查";
+  return resolveProblemStage(item).stageName as ProcessStage;
 };
 const stageOf = followupStage;
 export const matchesFollowupDashboardMetric = (item: Item, filter: DashboardMetricFilter) => {
-  const daysSinceFollowUp = dayDistance(latest(item)) ?? 0;
-  switch (filter) {
-    case "overdue":
-      return (dayDistance(item.expectedDate) ?? 0) > 0;
-    case "untouched":
-      return daysSinceFollowUp >= OVERDUE_DAYS;
-    case "customer":
-      return stageOf(item) === "待销售走申请" || stageOf(item) === "待销售去医院处理";
-    case "internal":
-      return stageOf(item) === "待财务调账";
-    case "leader":
-      return financeOf(item) === "需财务复核";
-    case "week":
-      return daysSinceFollowUp <= 7;
-    default:
-      return true;
-  }
+  return matchesProblemDashboardStage({
+    stage: stageOf(item),
+    expectedDate: item.expectedDate,
+    latestFollowupAt: latest(item),
+    financeAttention: financeOf(item),
+  }, filter);
 };
 const riskOf = (item: Item): Risk => {
   const days = dayDistance(latest(item)) ?? 0;
@@ -297,12 +283,12 @@ export function UnresolvedFollowupDashboard() {
     const initialFilter = Object.fromEntries(new URLSearchParams(window.location.search));
     if (initialFilter.region) setRegion(initialFilter.region);
     if (initialFilter.owner || initialFilter.customer) setQuery(initialFilter.owner || initialFilter.customer || "");
-    if (initialFilter.filter === "finance" || initialFilter.filter === "leader") setFinance("需财务复核");
+    if (initialFilter.filter === "finance" || initialFilter.filter === "finance_review") setFinance("需财务复核");
     if (PROCESS_STAGES.includes(initialFilter.stage as ProcessStage)) {
       setProcessStage(initialFilter.stage);
       setTab(initialFilter.stage === "已关闭" ? "resolved" : "pending");
     }
-    if (["all", "overdue", "untouched", "customer", "internal", "leader", "week"].includes(initialFilter.filter ?? "")) {
+    if (["all", "overdue", "untouched", "customer", "internal", "finance_review", "leader_review", "leader", "week"].includes(initialFilter.filter ?? "")) {
       setDashboardMetricFilter(initialFilter.filter as DashboardMetricFilter);
       setTab("pending");
     }
@@ -311,14 +297,14 @@ export function UnresolvedFollowupDashboard() {
       if (!filter) return;
       if (filter.region) setRegion(filter.region);
       if (filter.owner || filter.customer) setQuery(filter.owner || filter.customer || "");
-      if (filter.filter === "finance" || filter.filter === "leader") setFinance("需财务复核");
+      if (filter.filter === "finance" || filter.filter === "finance_review") setFinance("需财务复核");
       if (PROCESS_STAGES.includes(filter.stage as ProcessStage)) {
         setDashboardMetricFilter("");
         setProcessStage(filter.stage);
         setTab(filter.stage === "已关闭" ? "resolved" : "pending");
         return;
       }
-      if (["all", "overdue", "untouched", "customer", "internal", "leader", "week"].includes(filter.filter ?? "")) {
+      if (["all", "overdue", "untouched", "customer", "internal", "finance_review", "leader_review", "leader", "week"].includes(filter.filter ?? "")) {
         setDashboardMetricFilter(filter.filter as DashboardMetricFilter);
         setProcessStage("全部");
         setRisk("全部");

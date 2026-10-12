@@ -31,10 +31,12 @@ test("dashboard and stage drawer share the current open source set", async () =>
   ]);
   assert.match(dashboard, /const currentOpenProblems = useMemo/);
   assert.match(dashboard, /currentOpenTrackerItems\(toItems/);
+  assert.match(dashboard, /countProblemDashboardStage\(currentOpenTrackerProblems/);
   assert.match(dashboard, /filterProblemItemList\(currentOpenProblems/);
   assert.match(dashboard, /currentOpenProblems\.map\(\(item\) => item\.owner\)/);
   assert.match(stages, /target: "等待销售处理"/);
   assert.match(tracker, /const salesGroup = stage === "等待销售处理"/);
+  assert.match(tracker, /matchesProblemDashboardStage/);
 });
 
 test("tracker mapping and non-closed drawer use the shared current-open helper", async () => {

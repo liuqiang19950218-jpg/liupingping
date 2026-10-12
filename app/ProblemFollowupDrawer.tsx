@@ -13,7 +13,7 @@ const PAGE_SIZE = 10;
 const money = (amount: number) => amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
 const text = (value: unknown) => String(value ?? "").trim();
 const LABELS: Record<string, string> = { region: "区域", owner: "责任人", stage: "处理阶段", customer: "客户", filter: "看板筛选", quarter: "季度" };
-const FILTER_LABELS: Record<string, string> = { all: "未关闭问题", overdue: "超期未关闭", untouched: "7天未跟进", customer: "待销售处理", internal: "待内部处理", leader: "需领导介入", week: "本周待办" };
+const FILTER_LABELS: Record<string, string> = { all: "未关闭问题", overdue: "超期未关闭", untouched: "7天未跟进", customer: "待销售处理", internal: "待内部处理", finance_review: "需财务复核", leader_review: "需领导介入", leader: "需领导介入", week: "本周待办" };
 
 export function ProblemFollowupDrawer({ filterContext, onClose, onEnterFollowup }: Props) {
   const { quarter, reconciliationById, followups, differenceItems, loading, error } = useDashboardData();

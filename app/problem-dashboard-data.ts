@@ -7,6 +7,7 @@ import {
   topPendingIssuesByDifference,
   type ReconciliationIssue,
 } from "./reconciliation-insights";
+import { resolveProblemStage } from "../lib/problem-dashboard-stage.mjs";
 
 export type ProblemFilters = {
   quarter: string;
@@ -41,7 +42,7 @@ const AGES = [
 // time so the problem dashboard never reports a generated refresh timestamp.
 const latestAt = (item: ReconciliationIssue) =>
   item.latestFollowUpAt || item.updatedAt || item.expectedDate || "—";
-const stageOf = (item: ReconciliationIssue) => item.stage;
+const stageOf = (item: ReconciliationIssue) => resolveProblemStage(item).stageName;
 const followStateOf = (item: ReconciliationIssue) =>
   item.overdueDays > 7 ? "已超期" : item.overdueDays > 0 ? "待跟进" : "跟进中";
 

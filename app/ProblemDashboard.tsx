@@ -15,6 +15,7 @@ import { ProblemFollowupDrawer } from "./ProblemFollowupDrawer";
 import { followupStage, toItems } from "./UnresolvedFollowupDashboard";
 import { isResolvedArchiveReconciliation } from "../lib/closed-reconciliation-qualification.mjs";
 import { currentOpenTrackerItems } from "../lib/current-open-problems.mjs";
+import { countProblemDashboardStage } from "../lib/problem-dashboard-stage.mjs";
 import "./problem-dashboard.css";
 import "./problem-dashboard-layout.css";
 
@@ -43,15 +44,19 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
   // This is the one live workload set for the process dashboard. `toItems`
   // already applies the canonical closed qualification; resolved rows are
   // deliberately excluded from all current-problem metrics and Top5 counts.
+  const currentOpenTrackerProblems = useMemo(
+    () => currentOpenTrackerItems(toItems(quarter?.label ?? "", reconciliationById, followups), reconciliationById.values()),
+    [followups, reconciliationById, quarter],
+  );
   const currentOpenProblems = useMemo(() => {
     const followupByReconciliation = new Map(followups.map((item) => [item.reconciliationId, item]));
-    return currentOpenTrackerItems(toItems(quarter?.label ?? "", reconciliationById, followups), reconciliationById.values()).map((item) => {
+    return currentOpenTrackerProblems.map((item) => {
     const followup = followupByReconciliation.get(item.reconciliationId);
     const rawRisk = followup?.riskLevel;
     const riskLevel = rawRisk === "high" ? "高风险" : rawRisk === "medium" ? "中风险" : rawRisk === "low" ? "低风险" : rawRisk as "高风险" | "中风险" | "低风险";
-    return { id: item.id, quarter: item.quarter, accountSet: item.accountSet, region: item.region, customer: item.customer, owner: item.owner, difference: item.amount, solution: item.firstSolution, cause: item.firstSolution, expectedDate: followup?.expectedCompleteAt ?? item.expectedDate, latestFollowUpAt: followup?.latestFollowUpAt ?? followup?.latestEvent?.occurredAt ?? "", updatedAt: followup?.updatedAt ?? "", followStatus: followup?.followStatus ?? "pending", processStage: item.processStage ?? "", financeAttention: "无需关注", riskLevel, stage: followupStage(item), overdueDays: getOverdueDays(followup?.expectedCompleteAt ?? item.expectedDate) } as unknown as DashboardIssue;
+    return { id: item.id, quarter: item.quarter, accountSet: item.accountSet, region: item.region, customer: item.customer, owner: item.owner, difference: item.amount, solution: item.firstSolution, cause: item.firstSolution, expectedDate: item.expectedDate, latestFollowUpAt: item.followUps.at(-1)?.time ?? item.firstTime, updatedAt: followup?.updatedAt ?? "", followStatus: followup?.followStatus ?? "pending", processStage: item.processStage ?? "", financeAttention: item.financeAttention, riskLevel, stage: followupStage(item), overdueDays: getOverdueDays(item.expectedDate) } as unknown as DashboardIssue;
     });
-  }, [followups, reconciliationById, quarter]);
+  }, [currentOpenTrackerProblems, followups]);
   const closedReconciliations = useMemo(
     () => [...reconciliationById.values()].filter((item) => Boolean(item.customer?.trim()) && isResolvedArchiveReconciliation(item)),
     [reconciliationById],
@@ -66,6 +71,16 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
     ).length;
   }, [closedReconciliations, filters]);
   const dashboard = useMemo(() => buildProblemDashboard(items, closedCount), [items, closedCount]);
+  const stageCounts = useMemo(() => ({
+    all: countProblemDashboardStage(currentOpenTrackerProblems, "all"),
+    overdue: countProblemDashboardStage(currentOpenTrackerProblems, "overdue"),
+    untouched: countProblemDashboardStage(currentOpenTrackerProblems, "untouched"),
+    customer: countProblemDashboardStage(currentOpenTrackerProblems, "waiting_sales"),
+    internal: countProblemDashboardStage(currentOpenTrackerProblems, "finance_adjustment"),
+    financeReview: countProblemDashboardStage(currentOpenTrackerProblems, "finance_review"),
+    leaderReview: countProblemDashboardStage(currentOpenTrackerProblems, "leader_review"),
+    week: countProblemDashboardStage(currentOpenTrackerProblems, "week"),
+  }), [currentOpenTrackerProblems]);
   const regions = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.region))], [currentOpenProblems]);
   const owners = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.owner).filter(Boolean))], [currentOpenProblems]);
   const causes = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.cause).filter(Boolean))], [currentOpenProblems]);
@@ -99,12 +114,13 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
     window.setTimeout(() => setExporting(false), 260);
   };
   const metrics = [
-    ["未关闭问题", dashboard.metrics.all.length, "▤", "blue", "all"],
-    ["超期未关闭", dashboard.metrics.overdue.length, "◷", "orange", "overdue"],
-    ["7天未跟进", dashboard.metrics.untouched.length, "▦", "purple", "untouched"],
-    ["待销售处理", dashboard.metrics.customer.length, "◌", "cyan", "customer"],
-    ["待内部处理", dashboard.metrics.internal.length, "◎", "blue", "internal"],
-    ["需领导介入", dashboard.metrics.leader.length, "♟", "purple", "leader"],
+    ["未关闭问题", stageCounts.all, "▤", "blue", "all"],
+    ["超期未关闭", stageCounts.overdue, "◷", "orange", "overdue"],
+    ["7天未跟进", stageCounts.untouched, "▦", "purple", "untouched"],
+    ["待销售处理", stageCounts.customer, "◌", "cyan", "customer"],
+    ["待内部处理", stageCounts.internal, "◎", "blue", "internal"],
+    ["需财务复核", stageCounts.financeReview, "♟", "purple", "finance_review"],
+    ["需领导介入", stageCounts.leaderReview, "♟", "purple", "leader_review"],
     ["已关闭", closedCount, "✓", "green", "closed"],
   ] as const;
   const handleMetric = (key: string) => key === "closed" ? selectStage("已关闭") : drill({ filter: key });
@@ -127,7 +143,7 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
       <label>区域<select value={filters.region} onChange={(event) => change("region", event.target.value)}><option>全部</option>{regions.map((item) => <option key={item}>{item}</option>)}</select></label>
       <div className="pd-filter-actions"><button onClick={() => setFilters(emptyFilters(quarter?.label ?? ""))}>↻ 重置</button><button className="primary" disabled={exporting} onClick={exportCurrent}>{exporting ? "导出中" : "↓ 导出"}</button></div>
     </section>
-    <p className="pd-alert">⚠ 当前未关闭问题 <b>{dashboard.total}</b> 个，其中超期 <strong>{dashboard.metrics.overdue.length}</strong> 个，7 天未跟进 <em>{dashboard.metrics.untouched.length}</em> 个，待销售处理 <b>{dashboard.metrics.customer.length}</b> 个，请及时推进问题闭环。</p>
+    <p className="pd-alert">⚠ 当前未关闭问题 <b>{stageCounts.all}</b> 个，其中超期 <strong>{stageCounts.overdue}</strong> 个，7 天未跟进 <em>{stageCounts.untouched}</em> 个，待销售处理 <b>{stageCounts.customer}</b> 个，请及时推进问题闭环。</p>
     <section className="pd-kpis">
       {metrics.map(([name, count, icon, tone, key]) => <button className={`pd-kpi ${tone}`} key={name} onClick={() => handleMetric(key)}><i>{icon}</i><span>{name}</span><strong>{count}</strong><small>{key === "closed" ? "已解决档案" : "当前筛选范围"}</small></button>)}
     </section>
