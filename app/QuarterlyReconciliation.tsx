@@ -10,16 +10,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { updateDashboardSnapshot } from "./cockpit-data";
-import {
-  ensureArchiveFromActive,
-  quarterOf,
-  quarterOptions,
-  selectQuarter,
-  selectedQuarter,
-  sheetForQuarter,
-  writeArchivedSheet,
-} from "./quarter-storage";
+import { quarterOf } from "./quarter-storage";
 import { ImportDashboard } from "./ImportDashboard";
 import { DataImportCenter } from "./DataImportCenter";
 import { QuarterArchiveDownload } from "./QuarterArchiveDownload";
@@ -177,7 +168,6 @@ const T = {
     "\u8bf7\u5b8c\u6574\u586b\u5199\u65e5\u671f\u3001\u53d1\u7968\u53f7\u548c\u91d1\u989d",
   saved: "\u5df2\u4fdd\u5b58\u9500\u552e\u586b\u5199\u5185\u5bb9\u3002",
 };
-const STORAGE_KEY = "local-quarterly-reconciliation";
 const TABLE_VIEW_KEY = "local-quarterly-reconciliation-table-view";
 const PG_SELECTED_QUARTER_KEY = "postgres-quarterly-reconciliation-selected-quarter";
 const SPD_CONFIRMATION_HEADER = "SPD\u786e\u8ba4\u8868";
@@ -696,14 +686,12 @@ export function QuarterlyReconciliation({
       includeMaterial ? reconciliationApi.getMaterialStatus(quarter) : Promise.resolve(null),
       reconciliationApi.listQuarterDifferenceItems(quarter),
     ]);
-    // The legacy import view persists every sheet change to its archive.  These
-    // business imports must only refresh PostgreSQL-backed state, never seed it.
-    if (mode !== "import") {
-      setSheet(apiSheet(quarter, reconciliationResult.reconciliations, materialResult?.material ?? [], differenceResult.items));
-      setApiIds(preserveImportedOrder(reconciliationResult.reconciliations).map((item) => item.id));
-      setApiDifferenceItems({});
-      setRefreshNonce((current) => current + 1);
-    }
+    // Import-mode changes refresh PostgreSQL-backed state; browser business
+    // snapshots never seed or replace the displayed data.
+    setSheet(apiSheet(quarter, reconciliationResult.reconciliations, materialResult?.material ?? [], differenceResult.items));
+    setApiIds(preserveImportedOrder(reconciliationResult.reconciliations).map((item) => item.id));
+    setApiDifferenceItems({});
+    setRefreshNonce((current) => current + 1);
     window.dispatchEvent(new Event("reconciliation-dashboard-updated"));
   };
   const setFilterColumn = (column: number | null) => {
@@ -721,8 +709,6 @@ export function QuarterlyReconciliation({
       return;
     }
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setSheet(JSON.parse(saved));
       const savedView = localStorage.getItem(TABLE_VIEW_KEY);
       if (savedView) {
         const view = JSON.parse(savedView) as Partial<TableView>;
@@ -744,32 +730,6 @@ export function QuarterlyReconciliation({
     } finally {
       setViewReady(true);
     }
-  }, [mode]);
-  useEffect(() => {
-    if (mode !== "import") return;
-    ensureArchiveFromActive();
-    const refreshArchive = () => {
-      const quarter = selectedQuarter();
-      setArchivedQuarters(quarterOptions());
-      const archived = sheetForQuarter(quarter);
-      if (archived) setSheet(archived as LocalSheet);
-    };
-    const refreshOptions = () => {
-      setArchivedQuarters(quarterOptions());
-    };
-    refreshArchive();
-    window.addEventListener("reconciliation-quarter-selected", refreshArchive);
-    window.addEventListener("reconciliation-quarter-updated", refreshOptions);
-    return () => {
-      window.removeEventListener(
-        "reconciliation-quarter-selected",
-        refreshArchive,
-      );
-      window.removeEventListener(
-        "reconciliation-quarter-updated",
-        refreshOptions,
-      );
-    };
   }, [mode]);
   useEffect(() => {
     if (mode !== "import") return;
@@ -796,7 +756,6 @@ export function QuarterlyReconciliation({
     return () => controller.abort();
   }, [mode]);
   useEffect(() => {
-    if (mode === "import") return;
     const controller = new AbortController();
     apiRequest.current?.abort();
     apiRequest.current = controller;
@@ -818,6 +777,7 @@ export function QuarterlyReconciliation({
         ]);
         if (controller.signal.aborted) return;
         setArchivedQuarters(options);
+        setPostgresQuarters(options);
         setActiveQuarter(quarter);
         setApiIds(preserveImportedOrder(reconciliations).map((item) => item.id));
         setApiDifferenceItems({});
@@ -825,6 +785,7 @@ export function QuarterlyReconciliation({
         setMessage("");
       } catch (error) {
         if (controller.signal.aborted) return;
+        setPostgresQuarters([]);
         setApiIds([]);
         setApiDifferenceItems({});
         setSheet(null); // Never retain old business data after an API failure.
@@ -858,11 +819,6 @@ export function QuarterlyReconciliation({
     window.addEventListener("reconciliation-open-current-detail", applyDetailTarget);
     return () => window.removeEventListener("reconciliation-open-current-detail", applyDetailTarget);
   }, []);
-  useEffect(() => {
-    if (mode !== "import" || !sheet || !viewReady) return;
-    writeArchivedSheet(sheet);
-    setArchivedQuarters(quarterOptions());
-  }, [sheet, viewReady, mode]);
   useEffect(() => {
     const timer = window.setTimeout(
       () => setSearchQuery(searchInput.trim()),
@@ -1024,45 +980,6 @@ export function QuarterlyReconciliation({
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
   }, [page, pageCount]);
-  const saveSheet = (next: LocalSheet, syncDashboards = false) => {
-    const headers = [...next.headers];
-    const solution = "\u89e3\u51b3\u65b9\u6848",
-      time = "\u89e3\u51b3\u65f6\u95f4";
-    if (!headers.includes(T.lost)) headers.push(T.lost);
-    if (!headers.includes(T.instrument)) headers.push(T.instrument);
-    if (!headers.includes(solution)) headers.push(solution);
-    if (!headers.includes(time)) headers.push(time);
-    MATERIAL_HEADERS.forEach((header) => {
-      if (!headers.includes(header)) headers.push(header);
-    });
-    const ordered = placeMaterialHeaders(
-      reorderReviewColumns({
-        ...next,
-        headers,
-        rows: next.rows.map((row) => [...row]),
-      }),
-    );
-    const rows = ordered.rows.map((row) => [...row]);
-    Object.entries(ordered.details ?? {}).forEach(([id, detail]) => {
-      const row = rows[Number(id)];
-      if (row) {
-        row[ordered.headers.indexOf(T.lost)] = sumInvoiceEntries(detail.lost ?? []);
-        row[ordered.headers.indexOf(T.instrument)] = sumInvoiceEntries(
-          detail.instrument ?? [],
-        );
-        row[ordered.headers.indexOf(solution)] = detail.resolutionSolution;
-        row[ordered.headers.indexOf(time)] = detail.resolutionTime;
-      }
-    });
-    const saved = { ...ordered, rows };
-    setSheet(saved);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-    window.dispatchEvent(new Event("reconciliation-updated"));
-    if (syncDashboards) {
-      writeArchivedSheet(saved);
-      updateDashboardSnapshot();
-    }
-  };
   const changeQuarter = (quarter: string) => {
     if (mode !== "import") {
       localStorage.setItem(PG_SELECTED_QUARTER_KEY, quarter);
@@ -1084,17 +1001,7 @@ export function QuarterlyReconciliation({
     if (i >= 0) row[i] = value;
   };
   const updateResponsible = (value: string) => {
-    const nextForm = { ...form, responsible: value };
-    setForm(nextForm);
-    if (mode !== "import") return;
-    if (!sheet || active === null || responsibleIndex < 0) return;
-    const rows = sheet.rows.map((row) => [...row]);
-    rows[active][responsibleIndex] = value;
-    saveSheet({
-      ...sheet,
-      rows,
-      details: { ...(sheet.details ?? {}), [String(active)]: nextForm },
-    });
+    setForm({ ...form, responsible: value });
   };
   const hideColumn = (column: number) => {
     setHiddenColumns((columns) =>
@@ -1190,34 +1097,14 @@ export function QuarterlyReconciliation({
     );
   };
   const refreshTable = () => {
-    if (mode !== "import") {
-      setRefreshNonce((value) => value + 1);
-      return;
-    }
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved)
-        setSheet(
-          reorderReviewColumns(backfillClearedStatus(JSON.parse(saved))),
-        );
-    } catch {
-      /* Keep the currently visible sheet if the saved copy is unavailable. */
-    }
+    setRefreshNonce((value) => value + 1);
     setRegion(T.all);
     setStripeFilter("all");
     setColumnFilters({});
     setFilterColumns([]);
     setHiddenColumns([]);
     setSalesHidden(false);
-    setMessage("已刷新表格，并恢复全部明细。");
-  };
-  const updateDashboards = () => {
-    const count = updateDashboardSnapshot();
-    setMessage(
-      count
-        ? `已将 ${count} 条本年度对账记录更新到其他看板。`
-        : "暂无可更新的本年度对账数据。",
-    );
+    setMessage("已从 PostgreSQL 刷新表格和全部明细。");
   };
 
   async function importFile(event: ChangeEvent<HTMLInputElement>) {
@@ -1265,7 +1152,9 @@ export function QuarterlyReconciliation({
         stats: { inserted: result.importedRows },
       });
       localStorage.setItem(PG_SELECTED_QUARTER_KEY, result.quarter);
-      selectQuarter(result.quarter);
+      setPostgresQuarters(quarters.map((item) => item.code));
+      setActiveQuarter(result.quarter);
+      setRefreshNonce((current) => current + 1);
       setImportedQuarter(result.quarter);
       setRegion(T.all);
       setMessage(`导入成功：${result.quarter} 共 ${result.importedRows} 条，正在显示 PostgreSQL 最新数据。`);
@@ -1612,15 +1501,7 @@ export function QuarterlyReconciliation({
   }
   async function commit() {
     if (!sheet || active === null) return;
-    const needsCheck = [
-      ...form.transit,
-      ...form.returned,
-      ...form.lost,
-      ...form.instrument,
-      ...form.otherInvoice,
-    ].filter(hasInvoiceNumber);
-    if (mode !== "import") {
-      const reconciliationId = apiIds[active];
+    const reconciliationId = apiIds[active];
       if (!reconciliationId || !activeQuarter) return;
       if (saving) return;
       const mutationKey = `reconciliation:${reconciliationId}`;
@@ -1703,64 +1584,7 @@ export function QuarterlyReconciliation({
       } finally {
         if (mutationSequence.current.get(mutationKey) === sequence) setSaving(false);
       }
-      return;
-    }
-    const company = num(form.companyAmount);
-    const customer = num(form.customerAmount);
-    const difference = company - customer;
-    const transit = sumInvoiceEntries(form.transit);
-    const returned = sumInvoiceEntries(form.returned);
-    const lost = sumInvoiceEntries(form.lost);
-    const instrument = sumInvoiceEntries(form.instrument);
-    const otherInvoice = sumInvoiceEntries(form.otherInvoice);
-    const other = sum(form.other);
-    const total = transit + returned + lost + instrument + otherInvoice + other;
-    const rows = sheet.rows.map((row) => [...row]);
-    const row = rows[active];
-    setCell(row, T.customerBook, form.customerAmount === "" ? "" : customer);
-    setCell(row, T.difference, form.customerAmount === "" ? "" : difference);
-    setCell(row, T.transit, transit);
-    setCell(row, T.returned, returned);
-    setCell(row, T.lost, lost);
-    setCell(row, T.instrument, instrument);
-    setCell(row, T.other, otherInvoice + other);
-    setCell(row, T.badDebt, form.badDebt);
-    setCell(row, T.adjustment, form.adjustment);
-    const notes = [
-      ...meaningfulInvoiceEntries(form.transit).map((e) => e.note && `在途：${e.note}`),
-      ...meaningfulInvoiceEntries(form.returned).map((e) => e.note && `退票：${e.note}`),
-      ...meaningfulInvoiceEntries(form.lost).map((e) => e.note && `丢票：${e.note}`),
-      ...meaningfulInvoiceEntries(form.instrument).map((e) => e.note && `仪器设备：${e.note}`),
-      ...meaningfulInvoiceEntries(form.otherInvoice).map((e) => e.note && `其他（有发票）：${e.note}`),
-      ...form.other.map((e) => e.note && `其他：${e.note}`),
-    ]
-      .filter(Boolean)
-      .join("；");
-    setCell(row, T.note, notes);
-    if (clearedIndex >= 0)
-      row[clearedIndex] =
-        form.customerAmount === ""
-          ? T.unreconciled
-          : Math.abs(difference) < 0.01 || Math.abs(difference - total) < 0.01
-            ? T.clear
-            : T.uncleared;
-    saveSheet({
-      ...sheet,
-      rows,
-      details: {
-        ...(sheet.details ?? {}),
-        [String(active)]: {
-          ...form,
-          transit: normalizeInvoiceEntries(form.transit),
-          returned: normalizeInvoiceEntries(form.returned),
-          lost: normalizeInvoiceEntries(form.lost),
-          instrument: normalizeInvoiceEntries(form.instrument),
-          otherInvoice: normalizeInvoiceEntries(form.otherInvoice),
-        },
-      },
-    });
-    setMessage(T.saved);
-    setActive(null);
+    return;
   }
   async function refreshTransferredDifferenceItems() {
     if (active === null || !activeQuarter) return;
@@ -1850,15 +1674,6 @@ export function QuarterlyReconciliation({
                   onChange={importHistoricalLedger}
                 />
               </label>
-              {sheet && (
-                <button
-                  type="button"
-                  className="dashboard-sync-button"
-                  onClick={updateDashboards}
-                >
-                  一键更新其他看板
-                </button>
-              )}
               <DataImportCenter />
             </div>
           ) : (
@@ -1897,7 +1712,7 @@ export function QuarterlyReconciliation({
                 ))}
               </select>
             </label>
-            <span>已按季度独立保存，导入新季度不会覆盖已有明细。</span>
+            <span>季度数据来自 PostgreSQL；导入新季度不会覆盖已有明细。</span>
           </div>
         )}
         {currentLedgerInfo && (

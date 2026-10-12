@@ -231,7 +231,7 @@ test("ledger import quarter is selected and validated from PostgreSQL, never leg
   const page = await readFile(new URL("../app/QuarterlyReconciliation.tsx", import.meta.url), "utf8");
   assert.match(page, /reconciliationApi\.listQuarters\(controller\.signal\)/);
   assert.match(page, /const \[postgresQuarters, setPostgresQuarters\]/);
-  assert.match(page, /const preferred = toPostgresQuarterCode\(localStorage\.getItem\(PG_SELECTED_QUARTER_KEY\)/);
+  assert.match(page, /const preferredQuarter = localStorage\.getItem\(PG_SELECTED_QUARTER_KEY\)/);
   assert.match(page, /const quarterCode = toPostgresQuarterCode\(activeQuarter\)/);
   assert.match(page, /postgresQuarters\.includes\(quarterCode\)/);
   assert.match(page, /importQuarterLedger\(quarterCode, \{ sourceFiles \}\)/);
