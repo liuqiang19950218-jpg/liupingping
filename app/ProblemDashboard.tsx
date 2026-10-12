@@ -16,6 +16,7 @@ import { followupStage, toItems } from "./UnresolvedFollowupDashboard";
 import { isResolvedArchiveReconciliation } from "../lib/closed-reconciliation-qualification.mjs";
 import { currentOpenTrackerItems } from "../lib/current-open-problems.mjs";
 import { countProblemDashboardStage } from "../lib/problem-dashboard-stage.mjs";
+import { normalizeDateOnly } from "../lib/date-only.mjs";
 import "./problem-dashboard.css";
 import "./problem-dashboard-layout.css";
 
@@ -34,6 +35,7 @@ const emptyFilters = (quarter: string): ProblemFilters => ({
 const riskClass = (risk: string) => risk === "高风险" ? "high" : risk === "中风险" ? "medium" : "low";
 const overdueClass = (days: number) => days > 45 ? "danger" : days > 30 ? "warning" : "";
 const avatar = (name: string) => name.trim().slice(0, 1) || "未";
+const formatPreviewDate = (value: unknown) => normalizeDateOnly(value) || "--";
 
 export function ProblemDashboard({ onOpenFollowup }: Props) {
   const { quarter, reconciliationById, followups, loading, error } = useDashboardData();
@@ -151,7 +153,7 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
       <ProblemStageDistribution data={dashboard.stages} onSelect={selectStage} />
       <article className="pd-card pd-owner-card"><h2>责任人处理情况 Top5</h2><table><thead><tr><th>责任人</th><th>未关闭</th><th>超期</th><th>高风险</th><th>7天无更新</th><th>平均处理天数</th></tr></thead><tbody>{dashboard.owners.map((item) => <tr key={item.name} onClick={() => drill({ owner: item.name })}><td><i className="pd-avatar">{avatar(item.name)}</i>{item.name}</td><td>{item.count}</td><td className="danger">{item.overdue}</td><td className="danger">{item.high}</td><td className="warning">{item.untouched}</td><td>{item.averageDays.toFixed(1)}</td></tr>)}</tbody></table><button className="pd-more" onClick={() => drill()}>查看全部责任人 ›</button></article>
     </section>
-    <article className="pd-card pd-preview"><h2>重点问题预览 <button onClick={() => drill()}>查看更多 ›</button></h2><div className="pd-preview-wrap"><table><thead><tr><th>客户名称</th><th>问题标题</th><th>责任人</th><th>当前阶段</th><th>超期天数</th><th>风险等级</th><th>最近跟进时间</th><th>跟进状态</th></tr></thead><tbody>{dashboard.preview.map((item) => <tr key={item.id} onClick={() => drill({ customer: item.customer })}><td>{item.customer}</td><td title={issueTitle(item)}>{issueTitle(item)}</td><td><i className="pd-avatar">{avatar(item.owner)}</i>{item.owner || "未分配"}</td><td>{item.stage}</td><td className={overdueClass(item.overdueDays)}>{item.overdueDays} 天</td><td><span className={`pd-risk-tag ${riskClass(item.riskLevel)}`}>{item.riskLevel}</span></td><td>{issueLatestAt(item)}</td><td><span className="pd-follow-tag">{issueFollowState(item)}</span></td></tr>)}{!dashboard.preview.length && <tr><td colSpan={8} className="pd-empty">当前筛选范围暂无待解决问题</td></tr>}</tbody></table></div></article>
+    <article className="pd-card pd-preview"><h2>重点问题预览 <button onClick={() => drill()}>查看更多 ›</button></h2><div className="pd-preview-wrap"><table><thead><tr><th>客户名称</th><th>问题标题</th><th>责任人</th><th>当前阶段</th><th>超期天数</th><th>风险等级</th><th>最近跟进时间</th><th>跟进状态</th></tr></thead><tbody>{dashboard.preview.map((item) => <tr key={item.id} onClick={() => drill({ customer: item.customer })}><td>{item.customer}</td><td title={issueTitle(item)}>{issueTitle(item)}</td><td><i className="pd-avatar">{avatar(item.owner)}</i>{item.owner || "未分配"}</td><td>{item.stage}</td><td className={overdueClass(item.overdueDays)}>{item.overdueDays} 天</td><td><span className={`pd-risk-tag ${riskClass(item.riskLevel)}`}>{item.riskLevel}</span></td><td>{formatPreviewDate(issueLatestAt(item))}</td><td><span className="pd-follow-tag">{issueFollowState(item)}</span></td></tr>)}{!dashboard.preview.length && <tr><td colSpan={8} className="pd-empty">当前筛选范围暂无待解决问题</td></tr>}</tbody></table></div></article>
     {drawerFilterContext && <ProblemFollowupDrawer filterContext={drawerFilterContext} onClose={() => setDrawerFilterContext(null)} onEnterFollowup={() => onOpenFollowup(drawerFilterContext)} />}
   </section>;
 }

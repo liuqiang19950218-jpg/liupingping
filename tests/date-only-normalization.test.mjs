@@ -18,6 +18,10 @@ test("null and invalid input normalize safely to empty", () => {
   assert.equal(normalizeDateOnly("2026-02-30"), "");
 });
 
+test("Date objects retain their local YYYY-MM-DD display date", () => {
+  assert.equal(normalizeDateOnly(new Date(2026, 7, 13)), "2026-08-13");
+});
+
 test("timestamps and date-only values have identical overdue days", () => {
   const today = "2026-09-01";
   assert.equal(businessDayDistance("2026-06-29", today), 64);
@@ -30,4 +34,10 @@ test("dashboard uses the one date-only normalizer for display and overdue days",
   assert.match(page, /normalizeDateOnly\(\[\.\.\.item\.followUps\]/);
   assert.match(page, /const dayDistance = \(value: string\) => businessDayDistance\(value\)/);
   assert.doesNotMatch(page, /new Date\(`\$\{value\}T00:00:00`\)/);
+});
+
+test("problem preview renders latest follow-up dates as YYYY-MM-DD or --", async () => {
+  const page = await readFile(new URL("../app/ProblemDashboard.tsx", import.meta.url), "utf8");
+  assert.match(page, /const formatPreviewDate = \(value: unknown\) => normalizeDateOnly\(value\) \|\| "--"/);
+  assert.match(page, /formatPreviewDate\(issueLatestAt\(item\)\)/);
 });
