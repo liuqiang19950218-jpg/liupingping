@@ -124,8 +124,8 @@ export function Q1ActionPanel() {
                   </td>
                   <td>{item.customer}</td>
                   <td>{item.companyReceivable}</td>
-                  <td>{item.cause}</td>
-                  <td>{item.action}</td>
+                  <td title={item.cause}>{item.cause}</td>
+                  <td title={item.action}>{item.action}</td>
                 </tr>
               ))
             ) : (
