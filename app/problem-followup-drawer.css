@@ -56,7 +56,7 @@
 .pfd-table-wrap th button { padding: 0; border: 0; background: transparent; color: #eef9ff; font: inherit; font-weight: 800; cursor: pointer; }
 .pfd-table-wrap td { max-width: 180px; padding: 11px; border-bottom: 1px solid rgba(74, 142, 205, .2); background: rgba(10, 40, 80, .65); color: #dff3ff; vertical-align: middle; }
 .pfd-table-wrap tbody tr:hover td { background: linear-gradient(90deg, rgba(16, 104, 187, .44), rgba(16, 78, 151, .28)); color: #fff; box-shadow: inset 2px 0 rgba(94, 207, 255, .7); }
-.pfd-amount { color: #ff7b8a; font-weight: 800; text-shadow: 0 0 9px rgba(255, 91, 111, .28); white-space: nowrap; }
+.pfd-table-wrap td.pfd-amount { color: #ff7b8a; font-weight: 700; text-shadow: 0 0 10px rgba(255, 123, 138, .35); white-space: nowrap; }
 .pfd-clamp { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 18px; }
 
 .pfd-tools { display: flex; justify-content: flex-end; margin-bottom: 12px; }
