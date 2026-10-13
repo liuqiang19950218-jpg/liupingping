@@ -1625,13 +1625,13 @@ export function QuarterlyReconciliation({
         <div className="local-toolbar">
           <div>
             <p className="eyebrow">
-              {mode === "import" ? "数据导入" : T.local}
+              {mode === "import" ? "数据导入" : `${activeQuarter || "当前季度"} PostgreSQL`}
             </p>
             <h2>{mode === "import" ? "数据导入" : "本季度对账详细情况"}</h2>
             <p>
               {mode === "import"
                 ? T.importHint
-                : "查看、筛选、填写和导出本年度对账明细。"}
+                : "查看、筛选、填写和管理本季度全部客户对账明细。"}
             </p>
           </div>
           {mode === "import" ? (
@@ -1806,7 +1806,7 @@ export function QuarterlyReconciliation({
                   </select>
                 </label>
                 <label>
-                  橙色条纹
+                  对账状态
                   <select
                     value={stripeFilter}
                     onChange={(event) =>
