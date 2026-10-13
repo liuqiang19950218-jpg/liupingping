@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { QuarterlyReconciliation } from "./QuarterlyReconciliation";
 import { ReconciliationHistoryDashboard } from "./ReconciliationHistoryDashboard";
+import { Q1ActionPanel } from "./Q1ActionPanel";
 import { Q1SpecialPanels } from "./Q1SpecialPanels";
 import { UnresolvedFollowupDashboard } from "./UnresolvedFollowupDashboard";
 import { ManagementCockpit } from "./ManagementCockpit";
@@ -81,7 +82,7 @@ export default function Home() {
       <header className="work-header"><div><h1>{title}</h1><p>{hint}</p></div>{view === "problem" ? <div className="problem-header-actions"><small>{`◷ 数据更新时间：${updatedAt}`}</small><button onClick={() => window.dispatchEvent(new Event("problem-dashboard-refresh"))}>↻ 刷新数据</button><button className="primary" onClick={() => openTracker()}>进入未解决客户跟进 ›</button></div> : <div className="header-status"><span className="header-user">◉ 当前用户</span><small>{`数据更新时间：${updatedAt}`}</small><span>✓ {T.local}</span></div>}</header>
       <div className="work-content">
         {view !== "current" && view !== "import" && view !== "problem" && <GlobalQuarterFilter />}
-        {view === "history" ? <><CurrentYearLinkedSummary/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>}
+        {view === "history" ? <><CurrentYearLinkedSummary/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>} 
       </div>
     </section>
   </main></DashboardDataProvider>;
