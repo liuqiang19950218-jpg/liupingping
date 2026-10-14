@@ -37,6 +37,7 @@ import {
 import { MAX_IMAGE_BYTES as MAX_ATTACHMENT_IMAGE_BYTES, prepareAttachmentImage } from "../lib/attachment-image-optimization.mjs";
 import "./reconciliation.css";
 import "./reconciliation-writeoff-section.css";
+import "./data-import-tech.css";
 
 type InvoiceEntry = {
   id?: string;
