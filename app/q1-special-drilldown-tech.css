@@ -1,0 +1,24 @@
+/* Dashboard drill-down: presentation-only cockpit skin. */
+.collection-drill-mask{background:rgba(1,10,33,.76);backdrop-filter:blur(6px)}
+.collection-drill-dialog.detail-table-tool{border-color:rgba(60,177,255,.42);background:linear-gradient(135deg,rgba(7,33,78,.97),rgba(3,18,48,.97));box-shadow:0 0 24px rgba(0,140,255,.22),0 24px 58px rgba(0,5,26,.66);color:#eaf8ff}
+.collection-drill-head{border-bottom-color:rgba(52,158,232,.42);background:linear-gradient(100deg,rgba(9,53,117,.88),rgba(4,25,66,.8))}
+.collection-drill-head p{color:#71e3ff;text-shadow:0 0 9px rgba(67,204,255,.25)}
+.collection-drill-head h2{color:#f3fcff;text-shadow:0 0 14px rgba(78,193,255,.3)}
+.collection-drill-head span{color:rgba(197,229,250,.8)}
+.collection-drill-head button{border:1px solid rgba(79,196,255,.45);background:rgba(7,45,102,.8);color:#ccefff;box-shadow:inset 0 1px 0 rgba(160,233,255,.12)}
+.collection-drill-head button:hover{border-color:#75e6ff;background:#0a5bab;color:#fff;box-shadow:0 0 13px rgba(38,179,255,.32)}
+.collection-drill-tabs{border-bottom-color:rgba(43,139,211,.4);background:rgba(4,26,65,.82)}
+.collection-drill-tabs button{border-color:rgba(65,163,232,.46);background:rgba(6,38,88,.76);color:rgba(203,232,252,.82)}
+.collection-drill-tabs button:hover{border-color:#65dcff;background:rgba(10,83,154,.72);color:#effcff}
+.collection-drill-tabs button.active{border-color:#54deff;background:linear-gradient(135deg,rgba(11,127,220,.8),rgba(12,65,156,.9));color:#fff;box-shadow:0 0 13px rgba(29,180,255,.26),inset 0 1px 0 rgba(194,247,255,.2)}
+.collection-drill-summary{border-bottom:1px solid rgba(41,127,198,.28);background:rgba(4,31,77,.86);color:rgba(202,231,250,.84)}
+.collection-drill-summary b{color:#79e7ff;text-shadow:0 0 8px rgba(50,197,255,.24)}
+.collection-drill-table{border-color:rgba(48,153,225,.46);background:rgba(3,21,55,.88);box-shadow:inset 0 1px 0 rgba(125,222,255,.08)}
+.collection-drill-table::-webkit-scrollbar{width:9px;height:9px}.collection-drill-table::-webkit-scrollbar-track{background:rgba(3,20,53,.88)}.collection-drill-table::-webkit-scrollbar-thumb{border:2px solid rgba(3,20,53,.88);border-radius:99px;background:linear-gradient(#3ccfff,#146ebc)}
+.collection-drill-table th{border-bottom-color:rgba(64,174,242,.55);background:linear-gradient(180deg,#0c4b94,#06285d);color:#eaf9ff;box-shadow:inset 0 1px 0 rgba(156,235,255,.14)}
+.collection-drill-table td{border-bottom-color:rgba(45,121,189,.42);background:rgba(5,31,74,.82);color:#e1f4ff}
+.collection-drill-table tbody tr:nth-child(even) td{background:rgba(6,39,89,.78)}
+.collection-drill-table tbody tr:hover td{background:linear-gradient(90deg,rgba(12,99,176,.72),rgba(7,55,123,.76));box-shadow:inset 2px 0 rgba(93,215,255,.72),inset 0 1px rgba(142,233,255,.15)}
+.collection-drill-table .collection-drill-customer{color:#f0fbff}.collection-drill-table .money-cell{color:#bceeff}.collection-drill-table .difference-cell{color:#ff96a5;text-shadow:0 0 9px rgba(255,103,126,.24)}
+.collection-drill-status.done{border:1px solid rgba(66,220,164,.45);background:rgba(17,145,104,.2);color:#91f3cf}.collection-drill-status.pending{border:1px solid rgba(255,192,92,.45);background:rgba(163,103,13,.22);color:#ffe09a}
+.collection-drill-table .table-empty{background:rgba(5,31,74,.82);color:rgba(193,225,246,.72)}

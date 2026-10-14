@@ -7,6 +7,7 @@ import type { MaterialStatus, QuarterDifferenceItem, Reconciliation, SpdDashboar
 import "./q1-special-panels.css";
 import "./q1-special-panels-layout-overrides.css";
 import "./q1-special-drilldown.css";
+import "./q1-special-drilldown-tech.css";
 
 type SavedSheet = { headers?: string[]; rows?: unknown[][] };
 type MaterialKind = "confirmation" | "letter" | "spd" | "stock" | "delivery" | "transit" | "writeoff";
