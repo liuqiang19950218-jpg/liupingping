@@ -29,27 +29,123 @@ type DatabaseImportBatch = {
   details: { note?: unknown } | null;
 };
 
-const databaseRecord = (batch: DatabaseImportBatch): ImportHistoryRecord => ({
-  id: batch.id,
-  fileName: batch.fileName || "未记录文件名",
-  importedAt: batch.importedAt || undefined,
-  dataType: batch.dataType,
-  description: typeof batch.details?.note === "string"
-    ? batch.details.note
-    : `PostgreSQL 导入批次：${batch.targetModule}`,
-  recordCount: batch.validRecordCount ?? undefined,
-  targetStore: `PostgreSQL · ${batch.targetModule}`,
-  quarter: batch.quarter || undefined,
-  operator: batch.operator || "未记录",
-  status: batch.status,
-  sourceSha256: batch.sourceSha256 || undefined,
-  stats: {
-    inserted: batch.insertedCount ?? undefined,
-    updated: batch.updatedCount ?? undefined,
-    skipped: batch.skippedCount ?? undefined,
-    errors: batch.errorCount ?? undefined,
+type ImportDisplayCopy = {
+  dataType: string;
+  targetStore: string;
+  description: string;
+};
+
+const importDisplayCopy: Record<string, ImportDisplayCopy> = {
+  NEW_QUARTER_BASE: {
+    dataType: "季度基础对账表",
+    targetStore: "PostgreSQL · 季度基础对账数据",
+    description: "已导入季度基础对账表，并生成该季度对账数据。",
   },
-});
+  UPDATE_COMPANY_RECEIVABLE: {
+    dataType: "公司应收增量更新",
+    targetStore: "PostgreSQL · 季度客户应收数据",
+    description: "已更新匹配客户的公司应收金额。",
+  },
+  MATERIAL_STATUS_IMPORT: {
+    dataType: "资料提供情况表",
+    targetStore: "PostgreSQL · 客户资料提供状态",
+    description: "已导入客户资料提供情况。",
+  },
+  INDEPENDENT_SPD_IMPORT: {
+    dataType: "SPD 表",
+    targetStore: "PostgreSQL · SPD 确认及库存数据",
+    description: "已导入 SPD 确认表和库存确认数据。",
+  },
+  COMPANY_RECEIVABLE_UPDATE: {
+    dataType: "公司应收更新",
+    targetStore: "PostgreSQL · 季度客户应收数据",
+    description: "已更新匹配客户的公司应收金额。",
+  },
+  HISTORICAL_LEDGER_REPLACE: {
+    dataType: "历史往来底库替换",
+    targetStore: "PostgreSQL · 历史往来底库",
+    description: "已替换历史往来底库版本。",
+  },
+  reconciliation: {
+    dataType: "季度对账表",
+    targetStore: "PostgreSQL · 季度对账数据",
+    description: "已导入季度对账数据。",
+  },
+  ledger: {
+    dataType: "本年往来明细",
+    targetStore: "PostgreSQL · 本年往来明细数据",
+    description: "已导入本年往来明细数据。",
+  },
+  materials: {
+    dataType: "资料提供情况表",
+    targetStore: "PostgreSQL · 客户资料提供状态",
+    description: "已导入客户资料提供情况。",
+  },
+  spd: {
+    dataType: "SPD 表",
+    targetStore: "PostgreSQL · SPD 确认及库存数据",
+    description: "已导入 SPD 确认表和库存确认数据。",
+  },
+  companyReceivable: {
+    dataType: "公司应收更新",
+    targetStore: "PostgreSQL · 季度客户应收数据",
+    description: "已更新匹配客户的公司应收金额。",
+  },
+};
+
+const importModuleCopy: Record<string, Pick<ImportDisplayCopy, "targetStore" | "description">> = {
+  "quarter-base-import": {
+    targetStore: "PostgreSQL · 季度基础对账数据",
+    description: "已完成季度基础对账数据导入。",
+  },
+  "remaining-imports": {
+    targetStore: "PostgreSQL · 对账辅助资料数据",
+    description: "已完成对应对账辅助资料导入。",
+  },
+  "runtime-import": {
+    targetStore: "PostgreSQL · 季度对账数据",
+    description: "已完成季度对账数据导入。",
+  },
+};
+
+const technicalBatchNote = (note: string) =>
+  /^(PostgreSQL\s*导入批次|PostgreSQL\s*[·-])|quarter-base-import|remaining-imports|runtime-import/i.test(note);
+
+const batchDisplayCopy = (batch: DatabaseImportBatch): ImportDisplayCopy => {
+  const byType = importDisplayCopy[batch.dataType];
+  const byModule = importModuleCopy[batch.targetModule];
+  const note = typeof batch.details?.note === "string" ? batch.details.note.trim() : "";
+  return {
+    dataType: byType?.dataType ?? importTypeLabel(batch.dataType),
+    targetStore: byType?.targetStore ?? byModule?.targetStore ?? "PostgreSQL · 对账数据",
+    description: note && !technicalBatchNote(note)
+      ? note
+      : byType?.description ?? byModule?.description ?? "已完成数据导入。",
+  };
+};
+
+const databaseRecord = (batch: DatabaseImportBatch): ImportHistoryRecord => {
+  const display = batchDisplayCopy(batch);
+  return {
+    id: batch.id,
+    fileName: batch.fileName || "未记录文件名",
+    importedAt: batch.importedAt || undefined,
+    dataType: display.dataType,
+    description: display.description,
+    recordCount: batch.validRecordCount ?? undefined,
+    targetStore: display.targetStore,
+    quarter: batch.quarter || undefined,
+    operator: batch.operator || "未记录",
+    status: batch.status,
+    sourceSha256: batch.sourceSha256 || undefined,
+    stats: {
+      inserted: batch.insertedCount ?? undefined,
+      updated: batch.updatedCount ?? undefined,
+      skipped: batch.skippedCount ?? undefined,
+      errors: batch.errorCount ?? undefined,
+    },
+  };
+};
 
 const isCompleted = (status: ImportHistoryRecord["status"]) =>
   status === "success" || status === "partial";
