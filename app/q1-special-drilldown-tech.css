@@ -22,3 +22,37 @@
 .collection-drill-table .collection-drill-customer{color:#f0fbff}.collection-drill-table .money-cell{color:#bceeff}.collection-drill-table .difference-cell{color:#ff96a5;text-shadow:0 0 9px rgba(255,103,126,.24)}
 .collection-drill-status.done{border:1px solid rgba(66,220,164,.45);background:rgba(17,145,104,.2);color:#91f3cf}.collection-drill-status.pending{border:1px solid rgba(255,192,92,.45);background:rgba(163,103,13,.22);color:#ffe09a}
 .collection-drill-table .table-empty{background:rgba(5,31,74,.82);color:rgba(193,225,246,.72)}
+
+/* Cascade guard: reconciliation workspace defaults use !important. */
+.collection-drill-dialog.detail-table-tool{
+  background:linear-gradient(135deg,rgba(7,33,78,.96),rgba(3,18,48,.96)) !important;
+  border:1px solid rgba(60,177,255,.45) !important;
+  box-shadow:0 0 30px rgba(0,140,255,.25),0 24px 58px rgba(0,5,26,.66) !important;
+  backdrop-filter:blur(12px) !important;
+}
+
+.collection-drill-dialog .local-table{
+  border-color:rgba(48,153,225,.46) !important;
+  background:rgba(3,21,55,.88) !important;
+}
+
+.collection-drill-dialog .local-table th{
+  border-bottom-color:rgba(64,174,242,.55) !important;
+  background:linear-gradient(180deg,#0c4b94,#06285d) !important;
+  color:#eaf9ff !important;
+}
+
+.collection-drill-dialog .local-table td{
+  background:rgba(5,30,72,.75) !important;
+  color:#dff3ff !important;
+  border-bottom-color:rgba(60,177,255,.15) !important;
+}
+
+.collection-drill-dialog .local-table tbody tr:nth-child(even) td{
+  background:rgba(6,39,89,.78) !important;
+}
+
+.collection-drill-dialog .local-table tbody tr:hover td{
+  background:linear-gradient(90deg,rgba(12,99,176,.72),rgba(7,55,123,.76)) !important;
+  box-shadow:inset 2px 0 rgba(93,215,255,.72),inset 0 1px rgba(142,233,255,.15);
+}
