@@ -111,6 +111,19 @@ const importModuleCopy: Record<string, Pick<ImportDisplayCopy, "targetStore" | "
 const technicalBatchNote = (note: string) =>
   /^(PostgreSQL\s*导入批次|PostgreSQL\s*[·-])|quarter-base-import|remaining-imports|runtime-import/i.test(note);
 
+const technicalFileNameCopy: Record<string, string> = {
+  "same.xlsx": "重复导入校验文件.xlsx",
+  "null-book.xlsx": "客户账面金额空值校验文件.xlsx",
+  "scenario-c.xlsx": "导入场景 C 校验文件.xlsx",
+  "staging-a.xlsx": "预发布导入校验文件 A.xlsx",
+};
+
+const displayFileName = (fileName: string | null) => {
+  const original = fileName?.trim();
+  if (!original) return "未记录文件名";
+  return technicalFileNameCopy[original.toLowerCase()] ?? original;
+};
+
 const batchDisplayCopy = (batch: DatabaseImportBatch): ImportDisplayCopy => {
   const byType = importDisplayCopy[batch.dataType];
   const byModule = importModuleCopy[batch.targetModule];
@@ -128,7 +141,7 @@ const databaseRecord = (batch: DatabaseImportBatch): ImportHistoryRecord => {
   const display = batchDisplayCopy(batch);
   return {
     id: batch.id,
-    fileName: batch.fileName || "未记录文件名",
+    fileName: displayFileName(batch.fileName),
     importedAt: batch.importedAt || undefined,
     dataType: display.dataType,
     description: display.description,
