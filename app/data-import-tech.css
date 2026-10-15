@@ -247,3 +247,218 @@ body:has(.data-import-tool) .local-tool.data-import-tool {
 .data-import-tool .local-tool-body {
   background: transparent !important;
 }
+
+/* Data-import center presentation hierarchy. */
+.data-import-tool .local-toolbar {
+  align-items: flex-start;
+  gap: 22px;
+}
+
+.data-import-tool .local-toolbar > div:first-child {
+  min-width: 260px;
+}
+
+.data-import-tool .upload-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(190px, 1fr));
+  flex: 1;
+}
+
+.data-import-tool .upload-actions .file-button,
+.data-import-tool .upload-actions .import-action-button {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.data-import-tool .import-archive-section {
+  margin: 0 40px 24px;
+}
+
+.data-import-tool .import-archive-section .quarter-archive-download {
+  margin: 0;
+}
+
+.data-import-tool .import-history-head h3::after {
+  content: " · import_batches";
+  color: #73ddff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+
+.data-import-tool .data-asset-center {
+  display: grid;
+  gap: 14px;
+  margin: 0 40px 30px;
+  padding: 20px;
+  border: 1px solid rgba(60, 201, 255, .45);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(8, 43, 92, .88), rgba(3, 21, 55, .93));
+  box-shadow: 0 14px 30px rgba(0, 8, 37, .36), inset 0 1px 0 rgba(159, 234, 255, .12), 0 0 18px rgba(0, 141, 255, .1);
+}
+
+.data-import-tool .data-asset-heading p {
+  margin: 0 0 4px;
+  color: #67e3ff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.data-import-tool .data-asset-heading h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 18px;
+  text-shadow: 0 0 14px rgba(69, 194, 255, .32);
+}
+
+.data-import-tool .data-asset-heading span {
+  display: block;
+  margin-top: 6px;
+  color: rgba(203, 233, 255, .78);
+  font-size: 12px;
+}
+
+.data-import-tool .data-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.data-import-tool .data-asset-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.data-import-tool .data-asset-heading > small {
+  align-self: end;
+  color: rgba(183, 218, 244, .72);
+  font-size: 11px;
+}
+
+.data-import-tool .data-asset-card {
+  min-height: 116px;
+  padding: 15px;
+  border: 1px solid rgba(66, 185, 255, .28);
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(6, 39, 89, .78), rgba(4, 24, 61, .84));
+  box-shadow: inset 0 1px 0 rgba(165, 235, 255, .08);
+}
+
+.data-import-tool .data-asset-card span {
+  display: block;
+  color: #cceeff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.data-import-tool .data-asset-card strong {
+  display: block;
+  margin: 6px 0;
+  color: #f5fdff;
+  font-size: 27px;
+  line-height: 1;
+}
+
+.data-import-tool .data-asset-card small {
+  color: rgba(183, 218, 244, .72);
+  font-size: 11px;
+}
+
+.data-import-tool .data-asset-coverage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px;
+  border: 1px solid rgba(64, 177, 240, .25);
+  border-radius: 9px;
+  background: rgba(3, 28, 68, .62);
+}
+
+.data-import-tool .data-asset-coverage > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.data-import-tool .data-asset-coverage strong { color: #effbff; }
+.data-import-tool .data-asset-coverage span,
+.data-import-tool .data-asset-coverage p { color: rgba(195, 225, 247, .76); font-size: 12px; }
+.data-import-tool .data-asset-coverage p { margin: 0; }
+
+.data-import-tool .data-asset-empty {
+  margin: 0;
+  padding: 28px;
+  border: 1px dashed rgba(91, 194, 255, .3);
+  border-radius: 10px;
+  color: rgba(203, 233, 255, .78);
+  text-align: center;
+}
+
+.data-import-tool .data-asset-coverage {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.data-import-tool .data-asset-coverage-grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  gap: 9px;
+}
+
+.data-import-tool .data-asset-quarter-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  padding: 11px;
+  border: 1px solid rgba(65, 204, 255, .25);
+  border-radius: 8px;
+  background: rgba(8, 47, 101, .44);
+}
+
+.data-import-tool .data-asset-quarter-card strong {
+  grid-column: 1 / -1;
+  color: #9beeff;
+}
+
+.data-import-tool .data-asset-quarter-card span {
+  color: rgba(218, 241, 255, .82);
+  font-size: 11px;
+}
+
+.data-import-tool .data-asset-quarter-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.data-import-tool .data-asset-quarter-list span {
+  padding: 5px 8px;
+  border: 1px solid rgba(65, 204, 255, .38);
+  border-radius: 999px;
+  background: rgba(9, 102, 177, .22);
+  color: #9beeff;
+  font-weight: 700;
+}
+
+@media (max-width: 1280px) {
+  .data-import-tool .local-toolbar { flex-direction: column; }
+  .data-import-tool .upload-actions { width: 100%; }
+  .data-import-tool .data-asset-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .data-import-tool .import-archive-section,
+  .data-import-tool .data-asset-center { margin-right: 20px; margin-left: 20px; }
+  .data-import-tool .upload-actions,
+  .data-import-tool .data-asset-grid { grid-template-columns: 1fr; }
+  .data-import-tool .data-asset-coverage { align-items: flex-start; flex-direction: column; }
+  .data-import-tool .data-asset-quarter-list { justify-content: flex-start; }
+}

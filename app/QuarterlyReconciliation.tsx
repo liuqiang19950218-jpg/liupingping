@@ -1626,12 +1626,12 @@ export function QuarterlyReconciliation({
         <div className="local-toolbar">
           <div>
             <p className="eyebrow">
-              {mode === "import" ? "数据导入" : `${activeQuarter || "当前季度"} PostgreSQL`}
+              {mode === "import" ? "数据导入中心" : `${activeQuarter || "当前季度"} PostgreSQL`}
             </p>
-            <h2>{mode === "import" ? "数据导入" : "本季度对账详细情况"}</h2>
+            <h2>{mode === "import" ? "数据导入窗口" : "本季度对账详细情况"}</h2>
             <p>
               {mode === "import"
-                ? T.importHint
+                ? "统一管理季度对账、资料、SPD 及历史底库数据导入。"
                 : "查看、筛选、填写和管理本季度全部客户对账明细。"}
             </p>
           </div>
@@ -1768,7 +1768,9 @@ export function QuarterlyReconciliation({
                 往来明细、资料提供、SPD 和历史往来底库维持各自既有导入流程；季度基础表与公司应收更新请使用上方新中心。
               </span>
             </div>
-            <QuarterArchiveDownload />
+            <div className="import-archive-section">
+              <QuarterArchiveDownload />
+            </div>
             <ImportDashboard />
           </>
         ) : !sheet ? (
