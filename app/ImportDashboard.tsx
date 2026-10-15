@@ -8,7 +8,6 @@ import {
   importTypeLabel,
   type ImportHistoryRecord,
 } from "./import-history";
-import { DataAssetCenter } from "./DataAssetCenter";
 
 type Order = "desc" | "asc";
 
@@ -232,11 +231,11 @@ export function ImportDashboard() {
     : null;
 
   return (
-    <section className="import-dashboard" aria-label="数据导入中心">
+    <section className="import-dashboard" aria-label="数据导入看板">
       <div className="import-dashboard-heading">
         <div>
-          <h3>导入任务中心</h3>
-          <p>基于 PostgreSQL 导入审计记录，查看任务状态与数据库更新情况。</p>
+          <h3>数据导入看板</h3>
+          <p>按文件命名展示每次导入记录、数据库更新情况。</p>
         </div>
       </div>
       {loadError && <p className="import-history-empty" role="alert">导入历史读取失败：{loadError}</p>}
@@ -261,7 +260,7 @@ export function ImportDashboard() {
 
       <article className="import-history-card">
         <div className="import-history-head">
-          <h3>导入任务中心</h3>
+          <h3>导入记录 / 数据库更新记录</h3>
         </div>
         <div className="import-history-table-wrap">
           <table className="import-history-table">
@@ -281,8 +280,6 @@ export function ImportDashboard() {
           <span>共 {sorted.length} 条</span><div><button type="button" disabled={activePage <= 1} onClick={() => setPage(activePage - 1)}>‹</button><b>{activePage}</b><button type="button" disabled={activePage >= pageCount} onClick={() => setPage(activePage + 1)}>›</button></div><label>每页 <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}><option value={10}>10 条/页</option><option value={20}>20 条/页</option><option value={50}>50 条/页</option></select></label><label>前往 <input value={activePage} type="number" min={1} max={pageCount} onChange={(event) => setPage(Math.max(1, Math.min(pageCount, Number(event.target.value) || 1)))} /> 页</label>
         </div>
       </article>
-
-      <DataAssetCenter />
 
       {selected && <div className="import-drawer-backdrop" onMouseDown={() => setSelected(null)}><aside className="import-detail-drawer" role="dialog" aria-modal="true" aria-label="导入记录详情" onMouseDown={(event) => event.stopPropagation()}><header><div><p>导入记录详情</p><h2>{selected.fileName}</h2></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header><section><h3>基本信息</h3><dl><dt>文件名称</dt><dd>{selected.fileName}</dd><dt>源文件 SHA256</dt><dd>{selected.sourceSha256 || "未记录"}</dd><dt>导入时间</dt><dd>{formatImportTime(selected.importedAt)}</dd><dt>所属季度</dt><dd>{selected.quarter || "未记录"}</dd><dt>数据类型</dt><dd>{importTypeLabel(selected.dataType)}</dd><dt>记录数</dt><dd>{typeof selected.recordCount === "number" ? selected.recordCount.toLocaleString() : "未记录"}</dd><dt>导入人</dt><dd>{selected.operator}</dd><dt>状态</dt><dd><span className={`import-status-badge ${selected.status}`}>{importStatusLabel(selected.status)}</span></dd></dl></section><section><h3>数据更新信息</h3><dl><dt>更新目标表 / 数据库</dt><dd>{selected.targetStore}</dd><dt>新增记录数</dt><dd>{selected.stats?.inserted?.toLocaleString() ?? "未记录"}</dd><dt>更新记录数</dt><dd>{selected.stats?.updated?.toLocaleString() ?? "未记录"}</dd><dt>跳过记录数</dt><dd>{selected.stats?.skipped?.toLocaleString() ?? "未记录"}</dd><dt>异常记录数</dt><dd>{selected.stats?.errors?.toLocaleString() ?? "未记录"}</dd>{selected.stats?.note && <><dt>说明</dt><dd>{selected.stats.note}</dd></>}</dl></section></aside></div>}
     </section>
