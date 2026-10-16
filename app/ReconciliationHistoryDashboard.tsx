@@ -26,19 +26,20 @@ function UnreconciledRiskChart({ data, currentQuarter }: { data: TrendDataItem[]
     const maxCustomers = Math.max(...data.map((item) => item.unsettledCustomers));
     const customerAxisMax = Math.max(5, Math.ceil((maxCustomers + 2) / 5) * 5);
     const dense = data.length > 7;
+    const compact = window.matchMedia("(max-width: 760px)").matches;
     chart.setOption({
       animationDuration: 260,
       tooltip: { trigger: "axis", backgroundColor: "#fff", borderColor: "#dfe7f1", borderWidth: 1, textStyle: { color: "#34425e", fontSize: 13 }, formatter: formatHistoricalTrendTooltip },
-      legend: { top: 2, left: "center", itemWidth: 14, itemHeight: 10, itemGap: 44, textStyle: { color: "#34425e", fontSize: 14 } },
-      grid: { left: 54, right: 54, top: 64, bottom: 48 },
-      xAxis: { type: "category", data: data.map((item) => item.quarter), axisTick: { show: false }, axisLine: { lineStyle: { color: "#d7dee9" } }, axisLabel: { interval: 0, color: "#34425e", fontSize: dense ? 11 : 13, margin: 16, formatter: (value: string) => value === currentQuarter ? `${value}\n{current|当前}` : value, rich: { current: { color: "#fff", backgroundColor: "#1267f4", padding: [3, 6], borderRadius: 4, fontSize: 11, lineHeight: 26 } } } },
+      legend: { top: 2, left: "center", itemWidth: compact ? 11 : 14, itemHeight: 10, itemGap: compact ? 18 : 44, textStyle: { color: "#34425e", fontSize: compact ? 11 : 14 } },
+      grid: { left: compact ? 38 : 54, right: compact ? 38 : 54, top: compact ? 46 : 64, bottom: compact ? 36 : 48 },
+      xAxis: { type: "category", data: data.map((item) => item.quarter), axisTick: { show: false }, axisLine: { lineStyle: { color: "#d7dee9" } }, axisLabel: { interval: 0, color: "#34425e", fontSize: compact ? 9 : dense ? 11 : 13, margin: compact ? 9 : 16, formatter: (value: string) => compact ? value.replace(" ", "\n") : value === currentQuarter ? `${value}\n{current|当前}` : value, rich: { current: { color: "#fff", backgroundColor: "#1267f4", padding: [3, 6], borderRadius: 4, fontSize: 11, lineHeight: 26 } } } },
       yAxis: [
         { type: "value", name: "户", min: 0, max: customerAxisMax, interval: Math.max(1, customerAxisMax / 4), nameTextStyle: { color: "#71809a", fontSize: 12, padding: [0, 0, 0, -4] }, axisLabel: { color: "#71809a", fontSize: 12 }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: "#e4eaf3", type: "dashed" } } },
         { type: "value", name: "对清率（%）", min: 0, max: 100, interval: 25, nameTextStyle: { color: "#71809a", fontSize: 12 }, axisLabel: { color: "#71809a", fontSize: 12, formatter: "{value}%" }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
       ],
       series: [
-        { name: "未对清客户数", type: "bar", yAxisIndex: 0, data: data.map((item) => item.unsettledCustomers), barWidth: dense ? 22 : 32, barGap: "28%", itemStyle: { color: "#1267f4", borderRadius: [5, 5, 0, 0] }, label: { show: true, position: "top", color: "#18243b", fontSize: dense ? 11 : 13, fontWeight: 600 } },
-        { name: "对清率", type: "line", yAxisIndex: 1, data: data.map((item) => item.reconciliationRate), symbol: "circle", symbolSize: 8, lineStyle: { width: 3, color: "#ff7a1a" }, itemStyle: { color: "#ff7a1a", borderColor: "#fff", borderWidth: 2 }, label: { show: true, position: "top", formatter: ({ value }: { value: number }) => `${value.toFixed(1)}%`, color: "#ff7a1a", fontSize: 13, fontWeight: 700 }, z: 3 },
+        { name: "未对清客户数", type: "bar", yAxisIndex: 0, data: data.map((item) => item.unsettledCustomers), barWidth: compact ? 18 : dense ? 22 : 32, barGap: "28%", itemStyle: { color: "#1267f4", borderRadius: [5, 5, 0, 0] }, label: { show: true, position: "top", color: "#18243b", fontSize: compact ? 10 : dense ? 11 : 13, fontWeight: 600 } },
+        { name: "对清率", type: "line", yAxisIndex: 1, data: data.map((item) => item.reconciliationRate), symbol: "circle", symbolSize: compact ? 6 : 8, lineStyle: { width: compact ? 2 : 3, color: "#ff7a1a" }, itemStyle: { color: "#ff7a1a", borderColor: "#fff", borderWidth: 2 }, label: { show: !compact, position: "top", formatter: ({ value }: { value: number }) => `${value.toFixed(1)}%`, color: "#ff7a1a", fontSize: 13, fontWeight: 700 }, z: 3 },
       ],
     });
     const observer = new ResizeObserver(() => chart.resize());
@@ -52,6 +53,7 @@ export function ReconciliationHistoryDashboard() {
   const { quarter, rows } = useDashboardData();
   const [periods, setPeriods] = useState<HistoricalPeriod[]>([]);
   const [activeLabel, setActiveLabel] = useState("");
+  const [expandedRegionsPeriod, setExpandedRegionsPeriod] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const regionTableRef = useRef<HTMLDivElement>(null);
@@ -103,6 +105,7 @@ export function ReconciliationHistoryDashboard() {
     [activePeriod],
   );
   useEffect(() => { regionTableRef.current?.scrollTo({ top: 0 }); }, [activePeriod?.label]);
+  const regionsExpanded = expandedRegionsPeriod === activePeriod?.label;
   const latest = latestHistoricalPeriod(periods);
   const previous = periods.length > 1 ? periods.at(-2) : null;
   const unsettledDelta = latest && previous ? (latest.total.unsettledCount ?? 0) - (previous.total.unsettledCount ?? 0) : 0;
@@ -113,6 +116,6 @@ export function ReconciliationHistoryDashboard() {
   if (!periods.length || !activePeriod) return <section className="history-dashboard"><p className="history-empty">暂无已封存的历史季度快照</p></section>;
   return <section className="history-dashboard" aria-label="历史对账情况">
     <article className="history-card history-trend-card"><header className="history-card-header"><div className="history-title"><span className="history-icon">⌁</span><h2>历史季度对清趋势</h2></div><div className="history-tags"><span className={unsettledDelta > 0 ? "up" : "down"}>{unsettledDelta > 0 ? "↑" : "↓"} 较上季度{unsettledDelta > 0 ? "增加" : "减少"}{Math.abs(unsettledDelta)}户</span><span className={rateDelta >= 0 ? "stable" : "down"}>✓ 较上季度 {rateDelta >= 0 ? "+" : ""}{rateDelta.toFixed(2)}个百分点</span></div></header><UnreconciledRiskChart data={trend} currentQuarter={realtimeTrend?.trend.quarter ?? latest?.label ?? ""} /></article>
-    <article className="history-card history-region-card"><header className="history-card-header"><div className="history-title"><span className="history-icon">▦</span><h2>历史各区域对清情况</h2></div><label className="history-quarter-select">季度<select value={activePeriod.label} onChange={(event) => setActiveLabel(event.target.value)} aria-label="选择历史区域对清季度">{periods.map((period) => <option value={period.label} key={period.label}>{period.label}</option>)}</select></label></header><p className="history-summary">{activePeriod.label}：对账客户 <b>{activePeriod.total.customerTotal}</b> 户，已对清 <b>{activePeriod.total.settledCount}</b> 户，未对清 <b>{activePeriod.total.unsettledCount ?? 0}</b> 户，对清率 <strong>{(activePeriod.total.settlementRate * 100).toFixed(1)}%</strong></p><div className="history-table" ref={regionTableRef}><table><thead><tr><th scope="col">区域</th><th scope="col">对账客户</th><th scope="col">已对清</th><th scope="col">未对清</th><th scope="col">对清率</th></tr></thead><tbody>{sortedRegions.map((item) => <tr key={`${activePeriod.label}-${item.sourceRow}`}><td>{item.region}</td><td>{item.customerTotal}</td><td>{item.settledCount}</td><td className={item.unsettledCount ? "warn" : ""}>{item.unsettledCount}</td><td className="rate">{(item.settlementRate * 100).toFixed(1)}%</td></tr>)}</tbody></table></div></article>
+    <article className="history-card history-region-card"><header className="history-card-header"><div className="history-title"><span className="history-icon">▦</span><h2>历史各区域对清情况</h2></div><label className="history-quarter-select">季度<select value={activePeriod.label} onChange={(event) => setActiveLabel(event.target.value)} aria-label="选择历史区域对清季度">{periods.map((period) => <option value={period.label} key={period.label}>{period.label}</option>)}</select></label></header><p className="history-summary">{activePeriod.label}：对账客户 <b>{activePeriod.total.customerTotal}</b> 户，已对清 <b>{activePeriod.total.settledCount}</b> 户，未对清 <b>{activePeriod.total.unsettledCount ?? 0}</b> 户，对清率 <strong>{(activePeriod.total.settlementRate * 100).toFixed(1)}%</strong></p><div className="history-table" ref={regionTableRef}><table><thead><tr><th scope="col">区域</th><th scope="col">对账客户</th><th scope="col">已对清</th><th scope="col">未对清</th><th scope="col">对清率</th></tr></thead><tbody>{sortedRegions.map((item, index) => <tr className={!regionsExpanded && index >= 4 ? "mobile-collapsed-row" : ""} key={`${activePeriod.label}-${item.sourceRow}`}><td>{item.region}</td><td>{item.customerTotal}</td><td>{item.settledCount}</td><td className={item.unsettledCount ? "warn" : ""}>{item.unsettledCount}</td><td className="rate">{(item.settlementRate * 100).toFixed(1)}%</td></tr>)}</tbody></table></div>{sortedRegions.length > 4 ? <button type="button" className="history-mobile-expand" aria-expanded={regionsExpanded} onClick={() => setExpandedRegionsPeriod((value) => value === activePeriod.label ? null : activePeriod.label)}>{regionsExpanded ? `收起全部 ${sortedRegions.length} 个区域⌃` : `展开全部 ${sortedRegions.length} 个区域⌄`}</button> : null}</article>
   </section>;
 }

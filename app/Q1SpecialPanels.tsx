@@ -354,17 +354,17 @@ function VerticalScrollList({ children, label }: { children: ReactNode; label: s
   </div>;
 }
 
-function CollectionOverviewCard({ rows, onDrilldown }: { rows: CollectionRow[]; onDrilldown: (material: MaterialDefinition) => void }) {
+function CollectionOverviewCard({ rows, onDrilldown, expanded, onToggle }: { rows: CollectionRow[]; onDrilldown: (material: MaterialDefinition) => void; expanded: boolean; onToggle: () => void }) {
   return <article className="collection-card overview-card">
     <header className="collection-card-head"><h3>{S.overview} <InfoTip text="展示各类资料的收集完成情况及需重点跟进区域。" /></h3></header>
     <div className="collection-table-wrap"><table className="collection-overview-table"><thead><tr><th>{S.materialType}</th><th>{S.collected}</th><th>{S.rate}</th><th>{S.followRegions}</th></tr></thead>
-      <tbody>{rows.length ? rows.map((item) => <tr key={item.name} className="collection-drill-row" tabIndex={0} onClick={() => onDrilldown(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onDrilldown(item); } }}>
+      <tbody>{rows.length ? rows.map((item, index) => <tr key={item.name} className={`collection-drill-row ${!expanded && index >= 4 ? "mobile-collapsed-row" : ""}`} tabIndex={0} onClick={() => onDrilldown(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onDrilldown(item); } }}>
         <td><div className="collection-material-name"><MaterialIcon kind={item.kind} /><span>{item.name}</span></div></td>
         <td className="collection-numeric">{item.completed} / {item.total}</td>
         <td className={`collection-rate ${item.rate < 90 ? "low" : ""}`}>{formatPercent(item.rate)}</td>
         <td className="collection-follow">{item.followRegions.length ? item.followRegions.map((region) => `${region.name}${formatPercent(region.rate)}`).join("、") : S.allComplete}</td>
       </tr>) : <tr><td colSpan={4} className="collection-empty">{S.noData}</td></tr>}</tbody>
-    </table></div>
+    </table></div>{rows.length > 4 ? <button type="button" className="mobile-expand-button" aria-expanded={expanded} onClick={onToggle}>{expanded ? `收起全部 ${rows.length} 项⌃` : `展开全部 ${rows.length} 项⌄`}</button> : null}
   </article>;
 }
 
@@ -418,7 +418,9 @@ export function Q1SpecialPanels() {
   const { quarter: selected, rows, differenceItems, materialStatus, spdDashboard, loading, error } = useDashboardData();
   const [tab, setTab] = useState<"collection" | "unaccounted">("unaccounted");
   const [drillSelection, setDrillSelection] = useState<CollectionDrillSelection | null>(null);
+  const [collectionExpandedQuarter, setCollectionExpandedQuarter] = useState<string | null>(null);
   const quarter = selected?.label ?? "";
+  const collectionExpanded = collectionExpandedQuarter === selected?.code;
   const sheet = useMemo(() => pgSheet(rows, materialStatus, differenceItems, selected?.code ?? ""), [rows, materialStatus, differenceItems, selected?.code]);
   const spdSheet = useMemo(() => pgSpdSheet(spdDashboard), [spdDashboard]);
   const data = useMemo(() => withSpdSummary(specialData(sheet, spdSheet), spdDashboard), [sheet, spdSheet, spdDashboard]);
@@ -434,7 +436,7 @@ export function Q1SpecialPanels() {
       <button role="tab" aria-selected={tab === "collection"} className={tab === "collection" ? "active" : ""} onClick={() => setTab("collection")}>{S.collection}</button>
       <button role="tab" aria-selected={tab === "unaccounted"} className={tab === "unaccounted" ? "active" : ""} onClick={() => setTab("unaccounted")}>{S.unaccounted}</button>
     </div></div>
-    <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} onDrilldown={(material) => setDrillSelection({ type: "material", material })} />
+    <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} expanded={collectionExpanded} onToggle={() => setCollectionExpandedQuarter((value) => value === selected?.code ? null : selected?.code ?? null)} onDrilldown={(material) => setDrillSelection({ type: "material", material })} />
       {tab === "collection" ? <ReplyRateCard rows={data.replyRates} onDrilldown={(region) => setDrillSelection({ type: "reply", region })} />
         : <div className="special-legacy-panel"><VerticalScrollList label={S.unaccounted}><table><thead><tr><th>{S.region}</th><th>{S.customer}</th><th>{S.note}</th></tr></thead><tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td className="unaccounted-reason" title={item.note || undefined}>{item.note || "—"}</td></tr>) : <tr><td colSpan={3}>{S.unaccountedEmpty}</td></tr>}</tbody></table></VerticalScrollList></div>}
     </div>

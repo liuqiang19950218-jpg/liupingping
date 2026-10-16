@@ -205,3 +205,15 @@
   .collection-overview-table tbody tr { background:#fff; }.collection-overview-table td { color:#1f2937; }.collection-overview-table td:before { color:#64748b; }.collection-numeric { color:#111827; }.collection-rate { color:#168a52; }.collection-follow { color:#64748b; }
   .special-scroll-list,.special-scroll-list table { background:#fff; }.special-scroll-list th { color:#475569; background:#f8fafc; }.special-scroll-list td { color:#1f2937; background:#fff; }
 }
+
+/* V4 keeps the collection table's real rows intact and only folds rows after
+   the first four on phones.  These controls intentionally do not affect the
+   reply-rate card or any desktop layout. */
+@media (max-width:760px) {
+  .overview-card .collection-overview-table .mobile-collapsed-row { display:none !important; }
+  .overview-card .mobile-expand-button { display:block; width:100%; min-height:38px; border:0; border-top:1px solid #dce9f8; background:#f7fbff; color:#0969e8; font-size:13px; font-weight:700; cursor:pointer; }
+}
+
+@media (min-width:761px) {
+  .overview-card .mobile-expand-button { display:none; }
+}

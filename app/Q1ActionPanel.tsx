@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useDashboardData } from "./dashboard-postgres-data";
 import { isUnsettled } from "../lib/reconciliation-settlement-status.mjs";
 import "./q1-action-panel.css";
 
 type ActionItem = {
+  id: string;
   region: string;
   customer: string;
   companyReceivable: string;
@@ -72,11 +73,12 @@ function exportList(items: ActionItem[]) {
 
 export function Q1ActionPanel() {
   const { quarter, rows, loading, error } = useDashboardData();
+  const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
   const items = useMemo<ActionItem[]>(() => rows
     .filter(isUnsettled)
     .map((row) => {
       const split = splitResolutionSolution(row.solution ?? "");
-      return { region: row.region || "未填写", customer: row.customer || "—", companyReceivable: row.companyReceivable || "—", cause: split.cause, action: split.action };
+      return { id: row.id, region: row.region || "未填写", customer: row.customer || "—", companyReceivable: row.companyReceivable || "—", cause: split.cause, action: split.action };
     }), [rows]);
   if (loading) return <section className="q1-actions" aria-busy="true">正在读取 PostgreSQL 季度数据…</section>;
   if (error) return <section className="q1-actions dashboard-data-error" role="alert">重点行动清单读取失败：{error}</section>;
@@ -137,6 +139,16 @@ export function Q1ActionPanel() {
             )}
           </tbody>
         </table>
+      </div>
+      <div className="mobile-action-list" aria-label="未对清客户重点行动清单">
+        {items.length ? items.map((item) => {
+          const key = item.id;
+          const expanded = expandedCustomer === key;
+          return <article className="mobile-action-row" key={key}>
+            <div className="mobile-action-summary"><strong>{item.customer}</strong><span>{item.region}</span><b>{item.companyReceivable}</b><button type="button" aria-expanded={expanded} onClick={() => setExpandedCustomer(expanded ? null : key)}>{expanded ? "收起详情⌃" : "展开详情⌄"}</button></div>
+            {expanded ? <div className="mobile-action-details"><div className="mobile-action-detail-item"><b className="mobile-action-detail-label">核心原因</b><span className="mobile-action-detail-value">{item.cause}</span></div><div className="mobile-action-detail-item"><b className="mobile-action-detail-label">下一步动作</b><span className="mobile-action-detail-value">{item.action}</span></div></div> : null}
+          </article>;
+        }) : <p className="mobile-action-empty">暂无“26年1季度是否对清”为“未对清”的客户数据。</p>}
       </div>
     </section>
   );

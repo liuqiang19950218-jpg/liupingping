@@ -33,3 +33,25 @@
   .history-table td:nth-child(2):before { content:"对账客户"; }.history-table td:nth-child(3):before { content:"已对清"; }.history-table td:nth-child(4):before { content:"未对清"; }.history-table td:nth-child(5):before { content:"对清率"; }
   .history-table td:before { display:block; color:#64748b; font-size:12px; font-weight:700; }.history-table td:nth-child(4) { color:#c62828; }.history-table td:nth-child(5) { color:#075aca; font-weight:800; }.history-table td:nth-last-child(-n+2) { border-bottom:0; }.history-table .mobile-collapsed-row { display:none; }
 }
+
+/* The legacy cockpit theme uses desktop-wide !important gradients.  Keep its
+   dark treatment above this breakpoint, while making only phone history cards
+   readable on their white surface. */
+@media (max-width:760px) {
+  .dashboard-management-layer .history-card,
+  .history-dashboard .history-card { background:#fff !important; background-image:none !important; color:#1f2937 !important; }
+  .history-card .history-title h2 { color:#17233d !important; }
+  .history-card .history-summary { color:#475569 !important; }
+  .history-card .history-summary b { color:#1f2937 !important; }
+  .history-card .history-summary strong,
+  .history-card .history-table .rate { color:#075aca !important; }
+  .history-card .history-table,
+  .history-card .history-table table,
+  .history-card .history-table tbody { background:#fff !important; color:#1f2937 !important; }
+  .history-card .history-table tr { background:#fff !important; }
+  .history-card .history-table th { background:#f4f9ff !important; color:#385476 !important; }
+  .history-card .history-table td { background:#fff !important; color:#1f2937 !important; }
+  .history-card .history-table td:before { color:#64748b !important; }
+  .history-card .history-table .warn { color:#c62828 !important; }
+  .history-trend-card .history-tags span { background:#fff !important; color:#34425e !important; }
+}
