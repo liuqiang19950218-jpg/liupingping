@@ -14,6 +14,7 @@ import "./app-shell.css";
 import "./shell-overrides.css";
 import "./problem-dashboard-header.css";
 import "./dashboard-cockpit.css";
+import "./dashboard-management-layout.css";
 
 const T = { brand:"应收对账管理系统", sub:"AR RECONCILIATION MANAGEMENT", history:"对账看板", current:"本季度对账详细情况", import:"数据导入", tracker:"未解决客户跟进", cockpit:"管理层驾驶舱", issue:"问题解决看板", local:"自动保存：已保存" };
 type View = "history" | "current" | "import" | "tracker" | "cockpit" | "problem";
@@ -79,11 +80,19 @@ export default function Home() {
       <div className="side-note"><b>让对账更简单</b><span>让数据更有价值</span></div>
     </aside>
     <section className="work-area">
-      <header className="work-header"><div><h1>{title}</h1><p>{hint}</p></div>{view === "problem" ? <div className="problem-header-actions"><small>{`◷ 数据更新时间：${updatedAt}`}</small><button onClick={() => window.dispatchEvent(new Event("problem-dashboard-refresh"))}>↻ 刷新数据</button><button className="primary" onClick={() => openTracker()}>进入未解决客户跟进 ›</button></div> : <div className="header-status"><span className="header-user">◉ 当前用户</span><small>{`数据更新时间：${updatedAt}`}</small><span>✓ {T.local}</span></div>}</header>
+      <header className="work-header"><div><span className="mobile-work-brand" aria-hidden="true">☰ {T.brand}</span><h1>{title}</h1><p>{hint}</p></div>{view === "problem" ? <div className="problem-header-actions"><small>{`◷ 数据更新时间：${updatedAt}`}</small><button onClick={() => window.dispatchEvent(new Event("problem-dashboard-refresh"))}>↻ 刷新数据</button><button className="primary" onClick={() => openTracker()}>进入未解决客户跟进 ›</button></div> : <div className="header-status"><span className="header-user">◉ 当前用户</span><small>{`数据更新时间：${updatedAt}`}</small><span>✓ {T.local}</span></div>}</header>
       <div className="work-content">
         {view !== "current" && view !== "import" && view !== "problem" && <GlobalQuarterFilter />}
-        {view === "history" ? <><CurrentYearLinkedSummary/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>} 
+        {view === "history" ? <><CurrentYearLinkedSummary/><section className="dashboard-management-layer"><Q1ActionPanel/><Q1SpecialPanels/></section><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>}
       </div>
     </section>
+    <nav className="mobile-bottom-nav" aria-label="业务导航">
+      <button type="button" className={view === "history" ? "selected" : ""} aria-label={T.history} onClick={() => setView("history")}><i>◈</i><span>看板</span></button>
+      <button type="button" className={view === "current" ? "selected" : ""} aria-label={T.current} onClick={() => setView("current")}><i>≡</i><span>本季</span></button>
+      <button type="button" className={view === "tracker" ? "selected" : ""} aria-label={T.tracker} onClick={() => openTracker()}><i>●</i><span>跟进</span></button>
+      <button type="button" className={view === "cockpit" && tab === "cockpit" ? "selected" : ""} aria-label={T.cockpit} onClick={() => cockpit("cockpit")}><i>◴</i><span>驾驶舱</span></button>
+      <button type="button" className={view === "problem" ? "selected" : ""} aria-label={T.issue} onClick={() => setView("problem")}><i>!</i><span>问题</span></button>
+      <button type="button" className={view === "import" ? "selected" : ""} aria-label={T.import} onClick={() => setView("import")}><i>↑</i><span>导入</span></button>
+    </nav>
   </main></DashboardDataProvider>;
 }

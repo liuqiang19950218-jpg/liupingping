@@ -167,3 +167,41 @@
 }
 
 .q1-special{min-width:0!important;margin:0 0 14px;padding:14px;border-color:#168eea;background:linear-gradient(135deg,#061d4d,#040f2c);color:#d9efff;box-shadow:0 0 20px #0078ff52,inset 0 0 22px #147de022}.special-head{align-items:center;margin-bottom:12px;padding:0 5px}.special-head p{color:#5ddcff;font-size:12px}.special-head h2{color:#effbff;font-size:21px;text-shadow:0 0 10px #36b7ff}.special-tabs{gap:0;padding:3px;border:1px solid #1a82d6;border-radius:8px;background:#061b49}.special-tabs button{height:32px;padding:0 16px;border:0;border-radius:6px;background:transparent;color:#a6d5f2;font-size:13px}.special-tabs button.active{background:linear-gradient(90deg,#0966ee,#188deb);color:#fff;box-shadow:0 0 13px #128eff}.collection-dashboard{grid-template-columns:minmax(0,1.52fr) minmax(350px,1fr);gap:12px}.collection-card,.special-legacy-panel{height:430px;min-height:430px;padding:0!important;border-color:#197bca;background:linear-gradient(145deg,#062257,#051637);box-shadow:inset 0 0 18px #0f77db25}.collection-card-head{min-height:50px;border-color:#176ab5}.collection-card-head h3{color:#e7f8ff}.collection-info{border-color:#70ceff;color:#70ceff}.collection-table-wrap{padding:0 8px}.collection-overview-table th{height:38px;background:#08295b;color:#a9dcff;border-color:#155eaa;font-size:12px}.collection-overview-table td{border-color:#104b8c;color:#d7efff;background:transparent}.collection-overview-table th+th,.collection-overview-table td+td{border-color:#104b8c}.collection-overview-table tbody tr:hover{background:#0a326b}.collection-material-name,.collection-numeric{color:#e4f7ff}.collection-rate{color:#25d0ff}.collection-rate.low{color:#ff9f29}.collection-follow{color:#b8d8f1}.collection-material-icon{box-shadow:0 0 9px #068cff88}.special-legacy-panel{padding:12px!important}.special-scroll-list{max-height:340px;border-color:#176ab5;border-radius:7px}.special-scroll-list th,.special-scroll-list td{border-color:#104b8c;color:#d7efff;background:transparent;font-size:13px}.special-scroll-list th{background:#08295b;color:#a9dcff}.special-scroll-list tbody tr:hover{background:#0a326b}.special-scroll-actions button{border-color:#1a7cc8;background:#08295b;color:#79d8ff}.reply-rate-row{border-color:#104b8c!important;color:#d7efff!important}.reply-rate-row strong,.reply-count{color:#d7efff!important}.reply-rate-row b{color:#2cd5ff!important}@media(max-width:960px){.collection-dashboard{grid-template-columns:1fr}.collection-card,.special-legacy-panel{height:auto;min-height:390px}}@media(max-width:600px){.special-head{align-items:flex-start;flex-direction:column}.special-tabs{width:100%}.special-tabs button{flex:1}.collection-card,.special-legacy-panel{min-height:360px}}
+
+/* V2 phone surface: this file loads after the legacy cockpit skin, so the
+   neutral rules live here to keep desktop presentation untouched. */
+@media (max-width:760px) {
+  .q1-special { min-width:0!important; margin:0 0 16px; padding:16px; border-color:#dce9f8; background:#fff; box-shadow:0 2px 10px rgba(31,56,100,.04); color:#263653; }
+  .special-head { align-items:flex-start; margin-bottom:14px; padding:0; }
+  .special-head p { color:#075aca; font-size:13px; }
+  .special-head h2 { color:#17233d; font-size:21px; text-shadow:none; }
+  .special-tabs { width:100%; padding:3px; border-color:#cfe0f4; background:#f7fbff; }
+  .special-tabs button { min-height:36px; color:#385476; }
+  .special-tabs button.active { background:#1769e0; color:#fff; box-shadow:none; }
+  .collection-dashboard { grid-template-columns:1fr; gap:14px; }
+  .collection-card,.special-legacy-panel { height:auto; min-height:0; padding:0!important; border-color:#e1eaf5; background:#fff; box-shadow:none; }
+  .collection-card-head { min-height:52px; border-color:#e7edf5; }
+  .collection-card-head h3 { color:#17233d; }
+  .collection-info { border-color:#71809d; color:#526785; }
+  .collection-table-wrap { padding:0 12px 12px; }
+  .collection-overview-table,.collection-overview-table tbody,.collection-overview-table tr,.collection-overview-table td { display:block; width:100%; }
+  .collection-overview-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  .collection-overview-table tbody { display:grid; gap:9px; }
+  .collection-overview-table tbody tr { padding:10px 11px; border:1px solid #e3eaf4; border-radius:10px; background:#fbfdff; }
+  .collection-overview-table td { display:grid; grid-template-columns:104px minmax(0,1fr); gap:8px; min-height:0; padding:6px 0; border-bottom:1px solid #e8edf5; color:#263653; font-size:13px; text-align:left; word-break:break-word; }
+  .collection-overview-table td:last-child { border-bottom:0; }
+  .collection-overview-table td:before { color:#526785; content:""; font-size:12px; font-weight:700; }
+  .collection-overview-table td:nth-child(1):before { content:"资料类型"; }.collection-overview-table td:nth-child(2):before { content:"已收集 / 应收集"; }.collection-overview-table td:nth-child(3):before { content:"收集率"; }.collection-overview-table td:nth-child(4):before { content:"需跟进区域"; }
+  .collection-overview-table td+td { border-left:0; }.collection-material-name,.collection-numeric { color:#17233d; font-size:14px; }.collection-material-icon { display:none; }.collection-rate { color:#168a52; font-size:14px; text-align:left; }.collection-rate.low { color:#c85e2d; }.collection-follow { color:#415a7a; font-size:13px; line-height:1.6; }
+  .reply-rate-list { padding:5px 12px 12px; overflow:visible; }.reply-rate-row { min-height:52px; height:auto; border-color:#e5edf7!important; color:#17233d!important; }.reply-rate-row strong,.reply-count { color:#17233d!important; }.reply-rate-row b { color:#168a52!important; }.reply-rate-row b[style] { color:#c85e2d!important; }
+  .special-legacy-panel { padding:12px!important; }.special-scroll-list { max-height:none; border-color:#e1eaf5; }.special-scroll-list th,.special-scroll-list td { border-color:#e8edf5; color:#263653; background:#fff; }.special-scroll-list th { background:#f4f9ff; color:#385476; }.special-scroll-list tbody tr:hover { background:#f8faff; }
+}
+
+/* Final phone-only surface guard for legacy !important cockpit declarations. */
+@media (max-width:760px) {
+  .dashboard-management-layer .q1-special,.q1-special { color:#1f2937; border-color:#e5e7eb; background:#fff; box-shadow:0 2px 8px rgba(15,23,42,.04); }
+  .dashboard-management-layer .collection-card,.dashboard-management-layer .special-legacy-panel,.collection-card,.special-legacy-panel { color:#1f2937; border-color:#e5e7eb; background:#fff; box-shadow:none; }
+  .collection-card-head,.special-legacy-panel header { background:#fff; color:#1f2937; }.collection-card-head h3,.special-head h2 { color:#17233d; }.special-head p { color:#075aca; }
+  .collection-overview-table tbody tr { background:#fff; }.collection-overview-table td { color:#1f2937; }.collection-overview-table td:before { color:#64748b; }.collection-numeric { color:#111827; }.collection-rate { color:#168a52; }.collection-follow { color:#64748b; }
+  .special-scroll-list,.special-scroll-list table { background:#fff; }.special-scroll-list th { color:#475569; background:#f8fafc; }.special-scroll-list td { color:#1f2937; background:#fff; }
+}

@@ -56,3 +56,14 @@
   background:linear-gradient(90deg,rgba(12,99,176,.72),rgba(7,55,123,.76)) !important;
   box-shadow:inset 2px 0 rgba(93,215,255,.72),inset 0 1px rgba(142,233,255,.15);
 }
+
+/* Keep the existing drill-down usable on phones without inheriting the
+   desktop cockpit skin.  The dialog data and handlers are unchanged. */
+@media (max-width:760px) {
+  .collection-drill-mask { background:rgba(23,35,55,.34); backdrop-filter:blur(2px); }
+  .collection-drill-dialog.detail-table-tool { background:#fff !important; border-color:#dce7f4 !important; box-shadow:0 16px 40px rgba(27,54,97,.22) !important; color:#263653; }
+  .collection-drill-head { border-bottom-color:#e5edf7; background:#fff; }.collection-drill-head p { color:#075aca; text-shadow:none; }.collection-drill-head h2 { color:#17233d; text-shadow:none; }.collection-drill-head span { color:#526785; }.collection-drill-head button { border-color:#cfe0f4; background:#fff; color:#075aca; box-shadow:none; }
+  .collection-drill-tabs { border-bottom-color:#e5edf7; background:#f7fbff; }.collection-drill-tabs button { border-color:#dce7f4; background:#fff; color:#385476; }.collection-drill-tabs button.active { border-color:#1769e0; background:#1769e0; color:#fff; box-shadow:none; }
+  .collection-drill-summary { border-bottom-color:#e5edf7; background:#f7fbff; color:#415a7a; }.collection-drill-summary b { color:#17233d; text-shadow:none; }
+  .collection-drill-table,.collection-drill-dialog .local-table { border-color:#dce7f4 !important; background:#fff !important; box-shadow:none; }.collection-drill-table th,.collection-drill-dialog .local-table th { border-bottom-color:#dce7f4 !important; background:#f4f9ff !important; color:#385476 !important; box-shadow:none; }.collection-drill-table td,.collection-drill-dialog .local-table td { border-bottom-color:#e5edf7 !important; background:#fff !important; color:#263653 !important; }.collection-drill-table tbody tr:nth-child(even) td,.collection-drill-dialog .local-table tbody tr:nth-child(even) td { background:#fbfdff !important; }.collection-drill-table tbody tr:hover td,.collection-drill-dialog .local-table tbody tr:hover td { background:#f2f7ff !important; box-shadow:none; }.collection-drill-table .collection-drill-customer,.collection-drill-table .money-cell { color:#17233d; }.collection-drill-table .difference-cell { color:#c62828; text-shadow:none; }
+}
