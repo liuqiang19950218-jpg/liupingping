@@ -1,0 +1,172 @@
+/* Phone-only presentation for the current-quarter reconciliation workflow.
+ * The desktop table and its existing business flow remain untouched. */
+@media (max-width: 760px) {
+  .reconciliation-page .work-content { background: #f5f7fb; }
+  .reconciliation-page .detail-table-tool { width: 100%; margin: 0; padding: 0 12px 86px; }
+  .reconciliation-page .detail-table-tool .local-toolbar,
+  .reconciliation-page .reconciliation-toolbar,
+  .reconciliation-page .quarter-archive-control {
+    border: 1px solid #e1e9f3; border-radius: 14px; background: #fff; box-shadow: 0 2px 10px rgb(28 55 91 / 5%); color: #172b4d;
+  }
+  .reconciliation-page .detail-table-tool .local-toolbar { display: none; }
+  .reconciliation-page .quarter-archive-control { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 10px; margin: 0 0 12px; padding: 14px; }
+  .reconciliation-page .quarter-archive-control::before { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: #edf5ff; color: #1677ff; font-size: 23px; content: "▣"; }
+  .reconciliation-page .quarter-archive-control label { display: grid; gap: 5px; color: #62748c; font-size: 13px; }
+  .reconciliation-page .quarter-archive-control select { height: 48px; width: 100%; border: 1px solid #dbe6f2; border-radius: 10px; background: #fff; color: #172b4d; font-size: 17px; font-weight: 800; }
+  .reconciliation-page .quarter-archive-control > span { display: none; }
+  .reconciliation-page .reconciliation-toolbar { display: grid; gap: 12px; margin-bottom: 12px; padding: 14px; }
+  .reconciliation-page .table-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .reconciliation-page .table-controls label { display: grid; gap: 0; color: transparent; font-size: 0; }
+  .reconciliation-page .table-controls select, .reconciliation-page .table-controls input { width: 100%; height: 46px; border-color: #dbe5f1; border-radius: 10px; background: #fbfcfe; color: #172b4d; font-size: 14px; }
+  .reconciliation-page .table-controls .search-control { grid-column: 1 / -1; }
+  .reconciliation-page .search-control input { width: 100%; padding-left: 14px; }
+  .reconciliation-page .toolbar-outline, .reconciliation-page .toolbar-ghost { display: none; }
+  .reconciliation-page .local-table { display: none; }
+  .mobile-reconciliation-list { display: grid; gap: 12px; }
+  .mobile-reconciliation-card { padding: 15px; border: 1px solid #e1e9f3; border-radius: 14px; background: #fff; box-shadow: 0 2px 10px rgb(28 55 91 / 5%); }
+  .mobile-reconciliation-card-head { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+  .mobile-row-number { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #edf5ff; color: #1677ff; font-size: 16px; font-weight: 800; }
+  .mobile-reconciliation-card h3 { display: inline; margin: 0 7px 0 0; color: #172b4d; font-size: 16px; line-height: 1.35; }
+  .mobile-region-tag { display: inline-block; padding: 4px 7px; border-radius: 6px; background: #edf5ff; color: #1677ff; font-size: 11px; font-weight: 700; }
+  .mobile-reconciliation-card .status-badge { min-width: 0; }
+  .mobile-reconciliation-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin: 12px 0; color: #71829a; font-size: 12px; }
+  .mobile-reconciliation-meta b { color: #304564; font-weight: 600; }
+  .mobile-reconciliation-amounts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 10px 0; border-top: 1px solid #edf1f6; border-bottom: 1px solid #edf1f6; }
+  .mobile-reconciliation-amounts span { display: grid; gap: 4px; color: #75869e; font-size: 11px; }
+  .mobile-reconciliation-amounts b { overflow: hidden; color: #1677ff; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-reconciliation-amounts .has-difference b { color: #ed4e5d; }
+  .mobile-reconciliation-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 11px; color: #75869e; font-size: 10px; line-height: 1.45; }
+  .mobile-reconciliation-footer > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reconciliation-page .mobile-reconciliation-footer .fill-button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; height: 38px !important; min-height: 38px; padding: 0 13px !important; border: 0 !important; border-radius: 9px !important; background: #1677ff !important; box-shadow: 0 4px 10px rgb(22 119 255 / 18%) !important; color: #fff !important; }
+  .mobile-reconciliation-footer .fill-button i { font-size: 21px; font-style: normal; line-height: 1; }
+  .mobile-reconciliation-empty { padding: 35px 12px; color: #75869e; text-align: center; }
+  .reconciliation-page .table-pagination { margin-top: 12px; border: 1px solid #e1e9f3; border-radius: 12px; background: #fff; color: #62748c; }
+  .reconciliation-page .table-pagination button, .reconciliation-page .table-pagination select { border-color: #dbe5f1; background: #fff; color: #315174; }
+
+  /* Level two: the existing customer form becomes a near-full-screen, white drawer. */
+  .reconciliation-page .modal-backdrop { z-index: 1000; padding: 0; overflow: hidden; background: rgb(14 30 52 / 48%); }
+  .reconciliation-page .sales-modal { position: absolute; right: 0; width: min(92vw, 620px); height: 100dvh; margin: 0; padding: 18px 14px 92px; border: 0; border-radius: 22px 0 0 22px; background: #f5f7fb; box-shadow: -12px 0 32px rgb(21 42 74 / 20%); color: #172b4d; }
+  .reconciliation-page .sales-modal-sticky { top: -18px; margin: -18px -14px 12px; padding: 28px 18px 16px; border-bottom: 0; background: #fff; box-shadow: 0 2px 10px rgb(28 55 91 / 5%); }
+  .reconciliation-page .sales-modal-sticky .eyebrow { color: #1677ff; font-size: 12px; text-shadow: none; }
+  .reconciliation-page .sales-account { color: #71829a; }
+  .reconciliation-page .sales-modal h2 { color: #172b4d; font-size: 22px; text-shadow: none; }
+  .reconciliation-page .sales-modal .modal-close, .reconciliation-page .difference-detail-drawer header > button { border: 0; border-radius: 50%; background: #f3f6fa; color: #172b4d; }
+  .reconciliation-page .amount-bar { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin: 12px 0; padding: 13px; border: 0; border-radius: 12px; background: #eef6ff; color: #60728d; }
+  .reconciliation-page .amount-bar strong { display: block; margin-top: 4px; color: #1677ff; font-size: 19px; text-shadow: none; }
+  .reconciliation-page .amount-bar .unclear { margin: 0; align-self: center; border: 0; background: #ffebe9; color: #e44d55; }
+  .reconciliation-page .amount-bar .clear { margin: 0; align-self: center; border: 0; background: #e7f7ef; color: #15915e; }
+  .customer-save-row { grid-template-columns: 1fr 1fr; gap: 9px; }
+  .customer-save-row .top-save-button { grid-column: 1 / -1; }
+  .reconciliation-page .sales-modal input, .reconciliation-page .sales-modal textarea, .reconciliation-page .difference-detail-drawer input, .reconciliation-page .difference-detail-drawer textarea { border-color: #dbe5f1; background: #fff; color: #172b4d !important; caret-color: #1677ff; }
+  .reconciliation-page .sales-modal input:focus, .reconciliation-page .sales-modal textarea:focus, .reconciliation-page .difference-detail-drawer input:focus, .reconciliation-page .difference-detail-drawer textarea:focus { border-color: #1677ff; box-shadow: 0 0 0 3px rgb(22 119 255 / 10%); }
+  .reconciliation-page .sales-modal .field > span, .reconciliation-page .writeoff-adjustment-section .field > span, .reconciliation-page .voice-text-field .field > span { color: #526784; }
+  .reconciliation-page .sales-modal .save-button, .reconciliation-page .top-save-button { min-height: 48px; border: 0 !important; border-radius: 10px; background: #1677ff !important; box-shadow: none; color: #fff !important; text-shadow: none; }
+  .sales-modal-body { overflow-y: auto; padding-bottom: 10px; }
+  .reconciliation-page .difference-summary-heading { color: #172b4d; text-shadow: none; }
+  .reconciliation-page .difference-summary-heading small { color: #75869e; }
+  .reconciliation-page .difference-summary-row { grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; min-height: 76px; padding: 10px; border-color: #e1e9f3; border-radius: 13px; background: #fff; color: #172b4d; box-shadow: 0 2px 8px rgb(28 55 91 / 4%); }
+  .reconciliation-page .difference-summary-row:hover, .reconciliation-page .difference-summary-row.active { border-color: #c9dffb; background: #fff; box-shadow: 0 3px 11px rgb(28 55 91 / 7%); }
+  .reconciliation-page .difference-summary-row i { border: 0; background: #edf5ff; color: #1677ff; }
+  .reconciliation-page .difference-summary-row strong { color: #172b4d; }
+  .reconciliation-page .difference-summary-row .summary-tag { display: inline-block; width: max-content; margin-top: 5px; border: 0; background: #fff3df; color: #bc7813; }
+  .reconciliation-page .difference-summary-row > span:not(.summary-tag), .reconciliation-page .difference-summary-row > b { grid-column: 2; justify-self: start; margin-top: -22px; color: #75869e; font-size: 12px; }
+  .reconciliation-page .difference-summary-row > b { grid-column: 2; margin-left: 38px; color: #1677ff; }
+  .reconciliation-page .difference-summary-row > button { grid-column: 3; grid-row: 1 / span 2; align-self: center; padding: 8px 12px; border: 0; border-radius: 9px; background: #1677ff; color: #fff; }
+  .reconciliation-page .difference-summary-row em { display: none; }
+  .reconciliation-page .previous-transfer-trigger { width: 100%; margin: 0 0 12px; border: 0; border-radius: 10px; background: #eef6ff; color: #1677ff; }
+  .reconciliation-page .amount-bar.evidence { grid-template-columns: repeat(3, minmax(0, 1fr)); background: #fff; box-shadow: 0 2px 8px rgb(28 55 91 / 4%); }
+  .reconciliation-page .amount-bar.evidence strong { font-size: 16px; }
+  .writeoff-adjustment-section { padding: 14px; border: 1px solid #e1e9f3; border-radius: 13px; background: #fff; }
+
+  /* Level three: rows are individual form cards rather than a compressed table. */
+  .reconciliation-page .difference-detail-drawer { z-index: 1100; width: min(88vw, 540px); border: 0; border-radius: 22px 0 0 22px; background: #f5f7fb; box-shadow: -12px 0 32px rgb(21 42 74 / 24%); color: #172b4d; }
+  .reconciliation-page .difference-detail-drawer header { padding: 30px 18px 16px; border: 0; background: #fff; }
+  .reconciliation-page .difference-detail-drawer header p { color: #526784; }
+  .reconciliation-page .difference-detail-drawer header h2 { color: #172b4d; font-size: 22px; text-shadow: none; }
+  .reconciliation-page .difference-detail-drawer header span { color: #62748c; }
+  .reconciliation-page .difference-detail-drawer header span b { color: #1677ff; text-shadow: none; }
+  .reconciliation-page .drawer-tools { flex-wrap: wrap; padding: 12px 14px; border: 0; background: #fff; }
+  .reconciliation-page .drawer-tools button, .reconciliation-page .drawer-tools button:first-child { flex: 1; min-width: max-content; border: 1px solid #b9d4f6; border-radius: 9px; background: #fff; color: #1677ff; }
+  .reconciliation-page .drawer-tools button:first-child { border: 0; background: #1677ff; color: #fff; }
+  .difference-drawer-table-wrap { padding: 12px 14px 84px; overflow-y: auto; }
+  .reconciliation-page .difference-drawer-table, .reconciliation-page .difference-drawer-table tbody, .reconciliation-page .difference-drawer-table tr, .reconciliation-page .difference-drawer-table td { display: block; width: 100%; min-width: 0; }
+  .reconciliation-page .difference-drawer-table { border: 0; background: transparent; }
+  .reconciliation-page .difference-drawer-table thead, .reconciliation-page .difference-drawer-table tfoot { display: none; }
+  .reconciliation-page .difference-drawer-table tbody { display: grid; gap: 12px; }
+  .reconciliation-page .difference-drawer-table tr { position: relative; padding: 14px; border: 1px solid #e1e9f3; border-radius: 13px; background: #fff; box-shadow: 0 2px 8px rgb(28 55 91 / 4%); }
+  .reconciliation-page .difference-drawer-table td { padding: 0 0 10px; border: 0; background: transparent; color: #526784; font-size: 13px; }
+  .reconciliation-page .difference-drawer-table td:first-child { padding-right: 54px; font-weight: 800; }
+  .reconciliation-page .difference-drawer-table td:not(:first-child)::before { display: block; margin-bottom: 5px; color: #526784; font-weight: 700; content: ""; }
+  .reconciliation-page .difference-drawer-table td:nth-child(2)::before { content: "开票日期"; }
+  .reconciliation-page .difference-drawer-table td:nth-child(3)::before { content: "发票号码"; }
+  .reconciliation-page .difference-drawer-table td:nth-child(4)::before { content: "金额（元）"; }
+  .reconciliation-page .difference-drawer-table td:nth-child(5)::before { content: "差额说明"; }
+  .reconciliation-page .difference-drawer-table td:nth-child(6)::before { content: "往来核验"; }
+  .reconciliation-page .difference-drawer-table tr:has(.drawer-attachment) td:nth-child(2)::before { content: "金额（元）"; }
+  .reconciliation-page .difference-drawer-table tr:has(.drawer-attachment) td:nth-child(3)::before { content: "差额说明"; }
+  .reconciliation-page .difference-drawer-table tr:has(.drawer-attachment) td:nth-child(4)::before { content: "上传附件"; }
+  .reconciliation-page .difference-drawer-table td input, .reconciliation-page .difference-drawer-table td textarea { width: 100%; min-height: 44px; border-radius: 9px; }
+  .reconciliation-page .difference-drawer-table .drawer-row-actions { position: absolute; top: 12px; right: 12px; display: flex; width: auto; gap: 9px; padding: 0; }
+  .reconciliation-page .drawer-row-actions button, .reconciliation-page .drawer-attachment label { color: #1677ff; }
+  .reconciliation-page .drawer-row-actions button:last-child { padding: 5px 7px; border-radius: 6px; background: #fff0f0; color: #df4e58; }
+  .drawer-mobile-save { position: absolute; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid #e1e9f3; background: #fff; color: #526784; font-size: 12px; box-shadow: 0 -3px 12px rgb(28 55 91 / 6%); }
+  .drawer-mobile-save b { color: #1677ff; }
+  .drawer-mobile-save button { width: auto; height: 40px; margin: 0; padding: 0 12px; border-radius: 9px; background: #1677ff; color: #fff; font-size: 12px; }
+}
+
+@media (min-width: 761px) { .mobile-reconciliation-list, .drawer-mobile-save { display: none; } }
+
+@media (max-width:760px) {
+  .reconciliation-page .mobile-reconciliation-card { padding:16px; }
+  .reconciliation-page .mobile-reconciliation-meta { gap:8px 12px; font-size:13px; line-height:1.45; }
+  .reconciliation-page .mobile-reconciliation-amounts { grid-template-columns:1fr 1fr; }
+  .reconciliation-page .mobile-reconciliation-amounts span:last-child { grid-column:1 / -1; }
+  .reconciliation-page .mobile-reconciliation-amounts b { overflow:visible; font-size:15px; white-space:normal; word-break:break-word; }
+  .reconciliation-page .sales-modal,
+  .reconciliation-page .difference-detail-drawer { width:100%!important; max-width:100vw; }
+  .reconciliation-page .difference-detail-drawer header { position:sticky; top:0; z-index:3; }
+  .reconciliation-page .difference-detail-drawer header > button,
+  .reconciliation-page .sales-modal .modal-close { display:grid; place-items:center; width:44px; height:44px; font-size:26px; }
+  .reconciliation-page .difference-detail-drawer table,
+  .reconciliation-page .difference-detail-drawer .drawer-table { min-width:620px; }
+  .reconciliation-page .difference-detail-drawer .drawer-table-wrap,
+  .reconciliation-page .difference-detail-drawer .table-wrap { max-width:100%; overflow-x:auto; overflow-y:visible; overscroll-behavior-x:contain; }
+  .reconciliation-page .difference-detail-drawer input,
+  .reconciliation-page .difference-detail-drawer textarea { min-height:44px; font-size:14px; line-height:1.55; }
+}
+
+/* First-level customer list only; existing level-two/three styles above are frozen. */
+@media (max-width:760px) {
+  .reconciliation-page .detail-table-tool > .quarter-archive-control { margin-bottom:10px; padding:12px; border-radius:12px; }
+  .reconciliation-page .detail-table-tool > .quarter-archive-control select { height:44px; font-size:16px; font-weight:600; }
+  .reconciliation-page .detail-table-tool > .reconciliation-toolbar { grid-template-columns:minmax(0,1fr); padding:0; gap:10px; border:0; background:transparent; box-shadow:none; }
+  .reconciliation-page .detail-table-tool > .reconciliation-toolbar { width:100%; max-width:none; box-sizing:border-box; align-self:stretch; }
+  .reconciliation-page .reconciliation-toolbar > .file-summary { display:none; }
+  .reconciliation-page .reconciliation-toolbar > .table-controls { display:grid; width:100%; max-width:none; box-sizing:border-box; align-self:stretch; grid-template-columns:repeat(2,minmax(0,1fr)); padding:12px; gap:9px; border:1px solid #dfe8f3; border-radius:12px; background:#fff; }
+  .reconciliation-page .reconciliation-toolbar > .table-controls > label { min-width:0; grid-column:auto; }
+  .reconciliation-page .reconciliation-toolbar > .table-controls > label:not(.search-control) { grid-column:auto; }
+  .reconciliation-page .reconciliation-toolbar > .table-controls > .search-control,
+  .reconciliation-page .reconciliation-toolbar > .table-controls > .toolbar-ghost { grid-column:1 / -1; width:100%; }
+  .reconciliation-page .reconciliation-toolbar > .table-controls label { gap:5px; font-size:12px; font-weight:400; color:#60718d; }
+  .reconciliation-page .reconciliation-toolbar > .table-controls select,
+  .reconciliation-page .reconciliation-toolbar > .table-controls input { height:42px; font-size:13px; font-weight:400; background:#fff; }
+  .reconciliation-page .reconciliation-toolbar > .table-controls .toolbar-ghost { display:block; grid-column:1 / -1; min-height:34px; font-size:12px; font-weight:500; }
+  .reconciliation-page .mobile-reconciliation-list { gap:10px; }
+  .reconciliation-page .mobile-reconciliation-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; padding:12px; border-radius:12px; }
+  .reconciliation-page .mobile-reconciliation-card-head { grid-column:1; grid-template-columns:28px minmax(0,1fr); gap:7px; align-items:start; }
+  .reconciliation-page .mobile-row-number { width:28px; height:28px; font-size:13px; font-weight:600; }
+  .reconciliation-page .mobile-reconciliation-card h3 { font-size:14px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
+  .reconciliation-page .mobile-reconciliation-card-head > .status-badge { grid-column:2; justify-self:start; padding:3px 6px; font-size:10px; font-weight:500; }
+  .reconciliation-page .mobile-region-tag { padding:2px 5px; font-size:10px; font-weight:500; }
+  .reconciliation-page .mobile-reconciliation-meta { grid-column:1 / -1; margin:0; gap:5px; font-size:11px; font-weight:400; }
+  .reconciliation-page .mobile-reconciliation-meta b { font-weight:500; overflow-wrap:anywhere; }
+  .reconciliation-page .mobile-reconciliation-amounts { grid-column:1 / -1; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; padding:9px 6px; border:0; border-radius:8px; background:#f3f8fd; }
+  .reconciliation-page .mobile-reconciliation-amounts span { min-width:0; gap:5px; font-size:10px; font-weight:400; }
+  .reconciliation-page .mobile-reconciliation-amounts span:last-child { grid-column:auto; }
+  .reconciliation-page .mobile-reconciliation-amounts b { font-size:clamp(10px,3.2vw,15px); font-weight:650; line-height:1.5; font-variant-numeric:tabular-nums; white-space:normal; overflow-wrap:anywhere; }
+  .reconciliation-page .mobile-reconciliation-footer { display:contents; }
+  .reconciliation-page .mobile-reconciliation-footer > span { grid-column:1 / -1; font-size:10px; font-weight:400; color:#71839e; white-space:normal; overflow-wrap:anywhere; line-height:1.6; }
+  .reconciliation-page .mobile-reconciliation-footer .fill-button { grid-column:2; grid-row:1; align-self:start; min-width:48px; min-height:36px; height:36px!important; padding:0 8px!important; font-size:12px; font-weight:500; box-shadow:none!important; }
+  .reconciliation-page .detail-table-tool > .table-pagination { flex-wrap:wrap; gap:8px; padding:10px; font-size:12px; }
+  .reconciliation-page .detail-table-tool > .table-pagination > div { flex-wrap:wrap; gap:6px; }
+}
