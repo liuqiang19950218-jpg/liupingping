@@ -17,7 +17,8 @@ export function prepareRelease({ cwd, environment, releaseId, archivePath, build
     const sourceTar = path.join(temporary, 'source.tar');
     const tree = path.join(temporary, 'tree');
     mkdirSync(tree);
-    execFileSync('git', ['archive', '--format=tar', `--output=${sourceTar}`, manifest.sourceGitSha], { cwd });
+    // Git for Windows can otherwise apply core.autocrlf while archiving.
+    execFileSync('git', ['-c', 'core.autocrlf=false', 'archive', '--format=tar', `--output=${sourceTar}`, manifest.sourceGitSha], { cwd });
     execFileSync('tar', ['-xf', sourceTar, '-C', tree]);
     verifySourceTree(tree, manifest);
     mkdirSync(path.join(tree, '.release'));

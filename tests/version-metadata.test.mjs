@@ -84,6 +84,8 @@ test('dirty tracked, staged and untracked source all block release', (t) => {
 test('Git archive preserves source SHA without .git and detects tampering/extra source', (t) => {
   const { root, cwd, sha } = fixture(t);
   const archivePath = path.join(root, 'release.tgz');
+  // Match Windows developer configuration; the archive must still use Git bytes.
+  git(cwd, 'config', 'core.autocrlf', 'true');
   prepareRelease({ cwd, archivePath, environment: 'formal', releaseId: 'formal-test' });
   const extracted = path.join(root, 'extracted');
   mkdirSync(extracted);
