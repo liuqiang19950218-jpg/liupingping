@@ -17,21 +17,28 @@
   .history-table td:before { display:none; }
 }
 
-/* Region rows become complete information cards on phones rather than a
-   compressed five-column desktop table. */
+/* Keep each real region in one compact five-column table row on phones.
+   At the narrowest widths, only this table (not the page) may scroll sideways. */
 @media (max-width:760px) {
   .history-dashboard { gap:14px; margin-bottom:16px; }
   .history-card { border-color:#e5e7eb; background:#fff; box-shadow:0 2px 8px rgba(15,23,42,.04); }
   .history-combo-chart { height:280px; max-width:100%; }
-  .history-table,.history-table table,.history-table tbody { display:block; width:100%; table-layout:auto; }
-  .history-table { border:0; background:transparent; overflow:visible; }
-  .history-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
-  .history-table tbody { display:grid; gap:10px; }
-  .history-table tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 12px; padding:12px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; }
-  .history-table th,.history-table td,.history-table th:nth-child(n),.history-table td:nth-child(n) { display:grid; grid-template-columns:72px minmax(0,1fr); width:auto; min-width:0; height:auto; padding:6px 0; border-bottom:1px solid #eef2f7; color:#1f2937; font-size:13px; line-height:1.45; text-align:left; white-space:normal; word-break:break-word; }
-  .history-table td:first-child { grid-column:1 / -1; grid-template-columns:minmax(0,1fr) auto; padding-top:0; color:#17233d; font-size:15px; font-weight:800; }.history-table td:first-child:before { content:"区域"; color:#075aca; font-size:12px; font-weight:700; }
-  .history-table td:nth-child(2):before { content:"对账客户"; }.history-table td:nth-child(3):before { content:"已对清"; }.history-table td:nth-child(4):before { content:"未对清"; }.history-table td:nth-child(5):before { content:"对清率"; }
-  .history-table td:before { display:block; color:#64748b; font-size:12px; font-weight:700; }.history-table td:nth-child(4) { color:#c62828; }.history-table td:nth-child(5) { color:#075aca; font-weight:800; }.history-table td:nth-last-child(-n+2) { border-bottom:0; }.history-table .mobile-collapsed-row { display:none; }
+  .history-dashboard .history-region-card .history-table { width:100%; min-width:0; overflow-x:auto; overflow-y:auto; border:1px solid #e3e9f2; border-radius:8px; background:#fff; }
+  .history-dashboard .history-region-card .history-table table { display:table; width:100%; min-width:318px; table-layout:fixed; border-collapse:collapse; }
+  .history-dashboard .history-region-card .history-table thead { position:static; display:table-header-group; width:auto; height:auto; overflow:visible; clip:auto; }
+  .history-dashboard .history-region-card .history-table tbody { display:table-row-group; width:auto; }
+  .history-dashboard .history-region-card .history-table tr { display:table-row; padding:0; border:0; border-radius:0; background:transparent; }
+  .history-dashboard .history-region-card .history-table th,
+  .history-dashboard .history-region-card .history-table td,
+  .history-dashboard .history-region-card .history-table th:nth-child(n),
+  .history-dashboard .history-region-card .history-table td:nth-child(n) { display:table-cell; box-sizing:border-box; width:auto; min-width:0; height:auto; padding:8px 2px; border-bottom:1px solid #e8edf5; color:#263653; font-size:11px; line-height:1.35; text-align:center; white-space:nowrap; word-break:normal; }
+  .history-dashboard .history-region-card .history-table th { position:static; background:#f4f9ff; color:#385476; font-size:10px; font-weight:600; }
+  .history-dashboard .history-region-card .history-table th:nth-child(1),.history-dashboard .history-region-card .history-table td:nth-child(1) { width:19%; padding-left:5px; text-align:left; }
+  .history-dashboard .history-region-card .history-table th:nth-child(2),.history-dashboard .history-region-card .history-table td:nth-child(2) { width:20%; }
+  .history-dashboard .history-region-card .history-table th:nth-child(3),.history-dashboard .history-region-card .history-table td:nth-child(3),.history-dashboard .history-region-card .history-table th:nth-child(4),.history-dashboard .history-region-card .history-table td:nth-child(4) { width:18%; }
+  .history-dashboard .history-region-card .history-table th:nth-child(5),.history-dashboard .history-region-card .history-table td:nth-child(5) { width:25%; }
+  .history-dashboard .history-region-card .history-table td:before { display:none; }
+  .history-dashboard .history-region-card .history-table td:nth-child(4) { color:#c62828; }.history-dashboard .history-region-card .history-table td:nth-child(5) { color:#075aca; font-weight:800; }.history-dashboard .history-region-card .history-table .mobile-collapsed-row { display:none; }
 }
 
 /* The legacy cockpit theme uses desktop-wide !important gradients.  Keep its
@@ -54,4 +61,47 @@
   .history-card .history-table td:before { color:#64748b !important; }
   .history-card .history-table .warn { color:#c62828 !important; }
   .history-trend-card .history-tags span { background:#fff !important; color:#34425e !important; }
+}
+
+/* Keep the history-region summary readable in the page flow while its full
+   real-data list scrolls inside a bounded phone card. */
+@media (max-width:760px) {
+  .history-dashboard { --mobile-list-card-height:max(320px,min(460px,58dvh)); }
+  /* dashboard-cockpit.css fixes .history-card at 430px with !important.
+     Limit the override to this phone-only list card so desktop/trend cards keep
+     their shared dimensions. */
+  .history-dashboard .history-region-card { display:flex; flex-direction:column; height:var(--mobile-list-card-height)!important; min-width:0; min-height:0!important; max-height:none; overflow:hidden; }
+  .history-region-card .history-card-header,.history-region-card .history-summary,.history-region-card .history-mobile-expand { flex:none; }
+  .history-dashboard .history-region-card .history-table { display:block; height:auto!important; flex:1 1 auto; min-width:0; min-height:0; overflow-x:auto; overflow-y:auto; overscroll-behavior:contain; scrollbar-color:#a8adb5 transparent; }
+  .history-region-card .history-table::-webkit-scrollbar { width:6px; }.history-region-card .history-table::-webkit-scrollbar-thumb { border-radius:999px; background:#a8adb5; }
+  .history-region-card .history-mobile-expand { -webkit-tap-highlight-color:transparent; touch-action:manipulation; }.history-region-card .history-mobile-expand:active { background:#edf5ff; }.history-region-card .history-mobile-expand:focus-visible { outline:2px solid #075aca; outline-offset:-3px; }
+}
+
+/* The ECharts canvas keeps its own coordinate system.  On phones only, its
+   host grows by real quarter count inside this dedicated scroll viewport, so
+   native scrolling moves the canvas and tooltip coordinates together. */
+.history-chart-scroll { width:100%; min-width:0; }
+@media (max-width:760px) {
+  .history-trend-card { min-width:0; }
+  .history-chart-scroll { width:100%; max-width:100%; min-width:0; overflow-x:auto; overflow-y:hidden; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; scrollbar-color:#a8adb5 transparent; touch-action:pan-x pan-y; }
+  .history-chart-scroll::-webkit-scrollbar { height:6px; }.history-chart-scroll::-webkit-scrollbar-thumb { border-radius:999px; background:#a8adb5; }
+  .history-chart-scroll .history-combo-chart { width:max(100%,calc(var(--history-trend-columns,1) * 76px)); min-width:0; max-width:none; }
+  .history-chart-scroll:focus-visible { outline:2px solid #075aca; outline-offset:2px; }
+}
+
+/* Only the phone history-region card suppresses pointer feedback.  The cockpit
+   theme uses an !important blue hover fill, so these narrow state rules do too. */
+@media (max-width:760px) {
+  .history-dashboard .history-region-card .history-table,
+  .history-dashboard .history-region-card .history-table tbody tr,
+  .history-dashboard .history-region-card .history-table tbody tr > td,
+  .history-dashboard .history-region-card .history-mobile-expand { -webkit-tap-highlight-color:transparent; }
+  .history-dashboard .history-region-card .history-table tbody tr:hover,
+  .history-dashboard .history-region-card .history-table tbody tr:active,
+  .history-dashboard .history-region-card .history-table tbody tr:hover > td,
+  .history-dashboard .history-region-card .history-table tbody tr:active > td,
+  .history-dashboard .history-region-card .history-mobile-expand:active,
+  .history-dashboard .history-region-card .history-mobile-expand:focus { background:transparent !important; box-shadow:none !important; filter:none !important; }
+  .history-dashboard .history-region-card .history-mobile-expand:active { transform:none; }
+  .history-dashboard .history-region-card .history-mobile-expand:focus-visible { outline:2px solid #075aca; outline-offset:-3px; }
 }

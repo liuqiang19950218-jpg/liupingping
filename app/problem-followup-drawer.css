@@ -82,3 +82,41 @@
   .pfd-summary { align-items: flex-start; flex-wrap: wrap; }
   .pfd-summary span:nth-last-child(-n + 2) { margin-left: 0; }
 }
+
+/* This drawer is exclusive to ProblemDashboard.  Keep its dark desktop skin
+   intact while presenting every mobile drill-down on the shared white surface. */
+@media (max-width: 760px) {
+  .pfd-backdrop { background: rgba(15, 23, 42, .38); backdrop-filter: blur(2px); }
+  .pfd-drawer { border-left: 0; background: #fff; box-shadow: -12px 0 32px rgba(30, 52, 85, .2); color: #1f2937; }
+  .pfd-header { padding: 22px 18px 16px; border-bottom-color: #e1eaf3; background: #fff; }
+  .pfd-header p { color: #1769e0; }
+  .pfd-header h2 { color: #102a4c; }
+  .pfd-header span { color: #64748b; }
+  .pfd-icon-close { border-color: #d5e1ee; border-radius: 10px; background: #fff; color: #475569; }
+  .pfd-icon-close:hover { border-color: #a9c7e5; background: #f5f9ff; color: #102a4c; }
+
+  .pfd-summary { gap: 8px 12px; padding: 11px 18px; border-bottom-color: #e1eaf3; background: #f7fbff; color: #475569; line-height: 1.5; }
+  .pfd-summary b { color: #102a4c; }
+  .pfd-summary strong { color: #1769e0; }
+  .pfd-body { padding: 16px 18px; background: #fff; }
+  .pfd-tools { justify-content: stretch; }
+  .pfd-tools input { width: 100%; border-color: #d5e1ee; background: #fff; color: #1f2937; box-shadow: none; }
+  .pfd-tools input::placeholder { color: #94a3b8; }
+  .pfd-tools input:focus { border-color: #4294ef; outline-color: rgba(66, 148, 239, .18); }
+  .pfd-table-wrap { border-color: #dbe5ef; background: #fff; box-shadow: none; }
+  .pfd-table-wrap th { border-bottom-color: #dbe5ef; background: #f3f7fb; color: #475569; }
+  .pfd-table-wrap th button { color: inherit; }
+  .pfd-table-wrap td { border-bottom-color: #e7eef6; background: #fff; color: #1f2937; }
+  .pfd-table-wrap tbody tr:nth-child(even) td { background: #fbfdff; }
+  .pfd-table-wrap tbody tr:hover td { background: #f3f8fd; color: #102a4c; box-shadow: inset 2px 0 #a9c7e5; }
+  .pfd-table-wrap td.pfd-amount { color: #c83b3b; text-shadow: none; }
+  .pfd-pagination { color: #475569; }
+  .pfd-pagination button { border-color: #d5e1ee; background: #fff; color: #1769e0; }
+  .pfd-pagination button:not(:disabled):hover { border-color: #8bb8e3; background: #f5f9ff; color: #075aca; }
+  .pfd-state { color: #64748b; }
+  .pfd-state.error { color: #c83b3b; }
+  .pfd-footer { padding: 14px 18px; border-top-color: #e1eaf3; background: #fff; }
+  .pfd-footer button { border-color: #d5e1ee; background: #fff; color: #475569; }
+  .pfd-footer button:hover { border-color: #a9c7e5; background: #f5f9ff; color: #102a4c; }
+  .pfd-footer .pfd-primary { border-color: #1677ff; background: #1677ff; box-shadow: none; color: #fff; }
+}

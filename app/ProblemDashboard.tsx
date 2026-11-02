@@ -41,6 +41,7 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
   const { quarter, reconciliationById, followups, loading, error } = useDashboardData();
   const [filters, setFilters] = useState<ProblemFilters>(() => emptyFilters(""));
   const [exporting, setExporting] = useState(false);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [drawerFilterContext, setDrawerFilterContext] = useState<Record<string, string> | null>(null);
 
   // This is the one live workload set for the process dashboard. `toItems`
@@ -135,19 +136,19 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
   if (error) return <section className="pd-page"><p className="pd-empty">无法读取问题看板：{error}</p></section>;
   if (loading) return <section className="pd-page" aria-busy><p className="pd-empty">正在读取问题看板…</p></section>;
   return <section className="pd-page" aria-busy={false}>
-    <section className="pd-filter">
+    <section className={`pd-filter ${filtersExpanded ? "is-expanded" : ""}`}>
       <label>责任人<select value={filters.owner} onChange={(event) => change("owner", event.target.value)}><option>全部</option>{owners.map((item) => <option key={item}>{item}</option>)}</select></label>
-      <label>问题类型<select value={filters.cause} onChange={(event) => change("cause", event.target.value)}><option>全部</option>{causes.map((item) => <option key={item}>{item}</option>)}</select></label>
-      <label>风险等级<select value={filters.risk} onChange={(event) => change("risk", event.target.value)}><option>全部</option><option>高风险</option><option>中风险</option><option>低风险</option></select></label>
+      <label className="pd-filter-aux">问题类型<select value={filters.cause} onChange={(event) => change("cause", event.target.value)}><option>全部</option>{causes.map((item) => <option key={item}>{item}</option>)}</select></label>
+      <label className="pd-filter-aux">风险等级<select value={filters.risk} onChange={(event) => change("risk", event.target.value)}><option>全部</option><option>高风险</option><option>中风险</option><option>低风险</option></select></label>
       <label>处理阶段<select value={filters.stage} onChange={(event) => change("stage", event.target.value)}><option>全部</option>{dashboard.stages.map((item) => <option key={item.name}>{item.name}</option>)}</select></label>
-      <label>超期天数<select value={filters.aging} onChange={(event) => change("aging", event.target.value)}><option>全部</option>{dashboard.ages.map((item) => <option key={item.name}>{item.name}</option>)}</select></label>
-      <label>最近跟进时间<select value={filters.follow} onChange={(event) => change("follow", event.target.value)}><option>全部</option><option>跟进中</option><option>待跟进</option><option>已超期</option></select></label>
+      <label className="pd-filter-aux">超期天数<select value={filters.aging} onChange={(event) => change("aging", event.target.value)}><option>全部</option>{dashboard.ages.map((item) => <option key={item.name}>{item.name}</option>)}</select></label>
+      <label className="pd-filter-aux">最近跟进时间<select value={filters.follow} onChange={(event) => change("follow", event.target.value)}><option>全部</option><option>跟进中</option><option>待跟进</option><option>已超期</option></select></label>
       <label>区域<select value={filters.region} onChange={(event) => change("region", event.target.value)}><option>全部</option>{regions.map((item) => <option key={item}>{item}</option>)}</select></label>
-      <div className="pd-filter-actions"><button onClick={() => setFilters(emptyFilters(quarter?.label ?? ""))}>↻ 重置</button><button className="primary" disabled={exporting} onClick={exportCurrent}>{exporting ? "导出中" : "↓ 导出"}</button></div>
+      <div className="pd-filter-actions"><button type="button" className="pd-filter-more" aria-expanded={filtersExpanded} onClick={() => setFiltersExpanded((current) => !current)}>{filtersExpanded ? "收起筛选" : "更多筛选"}</button><button onClick={() => setFilters(emptyFilters(quarter?.label ?? ""))}>↻ 重置</button><button className="primary" disabled={exporting} onClick={exportCurrent}>{exporting ? "导出中" : "↓ 导出"}</button></div>
     </section>
     <p className="pd-alert">⚠ 当前未关闭问题 <b>{stageCounts.all}</b> 个，其中超期 <strong>{stageCounts.overdue}</strong> 个，7 天未跟进 <em>{stageCounts.untouched}</em> 个，待销售处理 <b>{stageCounts.customer}</b> 个，请及时推进问题闭环。</p>
     <section className="pd-kpis">
-      {metrics.map(([name, count, icon, tone, key]) => <button className={`pd-kpi ${tone}`} key={name} onClick={() => handleMetric(key)}><i>{icon}</i><span>{name}</span><strong>{count}</strong><small>{key === "closed" ? "已解决档案" : "当前筛选范围"}</small></button>)}
+      {metrics.map(([name, count, icon, tone, key]) => <button className={`pd-kpi ${tone}${key === "leader_review" ? " pd-kpi-leader-review" : ""}`} key={name} onClick={() => handleMetric(key)}><i>{icon}</i><span>{name}</span><strong>{count}</strong><small>{key === "closed" ? "已解决档案" : "当前筛选范围"}</small></button>)}
     </section>
     <section className="pd-analysis-grid">
       <ProblemStageDistribution data={dashboard.stages} onSelect={selectStage} />

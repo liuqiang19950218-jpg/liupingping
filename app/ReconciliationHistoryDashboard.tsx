@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import * as echarts from "echarts";
 import { formatHistoricalTrendTooltip, historicalTrend, latestHistoricalPeriod, normalizeHistoricalSettlementPeriods, sortHistoricalRegionsBySettlementRate } from "../lib/historical-settlement-dashboard.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import { isSettled, isUnsettled, settlementRate } from "../lib/reconciliation-settlement-status.mjs";
 import "./history-dashboard.css";
 import "./history-dashboard-extra.css";
+import "./reconciliation-dashboard-mobile-v1.css";
 
 type TrendDataItem = { quarter: string; unsettledCustomers: number; reconciliationRate: number };
 type HistoricalPeriod = {
@@ -30,15 +31,15 @@ function UnreconciledRiskChart({ data, currentQuarter }: { data: TrendDataItem[]
     chart.setOption({
       animationDuration: 260,
       tooltip: { trigger: "axis", backgroundColor: "#fff", borderColor: "#dfe7f1", borderWidth: 1, textStyle: { color: "#34425e", fontSize: 13 }, formatter: formatHistoricalTrendTooltip },
-      legend: { top: 2, left: "center", itemWidth: compact ? 11 : 14, itemHeight: 10, itemGap: compact ? 18 : 44, textStyle: { color: "#34425e", fontSize: compact ? 11 : 14 } },
+      legend: { top: 2, left: compact ? 12 : "center", itemWidth: compact ? 11 : 14, itemHeight: 10, itemGap: compact ? 18 : 44, textStyle: { color: "#34425e", fontSize: compact ? 11 : 14 } },
       grid: { left: compact ? 38 : 54, right: compact ? 38 : 54, top: compact ? 46 : 64, bottom: compact ? 36 : 48 },
-      xAxis: { type: "category", data: data.map((item) => item.quarter), axisTick: { show: false }, axisLine: { lineStyle: { color: "#d7dee9" } }, axisLabel: { interval: 0, color: "#34425e", fontSize: compact ? 9 : dense ? 11 : 13, margin: compact ? 9 : 16, formatter: (value: string) => compact ? value.replace(" ", "\n") : value === currentQuarter ? `${value}\n{current|当前}` : value, rich: { current: { color: "#fff", backgroundColor: "#1267f4", padding: [3, 6], borderRadius: 4, fontSize: 11, lineHeight: 26 } } } },
+      xAxis: { type: "category", data: data.map((item) => item.quarter), axisTick: { show: false }, axisLine: { lineStyle: { color: "#d7dee9" } }, axisLabel: { interval: 0, color: "#34425e", fontSize: compact ? 11 : dense ? 11 : 13, margin: compact ? 9 : 16, formatter: (value: string) => compact ? value.replace(" ", "\n") : value === currentQuarter ? `${value}\n{current|当前}` : value, rich: { current: { color: "#fff", backgroundColor: "#1267f4", padding: [3, 6], borderRadius: 4, fontSize: 11, lineHeight: 26 } } } },
       yAxis: [
         { type: "value", name: "户", min: 0, max: customerAxisMax, interval: Math.max(1, customerAxisMax / 4), nameTextStyle: { color: "#71809a", fontSize: 12, padding: [0, 0, 0, -4] }, axisLabel: { color: "#71809a", fontSize: 12 }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: "#e4eaf3", type: "dashed" } } },
         { type: "value", name: "对清率（%）", min: 0, max: 100, interval: 25, nameTextStyle: { color: "#71809a", fontSize: 12 }, axisLabel: { color: "#71809a", fontSize: 12, formatter: "{value}%" }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
       ],
       series: [
-        { name: "未对清客户数", type: "bar", yAxisIndex: 0, data: data.map((item) => item.unsettledCustomers), barWidth: compact ? 18 : dense ? 22 : 32, barGap: "28%", itemStyle: { color: "#1267f4", borderRadius: [5, 5, 0, 0] }, label: { show: true, position: "top", color: "#18243b", fontSize: compact ? 10 : dense ? 11 : 13, fontWeight: 600 } },
+        { name: "未对清客户数", type: "bar", yAxisIndex: 0, data: data.map((item) => item.unsettledCustomers), barWidth: compact ? 18 : dense ? 22 : 32, barGap: "28%", itemStyle: { color: "#1267f4", borderRadius: [5, 5, 0, 0] }, label: { show: true, position: "top", color: "#18243b", fontSize: compact ? 11 : dense ? 11 : 13, fontWeight: 600 } },
         { name: "对清率", type: "line", yAxisIndex: 1, data: data.map((item) => item.reconciliationRate), symbol: "circle", symbolSize: compact ? 6 : 8, lineStyle: { width: compact ? 2 : 3, color: "#ff7a1a" }, itemStyle: { color: "#ff7a1a", borderColor: "#fff", borderWidth: 2 }, label: { show: !compact, position: "top", formatter: ({ value }: { value: number }) => `${value.toFixed(1)}%`, color: "#ff7a1a", fontSize: 13, fontWeight: 700 }, z: 3 },
       ],
     });
@@ -46,7 +47,7 @@ function UnreconciledRiskChart({ data, currentQuarter }: { data: TrendDataItem[]
     observer.observe(element);
     return () => { observer.disconnect(); chart.dispose(); };
   }, [currentQuarter, data]);
-  return <div className="history-combo-chart" ref={host} aria-label="历史未对清客户数柱状图与对清率折线图" />;
+  return <div className="history-chart-scroll" role="region" tabIndex={0} aria-label="历史季度对清趋势图，可左右滑动查看全部季度"><div className="history-combo-chart" ref={host} style={{ "--history-trend-columns": data.length } as CSSProperties} aria-label="历史未对清客户数柱状图与对清率折线图" /></div>;
 }
 
 export function ReconciliationHistoryDashboard() {

@@ -247,3 +247,312 @@ body:has(.data-import-tool) .local-tool.data-import-tool {
 .data-import-tool .local-tool-body {
   background: transparent !important;
 }
+
+/* Phone-only import workspace.  Import handlers, archive flows and database
+   history remain untouched; this section only replaces the dark desktop skin. */
+@media (max-width: 760px) {
+  html:has(.data-import-tool),
+  body:has(.data-import-tool),
+  .app-shell:has(.data-import-tool),
+  .app-shell:has(.data-import-tool) .work-area,
+  .app-shell:has(.data-import-tool) .work-content,
+  body:has(.data-import-tool) .app-shell,
+  body:has(.data-import-tool) .work-area,
+  body:has(.data-import-tool) .work-content {
+    background-color: #fff !important;
+    background-image: none !important;
+  }
+
+  body:has(.data-import-tool) .work-content::before {
+    display: none !important;
+    background: none !important;
+  }
+
+  .data-import-tool.local-tool,
+  body:has(.data-import-tool) .local-tool.data-import-tool {
+    min-height: 0;
+    border-color: transparent !important;
+    border-radius: 0;
+    background: #fff !important;
+    box-shadow: none !important;
+    color: #1f2937;
+  }
+
+  .data-import-tool.local-tool > .local-tool-body,
+  .data-import-tool .local-tool-body { background: #fff !important; }
+
+  .data-import-tool .local-toolbar,
+  .data-import-tool .quarter-archive-control,
+  .data-import-tool .import-status,
+  .data-import-tool .quarter-archive-download,
+  .data-import-tool .import-kpi-card,
+  .data-import-tool .import-history-card {
+    border-color: #dbe5ef !important;
+    background: #fff !important;
+    box-shadow: 0 4px 14px rgba(31, 55, 90, .07) !important;
+    color: #1f2937;
+    backdrop-filter: none;
+  }
+
+  .data-import-tool .local-toolbar {
+    gap: 16px;
+    padding: 20px 18px;
+    border-radius: 18px;
+  }
+  .data-import-tool .local-toolbar::before,
+  .data-import-tool .local-toolbar::after { display: none; }
+  .data-import-tool .eyebrow { color: #1769e0; letter-spacing: .04em; }
+  .data-import-tool .local-toolbar h2,
+  .data-import-tool .import-dashboard h3,
+  .data-import-tool .import-history-head h3,
+  .data-import-tool .quarter-archive-download h3 {
+    color: #102a4c !important;
+    text-shadow: none;
+  }
+  .data-import-tool .local-toolbar p:not(.eyebrow),
+  .data-import-tool .quarter-archive-control span,
+  .data-import-tool .quarter-archive-download span,
+  .data-import-tool .import-dashboard-heading p,
+  .data-import-tool .import-kpi-card small {
+    color: #64748b !important;
+    letter-spacing: normal;
+    line-height: 1.6;
+    overflow-wrap: break-word;
+    word-break: normal;
+    writing-mode: horizontal-tb;
+  }
+
+  .data-import-tool .upload-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+  .data-import-tool .upload-actions .file-button,
+  .data-import-tool .upload-actions .import-action-button {
+    min-width: 0;
+    min-height: 58px;
+    margin: 0;
+    padding: 10px 9px;
+    border-color: #cfe0f1 !important;
+    border-radius: 10px;
+    background: #f8fbff !important;
+    box-shadow: none;
+    color: #1769e0 !important;
+    font-size: 12px;
+    line-height: 1.45;
+    text-align: center;
+    text-shadow: none;
+    white-space: normal;
+  }
+  .data-import-tool .upload-actions .file-button:hover,
+  .data-import-tool .upload-actions .import-action-button:hover {
+    border-color: #8fbae9 !important;
+    background: #eef6ff !important;
+    box-shadow: none;
+  }
+
+  .data-import-tool .quarter-archive-control {
+    align-items: stretch;
+    gap: 10px;
+    margin: 12px 0;
+    padding: 14px;
+    border-radius: 14px;
+  }
+  .data-import-tool .quarter-archive-control label,
+  .data-import-tool .quarter-archive-download label { color: #475569; }
+  .data-import-tool .quarter-archive-control select,
+  .data-import-tool .quarter-archive-download select {
+    width: 100%;
+    min-width: 0;
+    border-color: #d5e1ee;
+    background: #fff;
+    color: #1f2937;
+  }
+
+  .data-import-tool .import-status {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+    margin: 12px 0;
+    padding: 15px;
+    border-left: 3px solid #3b82f6;
+    border-radius: 14px;
+  }
+  .data-import-tool .import-status strong { color: #102a4c !important; text-shadow: none; }
+  .data-import-tool .import-status span { color: #64748b !important; line-height: 1.65; }
+
+  .data-import-tool .quarter-archive-download {
+    grid-template-columns: 1fr;
+    gap: 13px;
+    margin: 0 0 14px;
+    padding: 17px;
+    border-radius: 16px;
+  }
+  .data-import-tool .archive-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    justify-content: stretch;
+  }
+  .data-import-tool .archive-controls select { grid-column: 1 / -1; width: 100%; }
+  .data-import-tool .archive-controls select,
+  .data-import-tool .archive-controls button {
+    min-width: 0;
+    border-color: #cfe0f1 !important;
+    background: #fff !important;
+    box-shadow: none;
+    color: #1769e0 !important;
+  }
+  .data-import-tool .archive-controls .archive-download-button {
+    border-color: #1677ff !important;
+    background: #1677ff !important;
+    color: #fff !important;
+  }
+  .data-import-tool .archive-summary,
+  .data-import-tool .archive-message { border-top-color: #e5edf5 !important; color: #64748b !important; }
+
+  .data-import-tool .import-dashboard { gap: 12px; margin: 0 0 16px; }
+  .data-import-tool .import-dashboard::before { display: none; }
+  .data-import-tool .import-dashboard-heading { padding: 0 2px; }
+  .data-import-tool .import-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .data-import-tool .import-kpi-card { min-height: 112px; gap: 10px; padding: 13px 11px; border-radius: 14px; }
+  .data-import-tool .import-kpi-card::after { display: none; }
+  .data-import-tool .import-kpi-card > div > span { color: #475569 !important; font-size: 12px; }
+  .data-import-tool .import-kpi-card strong { color: #102a4c !important; text-shadow: none; }
+  .data-import-tool .import-kpi-icon { border-color: #d5e6f6 !important; background: #edf5ff !important; box-shadow: none; color: #1769e0 !important; }
+  .data-import-tool .import-kpi-icon.success { border-color: #cde9dc !important; background: #eefaf4 !important; color: #158153 !important; }
+  .data-import-tool .import-kpi-icon.latest,
+  .data-import-tool .import-kpi-icon.database { border-color: #dbe5ef !important; background: #f3f7fb !important; color: #476783 !important; }
+
+  .data-import-tool .import-history-card { border-radius: 16px; }
+  .data-import-tool .import-history-head { min-height: 52px; border-bottom-color: #e5edf5 !important; background: #fff !important; }
+  .data-import-tool .import-history-table-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+  .data-import-tool .import-history-table,
+  .data-import-tool .import-history-table tbody,
+  .data-import-tool .import-history-table tr,
+  .data-import-tool .import-history-table td { background: #fff !important; color: #1f2937 !important; }
+  .data-import-tool .import-history-table th { border-bottom-color: #dbe5ef !important; background: #f3f7fb !important; color: #475569 !important; }
+  .data-import-tool .import-history-table td { border-top-color: #e7eef6 !important; }
+  .data-import-tool .import-history-table tbody tr:nth-child(even) td { background: #fbfdff !important; }
+  .data-import-tool .import-history-table tbody tr:hover td { background: #f3f8fd !important; box-shadow: inset 2px 0 #a9c7e5; }
+  .data-import-tool .import-history-table .number-cell { color: #102a4c !important; text-shadow: none; }
+  .data-import-tool .import-status-badge { border-color: #d4e0ed !important; background: #f2f6fa !important; color: #475569 !important; }
+  .data-import-tool .import-status-badge.success { border-color: #cde9dc !important; background: #eefaf4 !important; color: #158153 !important; }
+  .data-import-tool .import-status-badge.partial { border-color: #f1dfb7 !important; background: #fff9eb !important; color: #a86409 !important; }
+  .data-import-tool .import-status-badge.failed { border-color: #f3cccc !important; background: #fff5f5 !important; color: #c53a3a !important; }
+  .data-import-tool .import-detail-button { border-color: #cfe0f1 !important; background: #fff !important; color: #1769e0 !important; text-shadow: none; }
+  .data-import-tool .import-pagination { border-top-color: #e5edf5 !important; background: #fff !important; color: #64748b !important; }
+  .data-import-tool .import-pagination button,
+  .data-import-tool .import-pagination b,
+  .data-import-tool .import-pagination select,
+  .data-import-tool .import-pagination input { border-color: #d5e1ee !important; background: #fff !important; color: #475569 !important; box-shadow: none; }
+  .data-import-tool .import-pagination b { border-color: #1677ff !important; background: #1677ff !important; color: #fff !important; }
+
+  .data-import-tool .import-drawer-backdrop,
+  .data-import-tool .import-operation-backdrop { background: rgba(15, 23, 42, .38) !important; backdrop-filter: blur(2px); }
+  .data-import-tool .import-detail-drawer,
+  .data-import-tool .import-operation-drawer { border-left-color: #dbe5ef !important; background: #fff !important; box-shadow: -12px 0 32px rgba(30, 52, 85, .2) !important; color: #1f2937 !important; }
+  .data-import-tool .import-detail-drawer header,
+  .data-import-tool .import-operation-drawer header { border-bottom-color: #e5edf5 !important; background: #fff !important; }
+  .data-import-tool .import-detail-drawer header p,
+  .data-import-tool .drawer-title p,
+  .data-import-tool .drawer-preview h3 { color: #102a4c !important; }
+  .data-import-tool .import-detail-drawer h2,
+  .data-import-tool .import-detail-drawer h3 { color: #102a4c; }
+  .data-import-tool .import-detail-drawer header button { border: 1px solid #d5e1ee; background: #fff; color: #475569; }
+  .data-import-tool .import-detail-drawer section { border-bottom-color: #e5edf5; }
+  .data-import-tool .import-detail-drawer dl { color: #1f2937; }
+  .data-import-tool .import-detail-drawer dt,
+  .data-import-tool .drawer-title span,
+  .data-import-tool .drawer-quarter,
+  .data-import-tool .file-dropzone span,
+  .data-import-tool .drawer-message,
+  .data-import-tool .drawer-preview p { color: #64748b !important; }
+  .data-import-tool .drawer-title b { border-color: #d5e6f6 !important; background: #edf5ff !important; box-shadow: none; color: #1769e0 !important; }
+  .data-import-tool .drawer-switch { border-bottom-color: #e5edf5 !important; }
+  .data-import-tool .drawer-switch button { color: #64748b; }
+  .data-import-tool .drawer-switch button.selected { color: #1769e0; }
+  .data-import-tool .drawer-quarter select { border-color: #d5e1ee !important; background: #fff !important; color: #1f2937 !important; }
+  .data-import-tool .drawer-secondary { border-color: #d5e1ee !important; background: #fff !important; color: #1769e0 !important; }
+  .data-import-tool .drawer-primary { background: #1677ff !important; box-shadow: none; color: #fff !important; }
+  .data-import-tool .file-dropzone { border-color: #b8d1e8 !important; background: #f8fbff !important; box-shadow: none; color: #1f2937 !important; }
+  .data-import-tool .drawer-preview { border-color: #dbe5ef !important; background: #f8fbff !important; }
+}
+
+@media (max-width: 390px) {
+  .data-import-tool .local-toolbar { padding-inline: 14px; }
+  .data-import-tool .upload-actions .file-button,
+  .data-import-tool .upload-actions .import-action-button { font-size: 11px; }
+  .data-import-tool .import-kpi-card { align-items: flex-start; flex-direction: column; }
+  .data-import-tool .archive-controls { grid-template-columns: 1fr; }
+}
+
+@media (max-width:760px) {
+  .data-import-tool .upload-actions .file-button,
+  .data-import-tool .upload-actions .import-action-button { min-height:64px; padding:11px 10px; font-size:13px; }
+  .data-import-tool .import-detail-button,
+  .data-import-tool .archive-controls button,
+  .data-import-tool .import-pagination button { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; }
+  .data-import-tool .import-history-table-wrap { padding-bottom:4px; }
+}
+
+/* First-level import entries and history only; drawer selectors are excluded. */
+@media (max-width:760px) {
+  .work-content > .data-import-tool.local-tool { background:transparent!important; }
+  .data-import-tool > .local-toolbar { gap:12px; padding:14px 12px; border:1px solid #dfe8f3; border-radius:12px; }
+  .data-import-tool > .local-toolbar > div > .eyebrow { display:none; }
+  .data-import-tool > .local-toolbar > div:not(.upload-actions) > h2 { margin:0 0 7px; font-size:22px; font-weight:650; }
+  .data-import-tool > .local-toolbar > div:not(.upload-actions) > p { font-size:12px; font-weight:400; line-height:1.6; }
+  .data-import-tool > .local-toolbar .upload-actions { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .data-import-tool > .local-toolbar .upload-actions > .file-button,
+  .data-import-tool > .local-toolbar .upload-actions > .import-action-button { display:flex; align-items:center; justify-content:flex-start; gap:6px; min-height:60px; padding:9px 8px; border:1px solid #dce9f8!important; border-radius:9px; background:#fff!important; color:#102247!important; font-size:12px; font-weight:500; line-height:1.5; text-align:left; }
+  .data-import-tool > .local-toolbar .upload-actions > .file-button::before,
+  .data-import-tool > .local-toolbar .upload-actions > .import-action-button::before { display:grid; place-items:center; flex:0 0 25px; height:30px; border-radius:7px; background:#edf5ff; color:#0674ff; font-size:19px; content:'↑'; }
+  .data-import-tool > .local-toolbar .upload-actions > :nth-child(2)::before { content:'▤'; background:#eaf9f0; color:#0b9b68; }
+  .data-import-tool > .local-toolbar .upload-actions > :nth-child(3)::before { content:'▥'; background:#fff2e8; color:#f77718; }
+  .data-import-tool > .local-toolbar .upload-actions > :nth-child(4)::before { content:'↶'; background:#f0ebff; color:#7954ed; }
+  .data-import-tool > .local-toolbar .upload-actions > :nth-child(5)::before { content:'▦'; }
+  .data-import-tool > .local-toolbar .upload-actions > :nth-child(6)::before { content:'▥'; background:#fff0ef; color:#ed6060; }
+  .data-import-tool > .quarter-archive-control { padding:12px; border-radius:12px; gap:6px; }
+  .data-import-tool > .quarter-archive-control label { display:flex; flex-wrap:wrap; width:100%; justify-content:space-between; gap:8px; font-size:13px; font-weight:500; }
+  .data-import-tool > .quarter-archive-control select { width:auto; flex:1; max-width:160px; min-height:40px; font-size:13px; font-weight:500; }
+  .data-import-tool > .quarter-archive-control > span { font-size:11px; font-weight:400; }
+  .data-import-tool > .quarter-archive-download { padding:12px; border-radius:12px; }
+  .data-import-tool > .quarter-archive-download h3 { font-size:15px; font-weight:600; }
+  .data-import-tool > .quarter-archive-download span { font-size:11px; font-weight:400; }
+  .data-import-tool > .quarter-archive-download .archive-controls { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .data-import-tool > .quarter-archive-download .archive-controls button { padding:5px; font-size:12px; font-weight:500; }
+  .data-import-tool > .import-dashboard { padding:12px; border:1px solid #dfe8f3; border-radius:12px; background:#fff; }
+  .data-import-tool > .import-dashboard > .import-dashboard-heading { flex-wrap:wrap; gap:5px; }
+  .data-import-tool > .import-dashboard > .import-dashboard-heading h3 { font-size:15px; font-weight:600; }
+  .data-import-tool > .import-dashboard > .import-dashboard-heading p,
+  .data-import-tool > .import-dashboard > .import-dashboard-heading > span { font-size:11px; font-weight:400; }
+  .data-import-tool > .import-dashboard > .import-kpi-grid { gap:8px; }
+  .data-import-tool > .import-dashboard .import-kpi-card { display:flex; flex-direction:row; flex-wrap:wrap; align-content:flex-start; gap:6px; min-width:0; min-height:108px; padding:10px 8px; border-radius:9px; box-shadow:none!important; }
+  .data-import-tool > .import-dashboard .import-kpi-card > div { min-width:0; }
+  .data-import-tool > .import-dashboard .import-kpi-icon { width:28px; height:28px; flex:0 0 28px; font-size:20px; }
+  .data-import-tool > .import-dashboard .import-kpi-card strong { display:block; font-size:21px; font-weight:650; overflow-wrap:anywhere; white-space:normal; }
+  .data-import-tool > .import-dashboard .import-kpi-card.latest-card strong { font-size:13px; }
+  .data-import-tool > .import-dashboard .import-kpi-card small { font-size:10px; font-weight:400; }
+  .data-import-tool > .import-dashboard > .import-history-card { min-width:0; border-radius:9px; box-shadow:none!important; }
+  .data-import-tool > .import-dashboard .import-history-head { flex-wrap:wrap; gap:5px; padding:10px; }
+  .data-import-tool > .import-dashboard .import-history-head h3 { font-size:14px; font-weight:600; }
+  .data-import-tool > .import-dashboard .import-history-table { min-width:900px; table-layout:fixed; border-collapse:collapse; }
+  .data-import-tool > .import-dashboard .import-history-table th,
+  .data-import-tool > .import-dashboard .import-history-table td { padding:9px 8px; font-size:11px; font-weight:400; line-height:1.5; }
+  .data-import-tool > .import-dashboard .import-history-table th { font-weight:500; white-space:nowrap; }
+  .data-import-tool > .import-dashboard .import-history-table td:first-child,
+  .data-import-tool > .import-dashboard .import-history-table td:nth-child(4) { white-space:normal; overflow-wrap:anywhere; }
+  .data-import-tool > .import-dashboard .import-pagination { display:flex; flex-wrap:wrap; gap:8px; padding:10px; font-size:11px; font-weight:400; }
+  .data-import-tool > .import-dashboard .import-pagination > div { display:flex; flex-wrap:wrap; gap:5px; }
+  .data-import-tool > .import-dashboard .import-pagination button,
+  .data-import-tool > .import-dashboard .import-pagination select { min-width:34px; min-height:36px; padding:4px 7px; font-size:11px; font-weight:400; }
+}
+
+@media (max-width:760px) {
+  .data-import-tool > .import-dashboard > .import-history-empty { min-height:0; margin:0; padding:10px; color:#b54735!important; background:#fff5f0; border-radius:8px; font-size:12px; line-height:1.6; }
+  .data-import-tool > .import-status { padding:12px; border-radius:12px; gap:6px; }
+  .data-import-tool > .import-status > strong { font-size:14px; font-weight:600; }
+  .data-import-tool > .import-status > span { font-size:12px; font-weight:400; line-height:1.6; }
+  .data-import-tool > .import-dashboard .import-history-table td.import-history-empty { height:auto; padding:22px 10px; text-align:left; }
+}

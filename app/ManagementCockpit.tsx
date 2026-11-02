@@ -493,7 +493,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             <option>未对清</option>
           </select>
         </label>
-        <label>
+        <label className="cockpit-follow-filter">
           跟进状态
           <select
             value={f.follow}
