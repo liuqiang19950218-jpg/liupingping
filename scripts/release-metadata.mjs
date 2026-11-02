@@ -8,7 +8,7 @@ export const generatedPath = 'lib/build-version.generated.mjs';
 export const manifestPath = '.release/source-manifest.json';
 const excludedRoots = new Set(['.git', 'node_modules', 'dist', '.wrangler', '.cache', '.vinext', '.next', 'coverage']);
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
-const git = (cwd, args) => execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+const git = (cwd, args) => execFileSync('git', args, { cwd, maxBuffer: 128 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
 
 export function sourceFromGit(cwd) {
   const sourceGitSha = git(cwd, ['rev-parse', '--verify', 'HEAD^{commit}']).toString().trim();

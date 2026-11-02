@@ -118,6 +118,16 @@ test('manifest paths cannot traverse outside the source directory', (t) => {
   assert.throws(() => verifySourceTree(cwd, { schemaVersion: 1, sourceGitSha: sample.sourceGitSha, files: { '../escape': 'anything' } }), /Unsafe manifest path/);
 });
 
+test('source manifests support application assets larger than the child-process default buffer', (t) => {
+  const { cwd } = fixture(t);
+  writeFileSync(path.join(cwd, 'large-asset.bin'), Buffer.alloc(2 * 1024 * 1024, 42));
+  git(cwd, 'add', 'large-asset.bin');
+  git(cwd, 'commit', '-qm', 'Large asset fixture');
+  const manifest = sourceFromGit(cwd);
+  assert.match(manifest.files['large-asset.bin'], /^[0-9a-f]{64}$/);
+  verifySourceTree(cwd, manifest);
+});
+
 test('development is explicitly unreleased even with an old marker', (t) => {
   const { cwd } = fixture(t);
   const result = versionPayload(prepareBuild(cwd, { BUILD_SHA: sample.sourceGitSha, SOURCE_GIT_SHA: sample.sourceGitSha }));
