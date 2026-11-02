@@ -96,9 +96,17 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
   const owners = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.owner).filter(Boolean))], [currentOpenProblems]);
   const causes = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.cause).filter(Boolean))], [currentOpenProblems]);
   const change = (key: keyof ProblemFilters, value: string) => setFilters((current) => ({ ...current, [key]: value }));
+  // Every drill-through uses this one current context. Keeping the selected
+  // region outside the stored category filter makes an already open drawer
+  // refresh when the user changes regions instead of retaining stale rows.
+  const activeDrawerFilterContext = drawerFilterContext && {
+    quarter: quarter?.code ?? "",
+    ...drawerFilterContext,
+    ...(filters.region === "全部" ? {} : { region: filters.region }),
+  };
   // Preserve the exact legacy navigation context; navigation now happens only
   // after the user explicitly chooses it in the secondary drawer.
-  const drill = (filter: Record<string, string> = {}) => setDrawerFilterContext({ quarter: quarter?.code ?? "", ...filter });
+  const drill = (filter: Record<string, string> = {}) => setDrawerFilterContext(filter);
   const exportCurrent = () => {
     setExporting(true);
   const lines = [
@@ -136,7 +144,6 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
   const handleMetric = (key: string) => drill({ filter: key });
   const selectStage = (stage: string) => drill({
     stage,
-    ...(filters.region === "全部" ? {} : { region: filters.region }),
     ...(filters.owner === "全部" ? {} : { owner: filters.owner }),
   });
 
@@ -162,6 +169,6 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
       <article className="pd-card pd-owner-card"><h2>责任人处理情况 Top5</h2><table><thead><tr><th>责任人</th><th>未关闭</th><th>超期</th><th>高风险</th><th>7天无更新</th><th>平均处理天数</th></tr></thead><tbody>{dashboard.owners.map((item) => <tr key={item.name} onClick={() => drill({ owner: item.name })}><td><i className="pd-avatar">{avatar(item.name)}</i>{item.name}</td><td>{item.count}</td><td className="danger">{item.overdue}</td><td className="danger">{item.high}</td><td className="warning">{item.untouched}</td><td>{item.averageDays.toFixed(1)}</td></tr>)}</tbody></table><button className="pd-more" onClick={() => drill()}>查看全部责任人 ›</button></article>
     </section>
     <article className="pd-card pd-preview"><h2>重点问题预览 <button onClick={() => drill()}>查看更多 ›</button></h2><div className="pd-preview-wrap"><table><thead><tr><th>客户名称</th><th>问题标题</th><th>责任人</th><th>当前阶段</th><th>超期天数</th><th>风险等级</th><th>最近跟进时间</th><th>跟进状态</th></tr></thead><tbody>{dashboard.preview.map((item) => <tr key={item.id} onClick={() => drill({ customer: item.customer })}><td>{item.customer}</td><td title={issueTitle(item)}>{issueTitle(item)}</td><td><i className="pd-avatar">{avatar(item.owner)}</i>{item.owner || "未分配"}</td><td>{item.stage}</td><td className={overdueClass(item.overdueDays)}>{item.overdueDays} 天</td><td><span className={`pd-risk-tag ${riskClass(item.riskLevel)}`}>{item.riskLevel}</span></td><td>{formatPreviewDate(issueLatestAt(item))}</td><td><span className="pd-follow-tag">{issueFollowState(item)}</span></td></tr>)}{!dashboard.preview.length && <tr><td colSpan={8} className="pd-empty">当前筛选范围暂无待解决问题</td></tr>}</tbody></table></div></article>
-    {drawerFilterContext && <ProblemFollowupDrawer filterContext={drawerFilterContext} onClose={() => setDrawerFilterContext(null)} onEnterFollowup={() => onOpenFollowup(drawerFilterContext)} />}
+    {activeDrawerFilterContext && <ProblemFollowupDrawer key={JSON.stringify(activeDrawerFilterContext)} filterContext={activeDrawerFilterContext} onClose={() => setDrawerFilterContext(null)} onEnterFollowup={() => onOpenFollowup(activeDrawerFilterContext)} />}
   </section>;
 }

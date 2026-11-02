@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("all ProblemDashboard drill-downs open the secondary drawer before navigation", async () => {
+test("all ProblemDashboard drill-downs use the current region in the secondary drawer", async () => {
   const page = await readFile(new URL("../app/ProblemDashboard.tsx", import.meta.url), "utf8");
-  assert.match(page, /setDrawerFilterContext\(\{ quarter: quarter\?\.code/);
-  assert.match(page, /ProblemFollowupDrawer filterContext=\{drawerFilterContext\}/);
-  assert.match(page, /onEnterFollowup=\{\(\) => onOpenFollowup\(drawerFilterContext\)\}/);
+  assert.match(page, /const activeDrawerFilterContext = drawerFilterContext &&/);
+  assert.match(page, /filters\.region === "全部" \? \{\} : \{ region: filters\.region \}/);
+  assert.match(page, /const drill = \(filter: Record<string, string> = \{\}\) => setDrawerFilterContext\(filter\)/);
+  assert.match(page, /ProblemFollowupDrawer key=\{JSON\.stringify\(activeDrawerFilterContext\)\} filterContext=\{activeDrawerFilterContext\}/);
+  assert.match(page, /onEnterFollowup=\{\(\) => onOpenFollowup\(activeDrawerFilterContext\)\}/);
   assert.doesNotMatch(page, /const drill = .*=> onOpenFollowup/);
 });
 
