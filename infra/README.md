@@ -12,14 +12,6 @@
 
 所有持久卷均固定在 `/var/lib/quarterly-recon` 下，与应用镜像和应用 Pod 分离。
 
-## 应用运行时数据库接入
-
-- 应用通过 `DATABASE_URL` 连接 PostgreSQL，运行时账号为 `quarterly_app`。
-- `infra/postgres/migrations/002_runtime_access.sql` 只授权既有运行时账号，不创建生产账号、不迁移业务数据。
-- Web Pod 从 `quarterly-recon-data-secrets.DATABASE_URL` 读取连接串；未配置时应用仍可启动，健康检查返回 `configured=false`。
-- 健康检查接口：`GET /api/system/database-health`，用于确认 `DATABASE_URL`、连接、`recon` schema 和 `001_foundation` 迁移状态。
-- `POSTGRES_POOL_MAX` 默认 5，182 单机 k3s 可先保持小连接池。
-
 ## 首次部署顺序
 
 1. 推荐执行 `infra/scripts/bootstrap-secrets.sh`，在 k3s Secret 中自动生成强密码；脚本不会输出密码。

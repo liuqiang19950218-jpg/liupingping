@@ -9,50 +9,46 @@ import {
   useRef,
   useState,
 } from "react";
-import { updateDashboardSnapshot } from "./cockpit-data";
-import {
-  ensureArchiveFromActive,
-  quarterOf,
-  quarterOptions,
-  selectQuarter,
-  selectedQuarter,
-  sheetForQuarter,
-  removeArchivedSheet,
-  writeSpdSheetForQuarter,
-  writeArchivedSheet,
-} from "./quarter-storage";
+import { createPortal } from "react-dom";
+import { quarterOf } from "./quarter-storage";
 import { ImportDashboard } from "./ImportDashboard";
+import { DataImportCenter } from "./DataImportCenter";
+import { QuarterArchiveDownload } from "./QuarterArchiveDownload";
+import { PreviousQuarterDifferenceTransferDrawer } from "./PreviousQuarterDifferenceTransferDrawer";
+import { BatchInvoiceScreenshotDrawer } from "./BatchInvoiceScreenshotDrawer";
+import { VoiceInputButton } from "./VoiceInputButton";
+import { preserveImportedOrder } from "../lib/reconciliation-import-order.mjs";
 import { recordImport } from "./import-history";
+import {
+  reconciliationApi,
+  differenceAttachmentApi,
+  ReconciliationApiError,
+  type DifferenceItem,
+  type MaterialStatus,
+  type QuarterDifferenceItem,
+  type Reconciliation,
+} from "../lib/api/reconciliation-api";
+import {
+  FORM_DIFFERENCE_CATEGORIES,
+  planDifferenceItemMutations,
+  toApiDifferenceCategory,
+  toFormDifferenceCategory,
+} from "../lib/difference-category-adapter.mjs";
+import { MAX_IMAGE_BYTES as MAX_ATTACHMENT_IMAGE_BYTES, prepareAttachmentImage } from "../lib/attachment-image-optimization.mjs";
 import "./reconciliation.css";
+import "./reconciliation-writeoff-section.css";
+import "./data-import-tech.css";
 
 type InvoiceEntry = {
+  id?: string;
+  verificationStatus?: DifferenceItem["verificationStatus"];
   date: string;
   invoice: string;
   amount: string;
   note: string;
 };
 type LedgerLookup = Record<string, { amount: number; dates: string[] }>;
-type BrowserSpeechRecognition = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start: () => void;
-  stop: () => void;
-  onresult: ((event: {
-    resultIndex: number;
-    results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
-  }) => void) | null;
-  onend: (() => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-};
-type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
-declare global {
-  interface Window {
-    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
-    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
-  }
-}
-type OtherEntry = { amount: string; note: string; image?: string };
+type OtherEntry = { id?: string; verificationStatus?: DifferenceItem["verificationStatus"]; amount: string; note: string; image?: string; pendingImage?: File; previewUrl?: string; removeImage?: boolean };
 type DifferenceType =
   | "transit"
   | "returned"
@@ -60,6 +56,21 @@ type DifferenceType =
   | "instrument"
   | "otherInvoice"
   | "other";
+
+function GlobalSaveErrorNotification({ message, onClose }: { message: string; onClose: () => void }) {
+  if (!message || typeof document === "undefined") return null;
+  return createPortal(
+    <section className="global-save-error-notification" role="alert" aria-live="assertive">
+      <span className="global-save-error-icon" aria-hidden="true">!</span>
+      <div className="global-save-error-content">
+        <strong>保存失败</strong>
+        <p>{message.replace(/^保存失败[：:；;]?\s*/, "")}</p>
+      </div>
+      <button type="button" className="global-save-error-close" aria-label="关闭保存失败提示" onClick={onClose}>×</button>
+    </section>,
+    document.body,
+  );
+}
 type DetailForm = {
   companyAmount: string;
   customerAmount: string;
@@ -76,8 +87,6 @@ type DetailForm = {
   adjustmentReason: string;
   resolutionSolution: string;
   resolutionTime: string;
-  resolved: boolean;
-  followUps: { time: string; solution: string }[];
 };
 type LocalSheet = {
   headers: string[];
@@ -126,7 +135,6 @@ const T = {
   uploadCompanyReceivable:
     "\u4e0a\u4f20\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868",
   uploadSpdSheet: "\u5bfc\u5165SPD\u8868",
-  clearData: "\u6e05\u9664\u672c\u673a\u6570\u636e",
   withdrawQuarter: "\u64a4\u56de\u672c\u5b63\u5ea6\u5bf9\u8d26\u660e\u7ec6",
   importTitle: "\u5b63\u5ea6\u5bf9\u8d26",
   importHint:
@@ -161,8 +169,8 @@ const T = {
     "\u8bf7\u5b8c\u6574\u586b\u5199\u65e5\u671f\u3001\u53d1\u7968\u53f7\u548c\u91d1\u989d",
   saved: "\u5df2\u4fdd\u5b58\u9500\u552e\u586b\u5199\u5185\u5bb9\u3002",
 };
-const STORAGE_KEY = "local-quarterly-reconciliation";
 const TABLE_VIEW_KEY = "local-quarterly-reconciliation-table-view";
+const PG_SELECTED_QUARTER_KEY = "postgres-quarterly-reconciliation-selected-quarter";
 const SPD_CONFIRMATION_HEADER = "SPD\u786e\u8ba4\u8868";
 const LEGACY_SPD_CONFIRMATION_HEADER = "SPD\u786e\u8ba4\u51fd";
 const MATERIAL_HEADERS = [
@@ -200,13 +208,67 @@ const empty = (): DetailForm => ({
   adjustmentReason: "",
   resolutionSolution: "",
   resolutionTime: "",
-  resolved: false,
-  followUps: [],
 });
+const API_HEADERS = [
+  "序号", "账套", T.region, RESPONSIBLE_HEADER, T.customer, T.company,
+  T.customerBook, T.difference, T.transit, T.returned, T.lost, T.instrument,
+  T.other, T.note, T.badDebt, T.adjustment, T.cleared, "解决方案", "解决时间",
+  ...MATERIAL_HEADERS,
+];
+const summaryLabel: Record<DifferenceType, string> = {
+  transit: "在途", returned: "退票", lost: "丢票", instrument: "仪器设备", otherInvoice: "其他（有发票）", other: "其他",
+};
+const summaryValuesFromDifferenceItems = (items: Array<Pick<DifferenceItem, "category" | "differenceAmount" | "differenceDescription">>) => {
+  const amounts: Record<DifferenceType, number> = { transit: 0, returned: 0, lost: 0, instrument: 0, otherInvoice: 0, other: 0 };
+  const notes: string[] = [];
+  items.forEach((item) => {
+    const category = toFormDifferenceCategory(item.category);
+    amounts[category] += num(item.differenceAmount);
+    if (item.differenceDescription) notes.push(`${summaryLabel[category]}：${item.differenceDescription}`);
+  });
+  return { amounts, note: notes.join("；") };
+};
+const apiSheet = (quarter: string, reconciliations: Reconciliation[], material: MaterialStatus[] = [], differenceItems: QuarterDifferenceItem[] = []): LocalSheet => ({
+  headers: API_HEADERS,
+  fileName: `${quarter}-PostgreSQL`,
+  rows: preserveImportedOrder(reconciliations).map((row) => {
+    const byType = new Map(material.filter((item) => item.reconciliationId === row.id).map((item) => [item.materialType, item.rawValue ?? (item.provided ? "已提供" : "")]));
+    const summary = summaryValuesFromDifferenceItems(differenceItems.filter((item) => item.reconciliationId === row.id));
+    return [
+      row.sourceSequence ?? "", row.accountSet ?? "", row.region ?? "", row.ownerName ?? "", row.customer ?? "",
+    row.companyReceivable ?? "", row.customerBookAmount ?? "", row.reconciliationDifference ?? "",
+    summary.amounts.transit || "", summary.amounts.returned || "", summary.amounts.lost || "", summary.amounts.instrument || "", summary.amounts.otherInvoice + summary.amounts.other || "", summary.note, row.badDebtAmount ?? "", row.adjustmentAmount ?? "",
+    // The server owns this nullable status. Do not manufacture "未对账" for NULL.
+    row.reconciliationStatus ?? "", row.solution ?? "", row.solutionDate ?? "",
+    ...MATERIAL_HEADERS.map((header) => byType.get(header) ?? ""),
+  ];
+  }),
+  details: Object.fromEntries(preserveImportedOrder(reconciliations).map((row, i) => [String(i), {
+    ...empty(), companyAmount: row.companyReceivable ?? "", customerAmount: row.customerBookAmount ?? "",
+    responsible: row.ownerName ?? "", badDebt: row.badDebtAmount ?? "", badDebtReason: row.badDebtReason ?? "",
+    adjustment: row.adjustmentAmount ?? "", adjustmentReason: row.adjustmentReason ?? "",
+    resolutionSolution: row.solution ?? "", resolutionTime: row.solutionDate ?? "",
+  }])),
+});
+const formFromDifferenceItems = (base: DetailForm, items: DifferenceItem[]): DetailForm => {
+  const next = { ...base };
+  (['transit', 'returned', 'lost', 'instrument', 'otherInvoice'] as DifferenceType[]).forEach((category) => {
+    next[category] = items.filter((item) => toFormDifferenceCategory(item.category) === category).map((item) => ({ id: item.id, verificationStatus: item.verificationStatus, date: item.invoiceDate ?? "", invoice: item.invoiceNo ?? "", amount: item.differenceAmount ?? "", note: item.differenceDescription ?? "" })) as InvoiceEntry[];
+    if (!next[category].length) next[category] = [blankInvoice()];
+  });
+  next.other = items.filter((item) => toFormDifferenceCategory(item.category) === 'other').map((item) => ({ id: item.id, verificationStatus: item.verificationStatus, amount: item.differenceAmount ?? "", note: item.differenceDescription ?? "", image: item.attachmentKeys[0] ?? "" }));
+  if (!next.other.length) next.other = [blankOther()];
+  return next;
+};
+const toPostgresQuarterCode = (quarter: string) => {
+  const match = quarter.trim().match(/^(\d{4})\s*-?\s*Q([1-4])$/i);
+  return match ? `${match[1]}-Q${match[2]}` : null;
+};
 const num = (value: unknown) => {
   const n = Number(String(value ?? "").replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
 };
+const nullableText = (value: string) => value.trim() || null;
 const exactAmount = (value: unknown) => {
   const normalized = String(value ?? "").replace(/[\s,\uFFE5\u00A5]/g, "");
   if (!normalized) return null;
@@ -450,8 +512,9 @@ const backfillClearedStatus = (source: LocalSheet) => {
         sumInvoiceEntries(detail.otherInvoice) +
         sum(detail.other)
       : 0;
+    // NULL/empty is authoritative: do not backfill it to “未对账”.
     const status = !filled
-      ? T.unreconciled
+      ? row[clearedAt]
       : Math.abs(difference) < 0.01 || Math.abs(difference - total) < 0.01
         ? T.clear
         : T.uncleared;
@@ -536,8 +599,8 @@ const loadCurrentLedger = () =>
   );
 const saveCurrentLedger = (value: LedgerUpload) =>
   dbRequest<IDBValidKey>("readwrite", (store) => store.put(value, "current"));
-async function readLedgerFiles(files: File[]) {
-  const keys = new Set<string>();
+async function readLedgerSourceFiles(files: File[]) {
+  const sourceFiles: { sourceFileName: string; headers: string[]; rows: unknown[][] }[] = [];
   for (const file of files) {
     const workbook = XLSX.read(await file.arrayBuffer(), {
       type: "array",
@@ -559,43 +622,12 @@ async function readLedgerFiles(files: File[]) {
               "\u6458\u8981",
             ]) >= 0,
         );
-      if (!headerRow) continue;
-      const invoiceAt = headerIndex(headerRow, [
-        "\u53d1\u7968\u53f7",
-        "\u53d1\u7968\u4ee3\u7801",
-        "\u5355\u636e\u7f16\u53f7",
-        "\u6458\u8981",
-      ]);
-      const dateAt = headerIndex(headerRow, [
-        "\u5f00\u7968\u65e5\u671f",
-        "\u4e1a\u52a1\u65e5\u671f",
-        "\u8d22\u52a1\u65e5\u671f",
-        "\u4ea4\u6613\u65e5\u671f",
-        "\u65e5\u671f",
-      ]);
-      const amountAt = headerIndex(headerRow, [
-        "\u672c\u671f\u5e94\u6536",
-        "\u5e94\u6536\u91d1\u989d",
-        "\u5f00\u7968\u91d1\u989d",
-        "\u542b\u7a0e\u91d1\u989d",
-        "\u501f\u65b9",
-        "\u91d1\u989d",
-      ]);
-      if (invoiceAt < 0 || dateAt < 0 || amountAt < 0) continue;
       const start = rows.indexOf(headerRow) + 1;
-      for (const row of rows.slice(start)) {
-        const source = row.map((value) => String(value ?? "")).join(" ");
-        const cell = String(row[invoiceAt] ?? "").replace(/\s/g, "");
-        const matched = source.match(/(?<!\d)(?:\d{8}|\d{20})(?!\d)/);
-        const invoice = (matched?.[0] ?? cell).replace(/\s/g, "");
-        const date = normalizeDate(row[dateAt]);
-        const amount = num(row[amountAt]);
-        if (invoice && date && amount)
-          keys.add(`${invoice}|${date}|${amount.toFixed(2)}`);
-      }
+      if (headerRow && rows.slice(start).some((row) => row.some((value) => String(value ?? "").trim())))
+        sourceFiles.push({ sourceFileName: workbook.SheetNames.length > 1 ? `${file.name}#${sheetName}` : file.name, headers: headerRow.map(String), rows: rows.slice(start).filter((row) => row.some((value) => String(value ?? "").trim())) });
     }
   }
-  return [...keys];
+  return sourceFiles;
 }
 
 export function QuarterlyReconciliation({
@@ -606,22 +638,18 @@ export function QuarterlyReconciliation({
   const [sheet, setSheet] = useState<LocalSheet | null>(null);
   const [region, setRegion] = useState(T.all);
   const [message, setMessage] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [active, setActive] = useState<number | null>(null);
   const [form, setForm] = useState<DetailForm>(empty());
   const [activeDifferenceType, setActiveDifferenceType] =
     useState<DifferenceType | null>(null);
-  const [speechRecording, setSpeechRecording] = useState(false);
-  const [speechMessage, setSpeechMessage] = useState("");
-  const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-  const [ledgerKeys, setLedgerKeys] = useState<Set<string> | null>(null);
-  const [currentLedgerKeys, setCurrentLedgerKeys] = useState<Set<string>>(
-    new Set(),
-  );
   const [currentLedgerInfo, setCurrentLedgerInfo] =
     useState<LedgerUpload | null>(null);
   const [uploadingLedger, setUploadingLedger] = useState(false);
-  const [ledgerError, setLedgerError] = useState(false);
-  const [ledgerLookup, setLedgerLookup] = useState<LedgerLookup>({});
+  const [importingMaterials, setImportingMaterials] = useState(false);
+  const [importingSpd, setImportingSpd] = useState(false);
+  const [importingCompanyReceivables, setImportingCompanyReceivables] = useState(false);
+  const [replacingHistoricalLedger, setReplacingHistoricalLedger] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [columnFilters, setColumnFilters] = useState<Record<number, string>>(
     {},
@@ -640,6 +668,33 @@ export function QuarterlyReconciliation({
   const [viewReady, setViewReady] = useState(false);
   const [activeQuarter, setActiveQuarter] = useState("");
   const [archivedQuarters, setArchivedQuarters] = useState<string[]>([]);
+  const [postgresQuarters, setPostgresQuarters] = useState<string[]>([]);
+  const [apiIds, setApiIds] = useState<string[]>([]);
+  const [apiDifferenceItems, setApiDifferenceItems] = useState<Record<string, DifferenceItem[]>>({});
+  const [saving, setSaving] = useState(false);
+  const mutationSequence = useRef<Map<string, number>>(new Map());
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [importingQuarter, setImportingQuarter] = useState(false);
+  const [importedQuarter, setImportedQuarter] = useState("");
+  const apiRequest = useRef<AbortController | null>(null);
+  const currentPostgresQuarter = () => {
+    const quarter = toPostgresQuarterCode(activeQuarter);
+    return quarter && postgresQuarters.includes(quarter) ? quarter : null;
+  };
+  const refreshPostgresImportState = async (quarter: string, includeMaterial = false) => {
+    const [reconciliationResult, materialResult, differenceResult] = await Promise.all([
+      reconciliationApi.list(quarter),
+      includeMaterial ? reconciliationApi.getMaterialStatus(quarter) : Promise.resolve(null),
+      reconciliationApi.listQuarterDifferenceItems(quarter),
+    ]);
+    // Import-mode changes refresh PostgreSQL-backed state; browser business
+    // snapshots never seed or replace the displayed data.
+    setSheet(apiSheet(quarter, reconciliationResult.reconciliations, materialResult?.material ?? [], differenceResult.items));
+    setApiIds(preserveImportedOrder(reconciliationResult.reconciliations).map((item) => item.id));
+    setApiDifferenceItems({});
+    setRefreshNonce((current) => current + 1);
+    window.dispatchEvent(new Event("reconciliation-dashboard-updated"));
+  };
   const setFilterColumn = (column: number | null) => {
     rawSetFilterColumn(null);
     if (column !== null)
@@ -649,64 +704,12 @@ export function QuarterlyReconciliation({
           : [...columns, column],
       );
   };
-  const stopSolutionRecording = () => {
-    speechRecognitionRef.current?.stop();
-    speechRecognitionRef.current = null;
-    setSpeechRecording(false);
-  };
-  const toggleSolutionRecording = () => {
-    if (speechRecording) {
-      stopSolutionRecording();
-      return;
-    }
-    const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
-    if (!Recognition) {
-      setSpeechMessage("当前浏览器不支持语音转文字，请使用最新版 Chrome 或 Edge。");
-      return;
-    }
-    const recognition = new Recognition();
-    let transcript = "";
-    recognition.lang = "zh-CN";
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.onresult = (event) => {
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        if (event.results[index].isFinal) transcript += event.results[index][0].transcript;
-      }
-    };
-    recognition.onerror = (event) => {
-      const errorMessages: Record<string, string> = {
-        "not-allowed": "麦克风权限未开启，请允许浏览器使用麦克风后重试。",
-        "no-speech": "未识别到语音，请重新开始录音。",
-        "network": "语音识别服务连接失败，请检查网络后重试。",
-      };
-      setSpeechMessage(errorMessages[event.error] ?? "语音转文字失败，请重试。");
-    };
-    recognition.onend = () => {
-      if (transcript.trim()) {
-        setForm((current) => ({
-          ...current,
-          resolutionSolution: `${current.resolutionSolution}${current.resolutionSolution.trim() ? "；" : ""}${transcript.trim()}`,
-        }));
-        setSpeechMessage("\u8bed\u97f3\u5185\u5bb9\u5df2\u8ffd\u52a0\u5230\u89e3\u51b3\u65b9\u6848\u3002");
-      }
-      speechRecognitionRef.current = null;
-      setSpeechRecording(false);
-    };
-    try {
-      recognition.start();
-      speechRecognitionRef.current = recognition;
-      setSpeechRecording(true);
-      setSpeechMessage("正在录音，请说出解决方案；再次点击即可结束并转为文字。");
-    } catch {
-      setSpeechMessage("录音启动失败，请稍后重试。");
-    }
-  };
-
   useEffect(() => {
+    if (mode !== "import") {
+      setViewReady(true);
+      return;
+    }
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setSheet(JSON.parse(saved));
       const savedView = localStorage.getItem(TABLE_VIEW_KEY);
       if (savedView) {
         const view = JSON.parse(savedView) as Partial<TableView>;
@@ -728,34 +731,71 @@ export function QuarterlyReconciliation({
     } finally {
       setViewReady(true);
     }
-  }, []);
+  }, [mode]);
   useEffect(() => {
-    ensureArchiveFromActive();
-    const refreshArchive = () => {
-      const quarter = selectedQuarter();
-      setArchivedQuarters(quarterOptions());
-      setActiveQuarter(quarter);
-      const archived = sheetForQuarter(quarter);
-      if (archived) setSheet(archived as LocalSheet);
+    if (mode !== "import") return;
+    const controller = new AbortController();
+    const loadPostgresQuarter = async () => {
+      try {
+        const { quarters } = await reconciliationApi.listQuarters(controller.signal);
+        if (controller.signal.aborted) return;
+        const options = quarters.map((item) => item.code);
+        const preferred = toPostgresQuarterCode(localStorage.getItem(PG_SELECTED_QUARTER_KEY) ?? "");
+        const quarter = preferred && options.includes(preferred) ? preferred : options[0] ?? "";
+        setPostgresQuarters(options);
+        setActiveQuarter(quarter);
+        if (quarter) localStorage.setItem(PG_SELECTED_QUARTER_KEY, quarter);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setPostgresQuarters([]);
+          setActiveQuarter("");
+          setMessage(error instanceof Error ? `PostgreSQL 季度加载失败：${error.message}` : "PostgreSQL 季度加载失败。");
+        }
+      }
     };
-    const refreshOptions = () => {
-      setArchivedQuarters(quarterOptions());
-      setActiveQuarter(selectedQuarter());
+    void loadPostgresQuarter();
+    return () => controller.abort();
+  }, [mode]);
+  useEffect(() => {
+    const controller = new AbortController();
+    apiRequest.current?.abort();
+    apiRequest.current = controller;
+    const load = async () => {
+      try {
+        const { quarters } = await reconciliationApi.listQuarters(controller.signal);
+        const options = quarters.map((item) => item.code);
+        const preferredQuarter = localStorage.getItem(PG_SELECTED_QUARTER_KEY) ?? "";
+        const quarter = options.includes(activeQuarter)
+          ? activeQuarter
+          : options.includes(preferredQuarter)
+            ? preferredQuarter
+            : options[0] ?? "";
+        if (!quarter) throw new Error("当前没有可用的 PostgreSQL 对账季度。");
+        const [{ reconciliations }, { material }, { items: differenceItems }] = await Promise.all([
+          reconciliationApi.list(quarter, controller.signal),
+          reconciliationApi.getMaterialStatus(quarter),
+          reconciliationApi.listQuarterDifferenceItems(quarter, controller.signal),
+        ]);
+        if (controller.signal.aborted) return;
+        setArchivedQuarters(options);
+        setPostgresQuarters(options);
+        setActiveQuarter(quarter);
+        setApiIds(preserveImportedOrder(reconciliations).map((item) => item.id));
+        setApiDifferenceItems({});
+        setSheet(apiSheet(quarter, reconciliations, material, differenceItems));
+        setMessage("");
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setPostgresQuarters([]);
+        setApiIds([]);
+        setApiDifferenceItems({});
+        setSheet(null); // Never retain old business data after an API failure.
+        setMessage(error instanceof Error ? `PostgreSQL 对账数据加载失败：${error.message}` : "PostgreSQL 对账数据加载失败。");
+      }
     };
-    refreshArchive();
-    window.addEventListener("reconciliation-quarter-selected", refreshArchive);
-    window.addEventListener("reconciliation-quarter-updated", refreshOptions);
-    return () => {
-      window.removeEventListener(
-        "reconciliation-quarter-selected",
-        refreshArchive,
-      );
-      window.removeEventListener(
-        "reconciliation-quarter-updated",
-        refreshOptions,
-      );
-    };
-  }, []);
+    void load();
+    return () => controller.abort();
+  }, [mode, activeQuarter, refreshNonce]);
   useEffect(() => {
     const applyDetailTarget = () => {
       try {
@@ -779,48 +819,6 @@ export function QuarterlyReconciliation({
     applyDetailTarget();
     window.addEventListener("reconciliation-open-current-detail", applyDetailTarget);
     return () => window.removeEventListener("reconciliation-open-current-detail", applyDetailTarget);
-  }, []);
-  useEffect(() => {
-    if (!sheet || !viewReady) return;
-    const quarter = writeArchivedSheet(sheet);
-    setActiveQuarter(quarter);
-    setArchivedQuarters(quarterOptions());
-  }, [sheet, viewReady]);
-  useEffect(() => {
-    let alive = true;
-    fetch("/ledger_keys.json")
-      .then((r) => {
-        if (!r.ok) throw new Error("ledger");
-        return r.json() as Promise<string[]>;
-      })
-      .then(async (keys) => {
-        const lookup = await fetch("/ledger_invoice_lookup.json")
-          .then((r) => (r.ok ? (r.json() as Promise<LedgerLookup>) : {}))
-          .catch(() => ({}));
-        const saved = await loadCurrentLedger().catch(() => undefined);
-        historicalLedgerKeys = new Set(keys);
-        historicalLedgerLookup = lookup;
-        if (alive) {
-          setLedgerKeys(new Set([...keys, ...(saved?.keys ?? [])]));
-          setLedgerLookup(lookup);
-        }
-      })
-      .catch(() => {
-        if (alive) setLedgerError(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  useEffect(() => {
-    loadCurrentLedger()
-      .then((saved) => {
-        if (saved) {
-          setCurrentLedgerInfo(saved);
-          setCurrentLedgerKeys(new Set(saved.keys));
-        }
-      })
-      .catch(() => undefined);
   }, []);
   useEffect(() => {
     const timer = window.setTimeout(
@@ -983,73 +981,28 @@ export function QuarterlyReconciliation({
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
   }, [page, pageCount]);
-  const matchingLedgerKeys = useMemo(
-    () => (ledgerKeys ? new Set([...ledgerKeys, ...currentLedgerKeys]) : null),
-    [ledgerKeys, currentLedgerKeys],
-  );
-  const saveSheet = (next: LocalSheet, syncDashboards = false) => {
-    const headers = [...next.headers];
-    const solution = "\u89e3\u51b3\u65b9\u6848",
-      time = "\u89e3\u51b3\u65f6\u95f4";
-    if (!headers.includes(T.lost)) headers.push(T.lost);
-    if (!headers.includes(T.instrument)) headers.push(T.instrument);
-    if (!headers.includes(solution)) headers.push(solution);
-    if (!headers.includes(time)) headers.push(time);
-    MATERIAL_HEADERS.forEach((header) => {
-      if (!headers.includes(header)) headers.push(header);
-    });
-    const ordered = placeMaterialHeaders(
-      reorderReviewColumns({
-        ...next,
-        headers,
-        rows: next.rows.map((row) => [...row]),
-      }),
-    );
-    const rows = ordered.rows.map((row) => [...row]);
-    Object.entries(ordered.details ?? {}).forEach(([id, detail]) => {
-      const row = rows[Number(id)];
-      if (row) {
-        row[ordered.headers.indexOf(T.lost)] = sumInvoiceEntries(detail.lost ?? []);
-        row[ordered.headers.indexOf(T.instrument)] = sumInvoiceEntries(
-          detail.instrument ?? [],
-        );
-        row[ordered.headers.indexOf(solution)] = detail.resolutionSolution;
-        row[ordered.headers.indexOf(time)] = detail.resolutionTime;
-      }
-    });
-    const saved = { ...ordered, rows };
-    setSheet(saved);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-    window.dispatchEvent(new Event("reconciliation-updated"));
-    if (syncDashboards) {
-      writeArchivedSheet(saved);
-      updateDashboardSnapshot();
-    }
-  };
   const changeQuarter = (quarter: string) => {
-    const archived = sheetForQuarter(quarter);
-    if (!archived) return;
-    selectQuarter(quarter);
-    setSheet(archived as LocalSheet);
+    if (mode !== "import") {
+      localStorage.setItem(PG_SELECTED_QUARTER_KEY, quarter);
+      setActiveQuarter(quarter);
+      setRegion(T.all);
+      setPage(1);
+      return;
+    }
+    const postgresQuarter = toPostgresQuarterCode(quarter);
+    if (!postgresQuarter || !postgresQuarters.includes(postgresQuarter)) return;
+    localStorage.setItem(PG_SELECTED_QUARTER_KEY, postgresQuarter);
+    setActiveQuarter(postgresQuarter);
     setRegion(T.all);
     setPage(1);
-    setMessage(`已切换至 ${quarter} 对账明细。`);
+    setMessage(`已切换至 ${postgresQuarter} 季度。`);
   };
   const setCell = (row: unknown[], name: string, value: string | number) => {
     const i = index(name);
     if (i >= 0) row[i] = value;
   };
   const updateResponsible = (value: string) => {
-    const nextForm = { ...form, responsible: value };
-    setForm(nextForm);
-    if (!sheet || active === null || responsibleIndex < 0) return;
-    const rows = sheet.rows.map((row) => [...row]);
-    rows[active][responsibleIndex] = value;
-    saveSheet({
-      ...sheet,
-      rows,
-      details: { ...(sheet.details ?? {}), [String(active)]: nextForm },
-    });
+    setForm({ ...form, responsible: value });
   };
   const hideColumn = (column: number) => {
     setHiddenColumns((columns) =>
@@ -1145,36 +1098,23 @@ export function QuarterlyReconciliation({
     );
   };
   const refreshTable = () => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved)
-        setSheet(
-          reorderReviewColumns(backfillClearedStatus(JSON.parse(saved))),
-        );
-    } catch {
-      /* Keep the currently visible sheet if the saved copy is unavailable. */
-    }
+    setRefreshNonce((value) => value + 1);
     setRegion(T.all);
     setStripeFilter("all");
     setColumnFilters({});
     setFilterColumns([]);
     setHiddenColumns([]);
     setSalesHidden(false);
-    setMessage("已刷新表格，并恢复全部明细。");
-  };
-  const updateDashboards = () => {
-    const count = updateDashboardSnapshot();
-    setMessage(
-      count
-        ? `已将 ${count} 条本年度对账记录更新到其他看板。`
-        : "暂无可更新的本年度对账数据。",
-    );
+    setMessage("已从 PostgreSQL 刷新表格和全部明细。");
   };
 
   async function importFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || importingQuarter) return;
+    let serverImportedQuarter = "";
     try {
+      setImportingQuarter(true);
+      setMessage("正在解析 Excel…");
       const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const all = XLSX.utils.sheet_to_json<unknown[]>(
         wb.Sheets[wb.SheetNames[0]],
@@ -1188,49 +1128,69 @@ export function QuarterlyReconciliation({
         throw new Error(
           "\u6ca1\u6709\u8bfb\u53d6\u5230\u53ef\u7528\u7684\u8868\u5934\u6216\u6570\u636e\u3002",
         );
-      saveSheet({ headers, rows, fileName: file.name, details: {} }, true);
+      const quarter = toPostgresQuarterCode(quarterOf(file.name, headers, rows));
+      if (!quarter)
+        throw new Error("无法从对账时间点或季度信息识别导入季度，未提交数据库。");
+      setMessage("正在写入数据库…");
+      const result = await reconciliationApi.importQuarter(quarter, {
+        sourceFileName: file.name,
+        headers,
+        rows,
+      });
+      serverImportedQuarter = result.quarter;
+      const { quarters } = await reconciliationApi.listQuarters();
+      if (!quarters.some((item) => item.code === result.quarter))
+        throw new Error("导入已返回成功，但刷新季度列表未找到该季度，请刷新后核验。");
       recordImport({
         fileName: file.name,
         importedAt: new Date().toISOString(),
         dataType: "reconciliation",
-        description: "本季度对账表数据。",
-        recordCount: rows.length,
-        targetStore: "local-quarterly-reconciliation-archive",
-        quarter: quarterOf(file.name, headers, rows),
+        description: "PostgreSQL 季度对账表导入（仅本机兼容记录）。",
+        recordCount: result.importedRows,
+        targetStore: "PostgreSQL import_batches（本机兼容记录）",
+        quarter: result.quarter,
         status: "success",
-        stats: { inserted: rows.length },
+        stats: { inserted: result.importedRows },
       });
+      localStorage.setItem(PG_SELECTED_QUARTER_KEY, result.quarter);
+      setPostgresQuarters(quarters.map((item) => item.code));
+      setActiveQuarter(result.quarter);
+      setRefreshNonce((current) => current + 1);
+      setImportedQuarter(result.quarter);
       setRegion(T.all);
-      setMessage(`\u5df2\u5bfc\u5165 ${rows.length} \u6761\u8bb0\u5f55\u3002`);
+      setMessage(`导入成功：${result.quarter} 共 ${result.importedRows} 条，正在显示 PostgreSQL 最新数据。`);
+      window.dispatchEvent(new Event("reconciliation-open-postgres-quarter"));
     } catch (error) {
-      recordImport({
-        fileName: file.name,
-        importedAt: new Date().toISOString(),
-        dataType: "reconciliation",
-        description: error instanceof Error ? error.message : "对账表导入失败。",
-        targetStore: "local-quarterly-reconciliation-archive",
-        status: "failed",
-        stats: { errors: 1 },
-      });
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      const errorMessage = error instanceof Error ? error.message : "";
       setMessage(
-        error instanceof Error
-          ? error.message
-          : "\u5bfc\u5165\u5931\u8d25\u3002",
+        serverImportedQuarter
+          ? `导入已成功写入 PostgreSQL（${serverImportedQuarter}），但刷新季度列表失败：${errorMessage || "请刷新页面核验。"}`
+          : code === "QUARTER_HAS_EXISTING_DATA" || errorMessage.includes("QUARTER_HAS_EXISTING_DATA")
+          ? "该季度已经存在业务数据。为防止覆盖销售已填写的对账数据，当前不允许直接重新导入。"
+          : code === "IMPORT_ALREADY_EXISTS" || errorMessage.includes("IMPORT_ALREADY_EXISTS")
+            ? "该文件/数据已经导入，请勿重复导入。"
+            : error instanceof Error
+              ? `导入失败：${error.message}`
+              : "导入失败。",
       );
+    } finally {
+      setImportingQuarter(false);
+      event.target.value = "";
     }
-    event.target.value = "";
   }
   async function importMaterials(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!sheet) {
-      setMessage(
-        "\u8bf7\u5148\u4e0a\u4f20\u5bf9\u8d26\u5b63\u5ea6\u8868\uff0c\u518d\u5bfc\u5165\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868\u3002",
-      );
+    const quarter = currentPostgresQuarter();
+    if (!quarter) {
+      setMessage("当前没有有效的 PostgreSQL 季度，无法导入资料提供情况表。");
       event.target.value = "";
       return;
     }
+    setImportingMaterials(true);
     try {
+      setMessage("正在解析 Excel…");
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const all = XLSX.utils.sheet_to_json<unknown[]>(
         workbook.Sheets[workbook.SheetNames[0]],
@@ -1242,82 +1202,23 @@ export function QuarterlyReconciliation({
         .filter((row) =>
           row.some((value) => String(value ?? "").trim() !== ""),
         );
-      const sourceAccount = headerIndex(sourceHeaders, ["\u8d26\u5957"]),
-        sourceRegion = headerIndex(sourceHeaders, [T.region]),
-        sourceCustomer = headerIndex(sourceHeaders, [T.customer]);
-      if (sourceAccount < 0 || sourceRegion < 0 || sourceCustomer < 0)
-        throw new Error(
-          "\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868\u5fc5\u987b\u5305\u542b\u8d26\u5957\u3001\u533a\u57df\u3001\u5ba2\u6237\u540d\u79f0\u5217\u3002",
-        );
-      const headers = [...sheet.headers];
-      MATERIAL_HEADERS.forEach((header) => {
-        if (!headers.includes(header)) headers.push(header);
-      });
-      const prepared = placeMaterialHeaders({
-        ...sheet,
-        headers,
-        rows: sheet.rows.map((row) => [...row]),
-      });
-      const accountAt = headerIndex(prepared.headers, ["\u8d26\u5957"]),
-        targetRegion = headerIndex(prepared.headers, [T.region]),
-        targetCustomer = headerIndex(prepared.headers, [T.customer]);
-      if (accountAt < 0 || targetRegion < 0 || targetCustomer < 0)
-        throw new Error(
-          "\u672c\u5e74\u5ea6\u5bf9\u8d26\u8868\u5fc5\u987b\u5305\u542b\u8d26\u5957\u3001\u533a\u57df\u3001\u5ba2\u6237\u540d\u79f0\u5217\u3002",
-        );
-      const key = (account: unknown, area: unknown, customer: unknown) =>
-        [account, area, customer]
-          .map((value) =>
-            String(value ?? "")
-              .replace(/\s/g, "")
-              .trim(),
-          )
-          .join("|");
-      const sourceByKey = new Map<string, unknown[]>();
-      sourceRows.forEach((row) => {
-        const matchKey = key(
-          row[sourceAccount],
-          row[sourceRegion],
-          row[sourceCustomer],
-        );
-        if (matchKey !== "||") sourceByKey.set(matchKey, row);
-      });
-      const sourceMaterials = MATERIAL_HEADERS.map((header) =>
-        headerIndex(sourceHeaders, materialImportAliases(header)),
-      );
-      const targetMaterials = MATERIAL_HEADERS.map((header) =>
-        prepared.headers.indexOf(header),
-      );
-      let matched = 0;
-      const rows = prepared.rows.map((row) => {
-        const source = sourceByKey.get(
-          key(row[accountAt], row[targetRegion], row[targetCustomer]),
-        );
-        if (!source) return row;
-        matched += 1;
-        const next = [...row];
-        sourceMaterials.forEach((sourceAt, index) => {
-          if (sourceAt >= 0 && String(source[sourceAt] ?? "").trim() !== "")
-            next[targetMaterials[index]] = source[sourceAt];
-        });
-        return next;
-      });
-      saveSheet({ ...prepared, rows });
+      if (!sourceHeaders.length || !sourceRows.length) throw new Error("资料提供情况表未读取到可用的表头或数据。");
+      setMessage("正在写入数据库…");
+      const result = await reconciliationApi.importMaterials(quarter, { sourceFileName: file.name, headers: sourceHeaders, rows: sourceRows });
+      await refreshPostgresImportState(quarter, true);
       recordImport({
         fileName: file.name,
         importedAt: new Date().toISOString(),
         dataType: "materials",
         description: "客户资料提供状态数据。",
-        recordCount: matched,
-        targetStore: "local-quarterly-reconciliation-archive（按客户更新）",
-        quarter: activeQuarter || selectedQuarter(),
-        status: matched === sourceRows.length ? "success" : "partial",
-        stats: { updated: matched, skipped: Math.max(0, sourceRows.length - matched) },
+        recordCount: result.writtenMaterialCells,
+        targetStore: "PostgreSQL · recon.material_status",
+        quarter,
+        status: result.status === "PARTIAL" ? "partial" : "success",
+        stats: { updated: result.matchedRows, skipped: result.unmatchedRows },
       });
       setMessage(
-        "\u5df2\u5bfc\u5165\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868\uff1a\u5339\u914d " +
-          matched +
-          " \u6761\u5ba2\u6237\u8bb0\u5f55\u3002",
+        `资料提供情况已导入：匹配 ${result.matchedRows} 条，未匹配 ${result.unmatchedRows} 条。`,
       );
     } catch (error) {
       recordImport({
@@ -1326,8 +1227,8 @@ export function QuarterlyReconciliation({
         dataType: "materials",
         description:
           error instanceof Error ? error.message : "资料提供情况表导入失败。",
-        targetStore: "local-quarterly-reconciliation-archive（按客户更新）",
-        quarter: activeQuarter || selectedQuarter(),
+        targetStore: "PostgreSQL · materials/import",
+        quarter,
         status: "failed",
         stats: { errors: 1 },
       });
@@ -1337,6 +1238,7 @@ export function QuarterlyReconciliation({
           : "\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868\u5bfc\u5165\u5931\u8d25\u3002",
       );
     }
+    finally { setImportingMaterials(false); }
     event.target.value = "";
   }
   async function importCompanyReceivables(
@@ -1344,14 +1246,15 @@ export function QuarterlyReconciliation({
   ) {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!sheet) {
-      setMessage(
-        "\u8bf7\u5148\u4e0a\u4f20\u5bf9\u8d26\u5b63\u5ea6\u8868\uff0c\u518d\u4e0a\u4f20\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\u3002",
-      );
+    const quarter = currentPostgresQuarter();
+    if (!quarter) {
+      setMessage("当前没有有效的 PostgreSQL 季度，无法上传公司应收更新表。");
       event.target.value = "";
       return;
     }
+    setImportingCompanyReceivables(true);
     try {
+      setMessage("正在解析 Excel…");
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const all = XLSX.utils.sheet_to_json<unknown[]>(
         workbook.Sheets[workbook.SheetNames[0]],
@@ -1363,73 +1266,23 @@ export function QuarterlyReconciliation({
         .filter((row) =>
           row.some((value) => String(value ?? "").trim() !== ""),
         );
-      const sourceAccount = headerIndex(sourceHeaders, ["\u8d26\u5957"]);
-      const sourceRegion = headerIndex(sourceHeaders, [T.region]);
-      const sourceCustomer = headerIndex(sourceHeaders, [T.customer]);
-      const sourceCompany = headerIndex(
-        sourceHeaders,
-        companyReceivableImportAliases,
-      );
-      if (
-        sourceAccount < 0 ||
-        sourceRegion < 0 ||
-        sourceCustomer < 0 ||
-        sourceCompany < 0
-      )
-        throw new Error(
-          "\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\u5fc5\u987b\u5305\u542b\u8d26\u5957\u3001\u533a\u57df\u3001\u5ba2\u6237\u540d\u79f0\u548c\u516c\u53f8\u5e94\u6536\u5217\u3002",
-        );
-      const accountAt = headerIndex(sheet.headers, ["\u8d26\u5957"]);
-      const regionAt = headerIndex(sheet.headers, [T.region]);
-      const customerAt = headerIndex(sheet.headers, [T.customer]);
-      const companyAt = headerIndex(sheet.headers, companyReceivableImportAliases);
-      if (accountAt < 0 || regionAt < 0 || customerAt < 0 || companyAt < 0)
-        throw new Error(
-          "\u672c\u5b63\u5ea6\u5bf9\u8d26\u8be6\u60c5\u5fc5\u987b\u5305\u542b\u8d26\u5957\u3001\u533a\u57df\u3001\u5ba2\u6237\u540d\u79f0\u548c\u516c\u53f8\u5e94\u6536\u5217\u3002",
-        );
-      const key = (account: unknown, area: unknown, customer: unknown) =>
-        [account, area, customer]
-          .map((value) => String(value ?? "").replace(/\s/g, "").trim())
-          .join("|");
-      const sourceByKey = new Map<string, unknown[]>();
-      sourceRows.forEach((row) => {
-        const matchKey = key(
-          row[sourceAccount],
-          row[sourceRegion],
-          row[sourceCustomer],
-        );
-        if (matchKey !== "||") sourceByKey.set(matchKey, row);
-      });
-      let matched = 0;
-      let updated = 0;
-      const rows = sheet.rows.map((row) => {
-        const source = sourceByKey.get(
-          key(row[accountAt], row[regionAt], row[customerAt]),
-        );
-        if (!source) return row;
-        matched += 1;
-        const next = [...row];
-        const sourceValue = source[sourceCompany];
-        if (String(sourceValue ?? "").trim() !== "") {
-          next[companyAt] = sourceValue;
-          updated += 1;
-        }
-        return next;
-      });
-      saveSheet({ ...sheet, rows });
+      if (!sourceHeaders.length || !sourceRows.length) throw new Error("公司应收更新表未读取到可用的表头或数据。");
+      setMessage("正在写入数据库…");
+      const result = await reconciliationApi.importCompanyReceivables(quarter, { sourceFileName: file.name, headers: sourceHeaders, rows: sourceRows });
+      await refreshPostgresImportState(quarter, true);
       recordImport({
         fileName: file.name,
         importedAt: new Date().toISOString(),
         dataType: "companyReceivable",
         description: "公司应收更新数据。",
-        recordCount: updated,
-        targetStore: "local-quarterly-reconciliation-archive（公司应收字段）",
-        quarter: activeQuarter || selectedQuarter(),
-        status: updated === sourceRows.length ? "success" : "partial",
-        stats: { updated, skipped: Math.max(0, sourceRows.length - updated) },
+        recordCount: result.updatedRows,
+        targetStore: "PostgreSQL · recon.reconciliations.company_receivable",
+        quarter,
+        status: result.status === "PARTIAL" ? "partial" : "success",
+        stats: { updated: result.updatedRows, skipped: result.unmatchedRows + result.ambiguousRows },
       });
       setMessage(
-        `\u5df2\u4e0a\u4f20\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\uff1a\u5339\u914d ${matched} \u6761\uff0c\u4ec5\u66f4\u65b0\u5176\u4e2d ${updated} \u6761\u7684\u516c\u53f8\u5e94\u6536\u3002`,
+        `公司应收更新完成：匹配 ${result.matchedRows} 条，更新 ${result.updatedRows} 条，未匹配 ${result.unmatchedRows} 条${result.ambiguousRows ? `；有 ${result.ambiguousRows} 行匹配到多个客户记录，系统未自动更新，请人工核对。` : "。"}`,
       );
     } catch (error) {
       recordImport({
@@ -1437,8 +1290,8 @@ export function QuarterlyReconciliation({
         importedAt: new Date().toISOString(),
         dataType: "companyReceivable",
         description: error instanceof Error ? error.message : "公司应收更新表上传失败。",
-        targetStore: "local-quarterly-reconciliation-archive（公司应收字段）",
-        quarter: activeQuarter || selectedQuarter(),
+        targetStore: "PostgreSQL · company-receivables/import",
+        quarter,
         status: "failed",
         stats: { errors: 1 },
       });
@@ -1448,18 +1301,21 @@ export function QuarterlyReconciliation({
           : "\u516c\u53f8\u5e94\u6536\u66f4\u65b0\u8868\u4e0a\u4f20\u5931\u8d25\u3002",
       );
     }
+    finally { setImportingCompanyReceivables(false); }
     event.target.value = "";
   }
   async function importSpdSheet(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const quarter = activeQuarter || selectedQuarter();
+    const quarter = currentPostgresQuarter();
     if (!quarter) {
-      setMessage("\u8bf7\u5148\u4e0a\u4f20\u5bf9\u8d26\u5b63\u5ea6\u8868\uff0c\u786e\u5b9a\u5f53\u524d\u5bf9\u8d26\u5b63\u5ea6\u540e\u518d\u5bfc\u5165SPD\u8868\u3002");
+      setMessage("当前没有有效的 PostgreSQL 季度，无法导入 SPD 表。");
       event.target.value = "";
       return;
     }
+    setImportingSpd(true);
     try {
+      setMessage("正在解析 Excel…");
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const all = XLSX.utils.sheet_to_json<unknown[]>(
         workbook.Sheets[workbook.SheetNames[0]],
@@ -1478,27 +1334,30 @@ export function QuarterlyReconciliation({
         throw new Error(
           "SPD\u8868\u5fc5\u987b\u81f3\u5c11\u5305\u542bSPD\u786e\u8ba4\u8868\u6216SPD\u5e93\u5b58\u786e\u8ba4\u51fd\u5217\u3002",
         );
-      writeSpdSheetForQuarter(quarter, { headers, rows, fileName: file.name });
+      setMessage("正在写入数据库…");
+      const result = await reconciliationApi.importSpdDashboard(quarter, { sourceFileName: file.name, headers, rows });
+      await reconciliationApi.getSpdDashboard(quarter);
+      window.dispatchEvent(new Event("reconciliation-dashboard-updated"));
       recordImport({
         fileName: file.name,
         importedAt: new Date().toISOString(),
         dataType: "spd",
         description: "SPD 确认表和 SPD 库存确认函数据。",
-        recordCount: rows.length,
-        targetStore: "local-quarterly-reconciliation-spd-sheet-archive",
+        recordCount: result.replacedRows,
+        targetStore: "PostgreSQL · recon.spd_dashboard_rows",
         quarter,
         status: "success",
-        stats: { inserted: rows.length },
+        stats: { inserted: result.replacedRows },
       });
-      setMessage(`\u5df2\u5bfc\u5165SPD\u8868\uff1a${rows.length}\u6761\u8bb0\u5f55\u3002\u4ec5\u7528\u4e8e\u5bf9\u8d26\u770b\u677f\u7684SPD\u786e\u8ba4\u8868\u548cSPD\u5e93\u5b58\u786e\u8ba4\u51fd\u7edf\u8ba1\u3002`);
+      setMessage(`SPD 表已替换：${result.replacedRows} 条记录，已刷新看板数据。`);
     } catch (error) {
       recordImport({
         fileName: file.name,
         importedAt: new Date().toISOString(),
         dataType: "spd",
         description: error instanceof Error ? error.message : "SPD表导入失败。",
-        targetStore: "local-quarterly-reconciliation-spd-sheet-archive",
-        quarter: activeQuarter || selectedQuarter(),
+        targetStore: "PostgreSQL · spd-dashboard/import",
+        quarter,
         status: "failed",
         stats: { errors: 1 },
       });
@@ -1506,104 +1365,70 @@ export function QuarterlyReconciliation({
         error instanceof Error ? error.message : "SPD\u8868\u5bfc\u5165\u5931\u8d25\u3002",
       );
     }
+    finally { setImportingSpd(false); }
     event.target.value = "";
   }
   async function importCurrentLedger(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     if (!files.length) return;
+    const quarterCode = toPostgresQuarterCode(activeQuarter);
+    if (!quarterCode || !postgresQuarters.includes(quarterCode)) {
+      setMessage("当前没有有效的 PostgreSQL 季度，无法上传本年往来明细。");
+      event.target.value = "";
+      return;
+    }
     setUploadingLedger(true);
     try {
-      const keys = await readLedgerFiles(files);
-      if (!keys.length)
+      setMessage("正在解析 Excel…");
+      const sourceFiles = await readLedgerSourceFiles(files);
+      if (!sourceFiles.length)
         throw new Error(
-          "\u6ca1\u6709\u4ece\u6587\u4ef6\u4e2d\u8bfb\u53d6\u5230\u53ef\u6838\u9a8c\u7684\u53d1\u7968\u53f7\u3001\u65e5\u671f\u548c\u91d1\u989d\u3002",
+          "没有从文件中读取到可导入的表头和数据行。",
         );
-      const upload = {
-        keys,
-        fileNames: files.map((file) => file.name),
-        updatedAt: new Date().toLocaleString("zh-CN"),
-      };
-      await saveCurrentLedger(upload);
+      setMessage("正在写入数据库…");
+      const result = await reconciliationApi.importQuarterLedger(quarterCode, { sourceFiles });
       recordImport({
-        fileName: upload.fileNames.join("、"),
+        fileName: result.sourceFiles.join("、"),
         importedAt: new Date().toISOString(),
         dataType: "ledger",
         description: "本年往来明细数据。",
-        recordCount: keys.length,
-        targetStore: "IndexedDB · quarterly-reconciliation/ledger/current",
-        quarter: activeQuarter || selectedQuarter(),
+        recordCount: result.insertedRows,
+        targetStore: "PostgreSQL · recon.ledger_datasets / ledger_verification_entries",
+        quarter: quarterCode,
         status: "success",
-        stats: { inserted: keys.length },
+        stats: { inserted: result.insertedRows },
       });
-      setCurrentLedgerKeys(new Set(keys));
-      setLedgerKeys(
-        historicalLedgerKeys
-          ? new Set([...historicalLedgerKeys, ...keys])
-          : null,
-      );
-      setCurrentLedgerInfo(upload);
+      setCurrentLedgerInfo({ keys: [], fileNames: result.sourceFiles, updatedAt: new Date().toLocaleString("zh-CN") });
       setMessage(
-        `\u5df2\u66ff\u6362\u672c\u5e74\u5f80\u6765\u660e\u7ec6\uff1a${keys.length} \u6761\u53ef\u6838\u9a8c\u8bb0\u5f55\u3002`,
+        `本年往来明细上传成功：${result.insertedRows} 条记录。`,
       );
     } catch (error) {
+      const code = error instanceof ReconciliationApiError ? error.code : "";
+      const description = code === "LEDGER_QUARTER_DATA_ALREADY_EXISTS"
+        ? "当前季度已存在本年往来明细，暂不支持直接覆盖，请确认后续替换策略。"
+        : error instanceof Error ? error.message : "往来明细上传失败。";
       recordImport({
         fileName: files.map((file) => file.name).join("、"),
         importedAt: new Date().toISOString(),
         dataType: "ledger",
-        description: error instanceof Error ? error.message : "往来明细上传失败。",
-        targetStore: "IndexedDB · quarterly-reconciliation/ledger/current",
-        quarter: activeQuarter || selectedQuarter(),
+        description,
+        targetStore: "PostgreSQL · ledger/import",
+        quarter: quarterCode,
         status: "failed",
         stats: { errors: 1 },
       });
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "\u5f80\u6765\u660e\u7ec6\u4e0a\u4f20\u5931\u8d25\u3002",
-      );
+      setMessage(description);
     } finally {
       setUploadingLedger(false);
       event.target.value = "";
     }
   }
-  function clearData() {
-    localStorage.removeItem(STORAGE_KEY);
-    setSheet(null);
-    setRegion(T.all);
-    setMessage(
-      "\u5df2\u6e05\u9664\u672c\u673a\u4fdd\u5b58\u7684\u6570\u636e\u3002",
-    );
-  }
-
-  function withdrawCurrentQuarter() {
-    const quarter = activeQuarter || selectedQuarter();
-    if (!quarter || !sheetForQuarter(quarter)) {
-      setMessage("\u5f53\u524d\u6ca1\u6709\u53ef\u64a4\u56de\u7684\u5bf9\u8d26\u5b63\u5ea6\u8868\u3002");
-      return;
-    }
-    const confirmed = window.confirm(
-      `\u786e\u8ba4\u64a4\u56de ${quarter} \u7684\u5bf9\u8d26\u660e\u7ec6\u5417\uff1f\n\n\u5c06\u5220\u9664\u8be5\u5b63\u5ea6\u7684\u4e3b\u5bf9\u8d26\u8868\u53ca\u5176\u5df2\u4fdd\u5b58\u7684\u9500\u552e\u586b\u5199\u5185\u5bb9\u3002\n\u4e0d\u5f71\u54cd\u5176\u4ed6\u5b63\u5ea6\u3001\u5f80\u6765\u660e\u7ec6\u3001\u8d44\u6599\u63d0\u4f9b\u60c5\u51b5\u8868\u548cSPD\u8868\u3002`,
-    );
-    if (!confirmed) return;
-
-    const result = removeArchivedSheet(quarter);
-    setSheet((result?.sheet as LocalSheet | null) ?? null);
-    setActiveQuarter(result?.nextQuarter ?? "");
-    setArchivedQuarters(quarterOptions());
-    setRegion(T.all);
-    setPage(1);
-    setMessage(
-      result?.nextQuarter
-        ? `\u5df2\u64a4\u56de ${quarter} \u5bf9\u8d26\u660e\u7ec6\uff0c\u5df2\u5207\u6362\u81f3 ${result.nextQuarter}\u3002`
-        : `\u5df2\u64a4\u56de ${quarter} \u5bf9\u8d26\u660e\u7ec6\u3002`,
-    );
-  }
-  function open(id: number) {
+  async function open(id: number) {
     if (!sheet) return;
     const row = sheet.rows[id];
     const old = sheet.details?.[String(id)];
     const value = (name: string) => String(row[index(name)] ?? "");
-    setForm(
+    const base =
       old
         ? {
             ...empty(),
@@ -1625,98 +1450,158 @@ export function QuarterlyReconciliation({
             // 发票明细。发票类明细必须由销售填写真实发票号后才参与核验。
             badDebt: value(T.badDebt),
             adjustment: value(T.adjustment),
-          },
-    );
+          };
+    setForm(base);
     setActive(id);
+    if (mode !== "import") {
+      const reconciliationId = apiIds[id];
+      if (!reconciliationId || !activeQuarter) return;
+      try {
+        const { items } = await reconciliationApi.listDifferenceItems(activeQuarter, reconciliationId);
+        setApiDifferenceItems((current) => ({ ...current, [reconciliationId]: items }));
+        setForm(formFromDifferenceItems(base, items));
+      } catch (error) {
+        setActive(null);
+        setMessage(error instanceof Error ? `差额明细加载失败：${error.message}` : "差额明细加载失败。");
+      }
+    }
   }
-  function commit() {
+  async function importHistoricalLedger(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) return;
+    if (!window.confirm("替换后，新历史往来底库将成为当前核验版本；旧版本会保留，不会删除。是否继续？")) {
+      event.target.value = "";
+      return;
+    }
+    setReplacingHistoricalLedger(true);
+    try {
+      setMessage("正在解析 Excel…");
+      const sourceFiles = await readLedgerSourceFiles(files);
+      if (!sourceFiles.length) throw new Error("没有从文件中读取到可导入的历史往来数据。");
+      setMessage("正在替换历史往来底库…");
+      const result = await reconciliationApi.replaceHistoricalLedger({ sourceFiles });
+      recordImport({
+        fileName: result.sourceFiles.join("、"), importedAt: new Date().toISOString(), dataType: "historicalLedger",
+        description: "历史往来底库 PostgreSQL 版本替换（本机兼容记录）。", recordCount: result.insertedRows,
+        targetStore: "PostgreSQL · recon.ledger_datasets / ledger_verification_entries", quarter: "",
+        status: "success", stats: { inserted: result.insertedRows },
+      });
+      setMessage(`历史往来底库已更新为 V${result.version}，共导入 ${result.insertedRows} 条核验记录。`);
+    } catch (error) {
+      const code = error instanceof ReconciliationApiError ? error.code : "";
+      const description = code === "IMPORT_ALREADY_EXISTS" ? "该文件已导入，无需重复上传。" : error instanceof Error ? error.message : "历史往来底库替换失败。";
+      recordImport({
+        fileName: files.map((file) => file.name).join("、"), importedAt: new Date().toISOString(), dataType: "historicalLedger",
+        description, recordCount: 0, targetStore: "PostgreSQL · ledger/historical/import", quarter: "", status: "failed", stats: { errors: 1 },
+      });
+      setMessage(description);
+    } finally {
+      setReplacingHistoricalLedger(false);
+      event.target.value = "";
+    }
+  }
+  async function commit() {
     if (!sheet || active === null) return;
-    const needsCheck = [
-      ...form.transit,
-      ...form.returned,
-      ...form.lost,
-      ...form.instrument,
-      ...form.otherInvoice,
-    ].filter(hasInvoiceNumber);
-    if (ledgerError) {
-      window.alert("往来明细核验数据加载失败，请刷新后重试。");
-      return;
-    }
-    if (!matchingLedgerKeys) {
-      window.alert("正在加载往来明细，请稍候再保存。");
-      return;
-    }
-    // Keep the save gate identical to the per-row verification displayed in
-    // the difference drawer.  The lookup contains the normalized invoice
-    // date/amount returned by the ledger search; checking keys alone made a
-    // row appear "核验正确" while the subsequent save was rejected.
-    if (
-      needsCheck.some(
-        (entry) => !validLedgerEntry(entry, matchingLedgerKeys, ledgerLookup),
-      )
-    ) {
-      window.alert(
-        "存在未通过往来明细核验的发票，不能保存。请确认日期、发票号和金额。",
-      );
-      return;
-    }
-    const company = num(form.companyAmount);
-    const customer = num(form.customerAmount);
-    const difference = company - customer;
-    const transit = sumInvoiceEntries(form.transit);
-    const returned = sumInvoiceEntries(form.returned);
-    const lost = sumInvoiceEntries(form.lost);
-    const instrument = sumInvoiceEntries(form.instrument);
-    const otherInvoice = sumInvoiceEntries(form.otherInvoice);
-    const other = sum(form.other);
-    const total = transit + returned + lost + instrument + otherInvoice + other;
-    const rows = sheet.rows.map((row) => [...row]);
-    const row = rows[active];
-    setCell(row, T.customerBook, form.customerAmount === "" ? "" : customer);
-    setCell(row, T.difference, form.customerAmount === "" ? "" : difference);
-    setCell(row, T.transit, transit);
-    setCell(row, T.returned, returned);
-    setCell(row, T.lost, lost);
-    setCell(row, T.instrument, instrument);
-    setCell(row, T.other, otherInvoice + other);
-    setCell(row, T.badDebt, form.badDebt);
-    setCell(row, T.adjustment, form.adjustment);
-    const notes = [
-      ...meaningfulInvoiceEntries(form.transit).map((e) => e.note && `在途：${e.note}`),
-      ...meaningfulInvoiceEntries(form.returned).map((e) => e.note && `退票：${e.note}`),
-      ...meaningfulInvoiceEntries(form.lost).map((e) => e.note && `丢票：${e.note}`),
-      ...meaningfulInvoiceEntries(form.instrument).map((e) => e.note && `仪器设备：${e.note}`),
-      ...meaningfulInvoiceEntries(form.otherInvoice).map((e) => e.note && `其他（有发票）：${e.note}`),
-      ...form.other.map((e) => e.note && `其他：${e.note}`),
-    ]
-      .filter(Boolean)
-      .join("；");
-    setCell(row, T.note, notes);
-    if (clearedIndex >= 0)
-      row[clearedIndex] =
-        form.customerAmount === ""
-          ? T.unreconciled
-          : Math.abs(difference) < 0.01 || Math.abs(difference - total) < 0.01
-            ? T.clear
-            : T.uncleared;
-    saveSheet({
-      ...sheet,
-      rows,
-      details: {
-        ...(sheet.details ?? {}),
-        [String(active)]: {
-          ...form,
-          transit: normalizeInvoiceEntries(form.transit),
-          returned: normalizeInvoiceEntries(form.returned),
-          lost: normalizeInvoiceEntries(form.lost),
-          instrument: normalizeInvoiceEntries(form.instrument),
-          otherInvoice: normalizeInvoiceEntries(form.otherInvoice),
-        },
-      },
-    });
-    setMessage(T.saved);
-    stopSolutionRecording();
-    setActive(null);
+    const reconciliationId = apiIds[active];
+      if (!reconciliationId || !activeQuarter) return;
+      if (saving) return;
+      const mutationKey = `reconciliation:${reconciliationId}`;
+      const sequence = (mutationSequence.current.get(mutationKey) ?? 0) + 1;
+      mutationSequence.current.set(mutationKey, sequence);
+      const uploadedAttachmentKeys: string[] = [];
+      let savedOtherEntries = form.other;
+      setSaving(true);
+      setMessage("正在上传图片…");
+      try {
+        savedOtherEntries = await Promise.all(form.other.map(async (entry) => {
+          if (!entry.pendingImage) return entry.removeImage ? { ...entry, image: "", removeImage: false } : entry;
+          const uploaded = await differenceAttachmentApi.upload(entry.pendingImage);
+          uploadedAttachmentKeys.push(uploaded.key);
+          return { ...entry, image: uploaded.key, pendingImage: undefined, previewUrl: undefined, removeImage: false };
+        }));
+      } catch (error) {
+        await Promise.allSettled(uploadedAttachmentKeys.map((key) => differenceAttachmentApi.remove(key)));
+        setSaveError(error instanceof Error ? `保存失败：${error.message}` : "保存失败：图片上传失败，请重试。");
+        if (mutationSequence.current.get(mutationKey) === sequence) setSaving(false);
+        return;
+      }
+      const desired = (FORM_DIFFERENCE_CATEGORIES as DifferenceType[]).flatMap((category) => {
+        const entries = category === 'other' ? savedOtherEntries : form[category] as InvoiceEntry[];
+        return entries.filter((entry) => category === 'other'
+          ? num(entry.amount) !== 0 || entry.note.trim() || Boolean((entry as OtherEntry).image || (entry as OtherEntry).pendingImage)
+          : hasInvoiceNumber(entry as InvoiceEntry)).map((entry) => ({
+            id: entry.id, formCategory: category, category: toApiDifferenceCategory(category), invoiceNo: category === 'other' ? null : (entry as InvoiceEntry).invoice || null,
+            invoiceDate: category === 'other' ? null : (entry as InvoiceEntry).date || null,
+            differenceAmount: entry.amount || null, differenceDescription: entry.note || null,
+            attachmentKeys: category === 'other' ? [String((entry as OtherEntry).image ?? '').trim()].filter(Boolean) : [],
+          }));
+      });
+      try {
+        setMessage("正在保存到 PostgreSQL…");
+        const original = sheet.details?.[String(active)];
+        const reconciliationPatch = {
+          ...(nullableText(form.customerAmount) !== nullableText(original?.customerAmount ?? "") ? { customerBookAmount: nullableText(form.customerAmount) } : {}),
+          ...(nullableText(form.responsible) !== nullableText(original?.responsible ?? "") ? { ownerName: nullableText(form.responsible) } : {}),
+          ...(nullableText(form.badDebt) !== nullableText(original?.badDebt ?? "") ? { badDebtAmount: nullableText(form.badDebt) } : {}),
+          ...(nullableText(form.badDebtReason) !== nullableText(original?.badDebtReason ?? "") ? { badDebtReason: nullableText(form.badDebtReason) } : {}),
+          ...(nullableText(form.adjustment) !== nullableText(original?.adjustment ?? "") ? { adjustmentAmount: nullableText(form.adjustment) } : {}),
+          ...(nullableText(form.adjustmentReason) !== nullableText(original?.adjustmentReason ?? "") ? { adjustmentReason: nullableText(form.adjustmentReason) } : {}),
+          ...(nullableText(form.resolutionSolution) !== nullableText(original?.resolutionSolution ?? "") ? { solution: nullableText(form.resolutionSolution) } : {}),
+          ...(nullableText(form.resolutionTime) !== nullableText(original?.resolutionTime ?? "") ? { solutionDate: nullableText(form.resolutionTime) } : {}),
+        };
+        if (Object.keys(reconciliationPatch).length) await reconciliationApi.patch(activeQuarter, reconciliationId, reconciliationPatch);
+        const differenceMutations = planDifferenceItemMutations(apiDifferenceItems[reconciliationId] ?? [], desired);
+        for (const item of differenceMutations.patch) await reconciliationApi.patchDifferenceItem(activeQuarter, reconciliationId, item.id, item.body);
+        for (const item of differenceMutations.delete) await reconciliationApi.deleteDifferenceItem(activeQuarter, reconciliationId, item);
+        for (const item of differenceMutations.create) await reconciliationApi.createDifferenceItem(activeQuarter, reconciliationId, item);
+        const oldAttachmentById = new Map((apiDifferenceItems[reconciliationId] ?? []).map((item) => [item.id, item.attachmentKeys[0] ?? ""]));
+        const attachmentKeysToDelete = desired.filter((item) => item.formCategory === 'other' && item.id).flatMap((item) => {
+          const oldKey = oldAttachmentById.get(item.id!);
+          const nextKey = item.attachmentKeys[0] ?? "";
+          return oldKey && oldKey !== nextKey ? [oldKey] : [];
+        });
+        for (const id of differenceMutations.delete) {
+          const oldKey = oldAttachmentById.get(id);
+          if (oldKey) attachmentKeysToDelete.push(oldKey);
+        }
+        await Promise.allSettled(attachmentKeysToDelete.map((key) => differenceAttachmentApi.remove(key)));
+        // The detail form owns reconciliation fields only. Followup items and
+        // events are managed exclusively by the unresolved-followup dashboard.
+        // Re-read confirmed server state; do not retain an optimistic local copy.
+        const [{ reconciliations }, { items }, { material }, { items: differenceItems }] = await Promise.all([
+          reconciliationApi.list(activeQuarter), reconciliationApi.listDifferenceItems(activeQuarter, reconciliationId), reconciliationApi.getMaterialStatus(activeQuarter), reconciliationApi.listQuarterDifferenceItems(activeQuarter),
+        ]);
+        if (mutationSequence.current.get(mutationKey) === sequence) {
+          setSheet(apiSheet(activeQuarter, reconciliations, material, differenceItems));
+          setApiIds(preserveImportedOrder(reconciliations).map((item) => item.id));
+          setApiDifferenceItems((currentItems) => ({ ...currentItems, [reconciliationId]: items }));
+          setMessage("已保存到 PostgreSQL。显示内容已按服务端确认结果刷新。");
+          setSaveError("");
+          setActive(null);
+        }
+      } catch (error) {
+        await Promise.allSettled(uploadedAttachmentKeys.map((key) => differenceAttachmentApi.remove(key)));
+        if (mutationSequence.current.get(mutationKey) === sequence) setSaveError(error instanceof Error ? `保存失败：${error.message}。未使用本地数据回退。` : "保存失败；未使用本地数据回退。");
+      } finally {
+        if (mutationSequence.current.get(mutationKey) === sequence) setSaving(false);
+      }
+    return;
+  }
+  async function refreshTransferredDifferenceItems() {
+    if (active === null || !activeQuarter) return;
+    const reconciliationId = apiIds[active];
+    if (!reconciliationId) return;
+    const [{ items }, { reconciliations }, { material }, { items: quarterItems }] = await Promise.all([
+      reconciliationApi.listDifferenceItems(activeQuarter, reconciliationId),
+      reconciliationApi.list(activeQuarter),
+      reconciliationApi.getMaterialStatus(activeQuarter),
+      reconciliationApi.listQuarterDifferenceItems(activeQuarter),
+    ]);
+    setApiDifferenceItems((current) => ({ ...current, [reconciliationId]: items }));
+    setSheet(apiSheet(activeQuarter, reconciliations, material, quarterItems));
+    setForm((current) => formFromDifferenceItems(current, items));
+    setMessage("已按服务端确认结果刷新差额明细。");
+    window.dispatchEvent(new Event("reconciliation-dashboard-updated"));
   }
 
   const company = num(form.companyAmount);
@@ -1734,27 +1619,24 @@ export function QuarterlyReconciliation({
 
   return (
     <>
+      <GlobalSaveErrorNotification message={saveError} onClose={() => setSaveError("")} />
       <section
         className={`local-tool ${mode === "import" ? "data-import-tool" : "detail-table-tool"}`}
       >
         <div className="local-toolbar">
           <div>
             <p className="eyebrow">
-              {mode === "import" ? "数据导入" : T.local}
+              {mode === "import" ? "数据导入" : `${activeQuarter || "当前季度"} PostgreSQL`}
             </p>
             <h2>{mode === "import" ? "数据导入" : "本季度对账详细情况"}</h2>
             <p>
               {mode === "import"
                 ? T.importHint
-                : "查看、筛选、填写和导出本年度对账明细。"}
+                : "查看、筛选、填写和管理本季度全部客户对账明细。"}
             </p>
           </div>
           {mode === "import" ? (
             <div className="toolbar-actions upload-actions">
-              <label className="file-button">
-                {T.import}
-                <input type="file" accept=".xlsx,.xls" onChange={importFile} />
-              </label>
               <label className="file-button ledger-upload">
                 {uploadingLedger ? T.loading : T.uploadLedger}
                 <input
@@ -1766,52 +1648,34 @@ export function QuarterlyReconciliation({
                 />
               </label>
               <label className="file-button materials-upload">
-                {T.uploadMaterials}
+                {importingMaterials ? T.loading : T.uploadMaterials}
                 <input
                   type="file"
                   accept=".xlsx,.xls"
+                  disabled={importingMaterials}
                   onChange={importMaterials}
                 />
               </label>
               <label className="file-button materials-upload">
-                {T.uploadSpdSheet}
+                {importingSpd ? T.loading : T.uploadSpdSheet}
                 <input
                   type="file"
                   accept=".xlsx,.xls"
+                  disabled={importingSpd}
                   onChange={importSpdSheet}
                 />
               </label>
-              <label className="file-button company-receivable-upload">
-                {T.uploadCompanyReceivable}
+              <label className="file-button ledger-upload">
+                {replacingHistoricalLedger ? "正在替换历史往来底库…" : "替换历史往来底库"}
                 <input
                   type="file"
                   accept=".xlsx,.xls"
-                  onChange={importCompanyReceivables}
+                  multiple
+                  disabled={replacingHistoricalLedger}
+                  onChange={importHistoricalLedger}
                 />
               </label>
-              {sheet && (
-                <button
-                  type="button"
-                  className="dashboard-sync-button"
-                  onClick={updateDashboards}
-                >
-                  一键更新其他看板
-                </button>
-              )}
-              {sheet && (
-                <button
-                  type="button"
-                  className="clear-button withdraw-quarter-button"
-                  onClick={withdrawCurrentQuarter}
-                >
-                  {T.withdrawQuarter}
-                </button>
-              )}
-              {sheet && (
-                <button className="clear-button" onClick={clearData}>
-                  {T.clearData}
-                </button>
-              )}
+              <DataImportCenter />
             </div>
           ) : (
             <div className="toolbar-actions">
@@ -1833,7 +1697,7 @@ export function QuarterlyReconciliation({
             </div>
           )}
         </div>
-        {archivedQuarters.length > 0 && (
+        {(mode === "import" ? postgresQuarters : archivedQuarters).length > 0 && (
           <div className="quarter-archive-control">
             <label>
               对账季度
@@ -1842,14 +1706,14 @@ export function QuarterlyReconciliation({
                 value={activeQuarter}
                 onChange={(event) => changeQuarter(event.target.value)}
               >
-                {archivedQuarters.map((quarter) => (
+                {(mode === "import" ? postgresQuarters : archivedQuarters).map((quarter) => (
                   <option key={quarter} value={quarter}>
                     {quarter}
                   </option>
                 ))}
               </select>
             </label>
-            <span>已按季度独立保存，导入新季度不会覆盖已有明细。</span>
+            <span>季度数据来自 PostgreSQL；导入新季度不会覆盖已有明细。</span>
           </div>
         )}
         {currentLedgerInfo && (
@@ -1899,14 +1763,13 @@ export function QuarterlyReconciliation({
         {mode === "import" ? (
           <>
             <div className="import-status">
-              <strong>{sheet ? "本年度对账表已导入" : T.needImport}</strong>
+              <strong>其他独立导入与历史记录</strong>
               <span>
-                {sheet
-                  ? `${sheet.fileName}，共 ${sheet.rows.length} 条记录。数据已保存在本机，可返回“本季度对账详细情况”继续填写。`
-                  : "请先上传对账季度表，再按需要上传或替换本年往来明细。"}
+                往来明细、资料提供、SPD 和历史往来底库维持各自既有导入流程；季度基础表与公司应收更新请使用上方新中心。
               </span>
             </div>
-            <ImportDashboard ledger={currentLedgerInfo} />
+            <QuarterArchiveDownload />
+            <ImportDashboard />
           </>
         ) : !sheet ? (
           <div className="local-empty">
@@ -1944,7 +1807,7 @@ export function QuarterlyReconciliation({
                   </select>
                 </label>
                 <label>
-                  橙色条纹
+                  对账状态
                   <select
                     value={stripeFilter}
                     onChange={(event) =>
@@ -2302,7 +2165,6 @@ export function QuarterlyReconciliation({
                 className="modal-close"
                 aria-label="关闭销售填写"
                 onClick={() => {
-                  stopSolutionRecording();
                   setActiveDifferenceType(null);
                   setActive(null);
                 }}
@@ -2345,8 +2207,9 @@ export function QuarterlyReconciliation({
                 <button
                   className="save-button top-save-button"
                   onClick={commit}
+                  disabled={saving}
                 >
-                  {T.save}
+                  {saving ? "保存中…" : T.save}
                 </button>
               </div>
             </div>
@@ -2356,6 +2219,13 @@ export function QuarterlyReconciliation({
                 activeType={activeDifferenceType}
                 onOpen={setActiveDifferenceType}
               />
+              {mode !== "import" && activeQuarter && apiIds[active] && <PreviousQuarterDifferenceTransferDrawer
+                quarter={activeQuarter}
+                reconciliationId={apiIds[active]}
+                accountSet={String(sheet.rows[active][accountIndex] ?? "")}
+                customer={String(sheet.rows[active][customerIndex] ?? "")}
+                onTransferred={refreshTransferredDifferenceItems}
+              />}
               <div className="amount-bar evidence">
                 <span>
                   {T.total}
@@ -2370,39 +2240,29 @@ export function QuarterlyReconciliation({
                   <strong>{money(Math.max(0, Math.abs(difference) - total))}</strong>
                 </span>
               </div>
-              <div className="detail-grid two">
-                <div>
-                  <TextField
-                    label={T.badDebt}
-                    value={form.badDebt}
-                    type="number"
-                    onChange={(value) => setForm({ ...form, badDebt: value })}
-                  />
-                  <TextField
-                    label={"死账原因"}
-                    value={form.badDebtReason}
-                    onChange={(value) =>
-                      setForm({ ...form, badDebtReason: value })
-                    }
-                  />
-                </div>
-                <div>
-                  <TextField
-                    label={T.adjustment}
-                    value={form.adjustment}
-                    type="number"
-                    onChange={(value) =>
-                      setForm({ ...form, adjustment: value })
-                    }
-                  />
-                  <TextField
-                    label={"调账原因"}
-                    value={form.adjustmentReason}
-                    onChange={(value) =>
-                      setForm({ ...form, adjustmentReason: value })
-                    }
-                  />
-                </div>
+              <section className="writeoff-adjustment-section" aria-label="死账、调账和解决信息">
+                <TextField
+                  label="死账金额"
+                  value={form.badDebt}
+                  type="number"
+                  onChange={(value) => setForm({ ...form, badDebt: value })}
+                />
+                <TextField
+                  label="调账金额"
+                  value={form.adjustment}
+                  type="number"
+                  onChange={(value) => setForm({ ...form, adjustment: value })}
+                />
+                <VoiceTextField
+                  label="死账原因"
+                  value={form.badDebtReason}
+                  onChange={(value) => setForm({ ...form, badDebtReason: value })}
+                />
+                <VoiceTextField
+                  label="调账原因"
+                  value={form.adjustmentReason}
+                  onChange={(value) => setForm({ ...form, adjustmentReason: value })}
+                />
                 <TextField
                   label={"\u89e3\u51b3\u65f6\u95f4"}
                   value={form.resolutionTime}
@@ -2411,30 +2271,14 @@ export function QuarterlyReconciliation({
                     setForm({ ...form, resolutionTime: value })
                   }
                 />
-                <div className="solution-field-with-speech">
-                  <TextField
+                <VoiceTextField
                     label={"\u89e3\u51b3\u65b9\u6848"}
                     value={form.resolutionSolution}
                     onChange={(value) =>
                       setForm({ ...form, resolutionSolution: value })
                     }
-                  />
-                  <button
-                    type="button"
-                    className={`speech-record-button${speechRecording ? " is-recording" : ""}`}
-                    onClick={toggleSolutionRecording}
-                    aria-pressed={speechRecording}
-                  >
-                    <span aria-hidden="true">{speechRecording ? "\u25cf" : "\u25c9"}</span>
-                    {speechRecording ? "\u7ed3\u675f\u5f55\u97f3" : "\u8bed\u97f3\u8f6c\u6587\u5b57"}
-                  </button>
-                  {speechMessage && (
-                    <p className="speech-record-hint" role="status">
-                      {speechMessage}
-                    </p>
-                  )}
-                </div>
-              </div>
+                />
+              </section>
             </div>
           </section>
           {activeDifferenceType && (
@@ -2444,8 +2288,7 @@ export function QuarterlyReconciliation({
               onChange={setForm}
               onClose={() => setActiveDifferenceType(null)}
               onPreview={setPreviewImage}
-              ledgerKeys={matchingLedgerKeys}
-              ledgerLookup={ledgerLookup}
+              quarter={activeQuarter}
             />
           )}
         </div>
@@ -2486,11 +2329,6 @@ export function QuarterlyReconciliation({
               {T.import}
               <input type="file" accept=".xlsx,.xls" onChange={importFile} />
             </label>
-            {sheet && (
-              <button className="clear-button" onClick={clearData}>
-                {T.clearData}
-              </button>
-            )}
           </div>
         </div>
         {message && <p className="import-message">{message}</p>}
@@ -2589,16 +2427,14 @@ export function QuarterlyReconciliation({
                 title={T.transitReview}
                 entries={form.transit}
                 requiresReview={true}
-                ledgerKeys={ledgerKeys}
-                ledgerLookup={ledgerLookup}
+                quarter={activeQuarter}
                 setEntries={(entries) => setForm({ ...form, transit: entries })}
               />
               <InvoiceGroup
                 title={T.returnReview}
                 entries={form.returned}
                 requiresReview={true}
-                ledgerKeys={ledgerKeys}
-                ledgerLookup={ledgerLookup}
+                quarter={activeQuarter}
                 setEntries={(entries) =>
                   setForm({ ...form, returned: entries })
                 }
@@ -2607,8 +2443,7 @@ export function QuarterlyReconciliation({
                 title={T.otherInvoice}
                 entries={form.otherInvoice}
                 requiresReview={false}
-                ledgerKeys={ledgerKeys}
-                ledgerLookup={ledgerLookup}
+                quarter={activeQuarter}
                 setEntries={(entries) =>
                   setForm({ ...form, otherInvoice: entries })
                 }
@@ -2682,6 +2517,10 @@ function TextField({
   );
 }
 
+function VoiceTextField(props: { label: string; value: string; onChange: (value: string) => void }) {
+  return <div className="voice-text-field"><label className="field"><span>{props.label}</span><textarea value={props.value} onChange={(event) => props.onChange(event.target.value)} /></label><VoiceInputButton value={props.value} onChange={props.onChange} /></div>;
+}
+
 const DIFFERENCE_SUMMARIES: Array<{
   type: DifferenceType;
   label: string;
@@ -2720,7 +2559,7 @@ function DifferenceSummaryList({
         const meaningfulEntries = item.invoice
           ? meaningfulInvoiceEntries(entries as InvoiceEntry[])
           : (entries as OtherEntry[]).filter(
-              (entry) => num(entry.amount) !== 0 || entry.note.trim() || Boolean(entry.image),
+        (entry) => num(entry.amount) !== 0 || entry.note.trim() || Boolean(entry.image || entry.pendingImage),
             );
         const filled = meaningfulEntries.length;
         const subtotal = meaningfulEntries.reduce((total, entry) => total + num(entry.amount), 0);
@@ -2746,27 +2585,28 @@ function DifferenceDetailDrawer({
   onChange,
   onClose,
   onPreview,
-  ledgerKeys,
-  ledgerLookup,
+  quarter,
 }: {
   type: DifferenceType;
   form: DetailForm;
   onChange: (next: DetailForm) => void;
   onClose: () => void;
   onPreview: (image: string) => void;
-  ledgerKeys: Set<string> | null;
-  ledgerLookup: LedgerLookup;
+  quarter: string;
 }) {
   const meta = DIFFERENCE_SUMMARIES.find((item) => item.type === type)!;
   const entries = entriesFor(form, type);
   const meaningfulEntries = meta.invoice
     ? meaningfulInvoiceEntries(entries as InvoiceEntry[])
     : (entries as OtherEntry[]).filter(
-        (entry) => num(entry.amount) !== 0 || entry.note.trim() || Boolean(entry.image),
+        (entry) => num(entry.amount) !== 0 || entry.note.trim() || Boolean(entry.image || entry.pendingImage),
       );
   const subtotal = meaningfulEntries.reduce((total, entry) => total + num(entry.amount), 0);
   const [ocrStatus, setOcrStatus] = useState("");
   const [ocrRecognizing, setOcrRecognizing] = useState(false);
+  const [screenshotOpen, setScreenshotOpen] = useState(false);
+  const [verificationResults, setVerificationResults] = useState<Record<number, "matched" | "not_found" | "pending">>({});
+  const verifyRequest = useRef<AbortController | null>(null);
   const setEntries = (next: InvoiceEntry[] | OtherEntry[]) =>
     onChange({ ...form, [type]: next } as DetailForm);
   const add = () =>
@@ -2803,21 +2643,23 @@ function DifferenceDetailDrawer({
     );
   const updateInvoice = (index: number, invoice: string) => {
     const normalizedInvoice = invoice.trim();
-    const matched = findLedgerMatch(normalizedInvoice, ledgerLookup, ledgerKeys);
     setEntries(
       entries.map((entry, entryIndex) => {
         if (entryIndex !== index) return entry;
         const current = entry as InvoiceEntry;
         if (!normalizedInvoice) return blankInvoice();
-        if (!matched) return { ...current, invoice: normalizedInvoice, date: "", amount: "" };
-        return {
-          ...current,
-          invoice: normalizedInvoice,
-          date: matched.dates.length === 1 ? matched.dates[0] : current.date,
-          amount: matched.amount.toFixed(2),
-        };
+        return normalizedInvoice ? { ...current, invoice: normalizedInvoice } : blankInvoice();
       }) as InvoiceEntry[],
     );
+  };
+  const resolveInvoice = async (index: number) => {
+    const invoice = (entries[index] as InvoiceEntry | undefined)?.invoice.trim();
+    if (!invoice || !quarter) return;
+    try {
+      const result = (await reconciliationApi.resolveLedgerInvoices(quarter, [invoice])).results[0];
+      if (!result || result.invoiceNumber !== invoice || result.status !== "resolved") return;
+      setEntries(entries.map((entry, entryIndex) => entryIndex === index && (entry as InvoiceEntry).invoice.trim() === invoice ? { ...entry, date: result.invoiceDate ?? "", amount: result.invoiceAmount ?? "" } : entry) as InvoiceEntry[] & OtherEntry[]);
+    } catch { /* retain the established incomplete-row behavior on lookup failure */ }
   };
   const fillRecognizedInvoices = (invoiceNumbers: string[]) => {
     const invoiceEntries = entries as InvoiceEntry[];
@@ -2830,13 +2672,10 @@ function DifferenceDetailDrawer({
     let nextIndex = 0;
     let matchedCount = 0;
     const createRecognizedEntry = (invoice: string) => {
-      const matched = findLedgerMatch(invoice, ledgerLookup, ledgerKeys);
-      if (matched) matchedCount += 1;
       return {
         ...blankInvoice(),
         invoice,
-        date: matched?.dates.length === 1 ? matched.dates[0] : "",
-        amount: matched ? matched.amount.toFixed(2) : "",
+        date: "", amount: "",
       };
     };
     const nextEntries = invoiceEntries.map((entry) => {
@@ -2863,13 +2702,10 @@ function DifferenceDetailDrawer({
         recognized.push(...extractInvoiceNumbersFromOcr(await response.json()));
       }
       const uniqueNumbers = [...new Set(recognized)];
-      const ledgerNumbers = uniqueNumbers.filter((invoice) =>
-        Boolean(findLedgerMatch(invoice, ledgerLookup, ledgerKeys)),
-      );
-      const result = fillRecognizedInvoices(ledgerNumbers.length ? ledgerNumbers : uniqueNumbers);
+      const result = fillRecognizedInvoices(uniqueNumbers);
       setOcrStatus(
         result.added
-          ? `已识别 ${result.added} 个发票号，${result.matched} 个已自动带出开票日期和金额。`
+          ? `已识别 ${result.added} 个发票号，请填写日期和金额后由服务器核验。`
           : "未识别到新的发票号，请确认图片清晰且未重复导入。",
       );
     } catch {
@@ -2878,26 +2714,37 @@ function DifferenceDetailDrawer({
       setOcrRecognizing(false);
     }
   };
-  const addImage = (index: number, file?: File) => {
-    if (!file || !file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = () =>
-      setEntries(
-        entries.map((entry, entryIndex) =>
-          entryIndex === index ? { ...entry, image: String(reader.result ?? "") } : entry,
-        ) as OtherEntry[],
-      );
-    reader.readAsDataURL(file);
+  const addImage = async (index: number, file?: File) => {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { window.alert('仅支持 JPG、PNG、WEBP 图片。'); return; }
+    if (!file.size) { window.alert('图片文件不能为空。'); return; }
+    if (file.size > MAX_ATTACHMENT_IMAGE_BYTES) { window.alert('图片文件过大，请选择20MB以内的图片。'); return; }
+    try {
+      const prepared = await prepareAttachmentImage(file);
+      const previewUrl = URL.createObjectURL(prepared.file);
+      setEntries(entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, pendingImage: prepared.file, previewUrl, removeImage: false } : entry) as OtherEntry[]);
+    } catch (error) { window.alert(error instanceof Error ? error.message : '图片优化失败，请重新选择图片。'); }
   };
-  const verification = (entry: InvoiceEntry) => {
+  useEffect(() => {
+    const candidates = entries.map((entry, index) => ({ entry: entry as InvoiceEntry, index })).filter(({ entry }) => meta.invoice && hasInvoiceNumber(entry) && entry.invoice && entry.date && entry.amount !== "");
+    if (!candidates.length || !quarter) return;
+    verifyRequest.current?.abort();
+    const controller = new AbortController(); verifyRequest.current = controller;
+    const timer = window.setTimeout(() => {
+      void Promise.all(candidates.map(async ({ entry, index }) => {
+        try { const result = await reconciliationApi.verifyLedgerInvoice(quarter, { invoiceNo: entry.invoice, invoiceDate: entry.date, amount: entry.amount }, controller.signal); return [index, result.status] as const; }
+        catch (error) { if (controller.signal.aborted) return null; return [index, error instanceof ReconciliationApiError && error.code === "LEDGER_INVOICE_NOT_FOUND" ? "not_found" : "pending"] as const; }
+      })).then((results) => { if (!controller.signal.aborted) setVerificationResults(Object.fromEntries(results.filter((item): item is readonly [number, "matched" | "not_found" | "pending"] => item !== null))); });
+    }, 400);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [entries, meta.invoice, quarter]);
+  const verification = (entry: InvoiceEntry, index: number) => {
     if (!hasInvoiceNumber(entry)) return null;
     if (!entry.date || !entry.invoice || entry.amount === "") {
       return { label: "\u5f85\u6838\u9a8c", kind: "pending" };
     }
-    if (!ledgerKeys) return { label: "\u6b63\u5728\u52a0\u8f7d", kind: "pending" };
-    return validLedgerEntry(entry, ledgerKeys, ledgerLookup)
-      ? { label: "\u5f80\u6765\u6838\u9a8c\u6b63\u786e", kind: "correct" }
-      : { label: "\u5f80\u6765\u6838\u9a8c\u9519\u8bef", kind: "error" };
+    const status = verificationResults[index] ?? "pending";
+    return status === "matched" ? { label: "往来明细核验：正确", kind: "correct" } : status === "not_found" ? { label: "往来明细未找到此发票", kind: "error" } : { label: "正在核验", kind: "pending" };
   };
   return (
     <aside className="difference-detail-drawer" role="dialog" aria-modal="true" aria-label={`填写${meta.label}差额明细`}>
@@ -2912,20 +2759,9 @@ function DifferenceDetailDrawer({
       <div className="drawer-tools">
         <button type="button" onClick={add}>＋ 新增一行</button>
         <button type="button" onClick={batchAdd}>▣ 批量录入</button>
-        {meta.invoice && <label className="drawer-ocr-button">
-          {ocrRecognizing ? "OCR识别中…" : "OCR发票识别"}
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            disabled={ocrRecognizing}
-            onChange={(event) => {
-              void recognizeInvoices(event.target.files);
-              event.target.value = "";
-            }}
-          />
-        </label>}
+        {meta.invoice && <button type="button" onClick={() => setScreenshotOpen(true)}>批量识别发票号</button>}
       </div>
+      {screenshotOpen && meta.invoice && <BatchInvoiceScreenshotDrawer quarter={quarter} entries={entries as InvoiceEntry[]} onAppend={(next) => setEntries(next)} onClose={() => setScreenshotOpen(false)} />}
       {meta.invoice && ocrStatus && <p className="drawer-ocr-status" role="status">{ocrStatus}</p>}
       <div className="difference-drawer-table-wrap">
         <table className="difference-drawer-table">
@@ -2944,14 +2780,24 @@ function DifferenceDetailDrawer({
             {entries.map((entry, index) => (
               <tr key={index}>
                 <td>{index + 1}</td>
-                {meta.invoice && <><td><input type="date" value={(entry as InvoiceEntry).date} disabled={!hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "date", event.target.value)} /></td><td><input value={(entry as InvoiceEntry).invoice} onChange={(event) => updateInvoice(index, event.target.value)} placeholder="填写发票号码" /></td></>}
+                {meta.invoice && <><td><input type="date" value={(entry as InvoiceEntry).date} disabled={!hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "date", event.target.value)} /></td><td><input value={(entry as InvoiceEntry).invoice} onChange={(event) => updateInvoice(index, event.target.value)} onBlur={() => void resolveInvoice(index)} placeholder="填写发票号码" /></td></>}
                 <td><input type="number" step="0.01" value={entry.amount} disabled={meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "amount", event.target.value)} placeholder="填写金额" /></td>
-                <td><input value={entry.note} disabled={meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "note", event.target.value)} placeholder="填写差额说明" /></td>
+                <td><div className="difference-note-with-voice"><textarea value={entry.note} disabled={meta.invoice && !hasInvoiceNumber(entry as InvoiceEntry)} onChange={(event) => update(index, "note", event.target.value)} placeholder="填写差额说明" /><VoiceInputButton value={entry.note} onChange={(value) => update(index, "note", value)} /></div></td>
                 {meta.invoice && (() => {
-                  const result = verification(entry as InvoiceEntry);
+                  const result = verification(entry as InvoiceEntry, index);
                   return <td>{result && <span className={`drawer-verification ${result.kind}`}>{result.label}</span>}</td>;
                 })()}
-                {!meta.invoice && <td className="drawer-attachment"><label>上传图片<input type="file" accept="image/*" onChange={(event) => { addImage(index, event.target.files?.[0]); event.target.value = ""; }} /></label>{(entry as OtherEntry).image && <button type="button" onClick={() => onPreview((entry as OtherEntry).image!)}>查看</button>}</td>}
+                {!meta.invoice && <td className="drawer-attachment">{(() => {
+                  const other = entry as OtherEntry;
+                  const imageUrl = other.previewUrl || (other.image && !other.removeImage ? differenceAttachmentApi.url(other.image) : '');
+                  const removeImage = () => setEntries(entries.map((current, currentIndex) => currentIndex === index ? { ...current, removeImage: true, pendingImage: undefined, previewUrl: undefined } : current) as OtherEntry[]);
+                  return imageUrl ? <div className="difference-attachment-control">
+                    <img src={imageUrl} alt="差额附件缩略图" className="difference-attachment-thumb" onClick={() => onPreview(imageUrl)} />
+                    <small>{other.pendingImage ? `待保存：${other.pendingImage.name}` : '已保存'}</small>
+                    <label><input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => addImage(index, event.target.files?.[0])} />更换图片</label>
+                    <button type="button" onClick={removeImage}>{other.pendingImage ? '移除' : '删除'}</button>
+                  </div> : other.removeImage ? <div className="difference-attachment-control"><small>待保存删除</small><button type="button" onClick={() => setEntries(entries.map((current, currentIndex) => currentIndex === index ? { ...current, removeImage: false } : current) as OtherEntry[])}>撤销删除</button></div> : <label><input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => addImage(index, event.target.files?.[0])} />＋ 上传图片</label>;
+                })()}</td>}
                 <td className="drawer-row-actions"><button type="button" onClick={() => copy(index)}>复制</button><button type="button" onClick={() => remove(index)}>删除</button></td>
               </tr>
             ))}
@@ -3062,7 +2908,7 @@ const extractInvoiceNumbers = (text: string) =>
     .map((line) => line.replace(/\D/g, ""))
     .filter((digits) => digits.length >= 7);
 
-const OCR_INVOICE_ENDPOINT = "http://192.168.51.116:8000/ocr/recognize";
+const OCR_INVOICE_ENDPOINT = "/api/ocr/recognize";
 
 function collectOcrText(value: unknown): string[] {
   if (typeof value === "string" || typeof value === "number") return [String(value)];
@@ -3081,15 +2927,13 @@ function InvoiceGroup({
   title,
   entries,
   requiresReview,
-  ledgerKeys,
-  ledgerLookup,
+  quarter,
   setEntries,
 }: {
   title: string;
   entries: InvoiceEntry[];
   requiresReview: boolean;
-  ledgerKeys: Set<string> | null;
-  ledgerLookup: LedgerLookup;
+  quarter: string;
   setEntries: (entries: InvoiceEntry[]) => void;
 }) {
   const [choices, setChoices] = useState<Record<number, string[]>>({});
@@ -3097,6 +2941,7 @@ function InvoiceGroup({
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoStatus, setPhotoStatus] = useState("");
   const [photoInvoices, setPhotoInvoices] = useState<string[]>([]);
+  const [verificationResults, setVerificationResults] = useState<Record<number, "matched" | "not_found" | "pending">>({});
   const update = (index: number, field: keyof InvoiceEntry, value: string) =>
     setEntries(
       entries.map((entry, i) =>
@@ -3109,30 +2954,17 @@ function InvoiceGroup({
         ? [blankInvoice()]
         : entries.filter((_, i) => i !== index),
     );
-  const autoFill = (index: number) => {
-    if (!requiresReview) return;
-    const match = findLedgerMatch(
-      entries[index]?.invoice ?? "",
-      ledgerLookup,
-      ledgerKeys,
-    );
-    if (!match) return;
-    setEntries(
-      entries.map((entry, i) =>
-        i === index
-          ? {
-              ...entry,
-              date: match.dates.length === 1 ? match.dates[0] : entry.date,
-              amount: match.amount.toFixed(2),
-            }
-          : entry,
-      ),
-    );
-    setChoices((current) => ({
-      ...current,
-      [index]: match.dates.length > 1 ? match.dates : [],
-    }));
-  };
+  const autoFill = (_index: number) => undefined;
+  useEffect(() => {
+    const candidates = entries.map((entry, index) => ({ entry, index })).filter(({ entry }) => requiresReview && entry.invoice && entry.date && entry.amount !== "");
+    if (!quarter || !candidates.length) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => void Promise.all(candidates.map(async ({ entry, index }) => {
+      try { const result = await reconciliationApi.verifyLedgerInvoice(quarter, { invoiceNo: entry.invoice, invoiceDate: entry.date, amount: entry.amount }, controller.signal); return [index, result.status] as const; }
+      catch (error) { return [index, error instanceof ReconciliationApiError && error.code === "LEDGER_INVOICE_NOT_FOUND" ? "not_found" : "pending"] as const; }
+    })).then((results) => { if (!controller.signal.aborted) setVerificationResults(Object.fromEntries(results)); }), 400);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [entries, requiresReview, quarter]);
   const recognizePhotos = async (files: File[]) => {
     if (!files.length) return;
     setPhotoBusy(true);
@@ -3160,13 +2992,10 @@ function InvoiceGroup({
         }
       }
       const found = [...numbers];
-      const verified = found.filter((invoice) =>
-        findLedgerMatch(invoice, ledgerLookup, ledgerKeys),
-      ).length;
       setPhotoInvoices(found);
       setPhotoStatus(
         found.length
-          ? `已识别 ${rows} 行、${found.length} 个不重复发票号，其中 ${verified} 个可由往来明细自动补全。`
+          ? `已识别 ${rows} 行、${found.length} 个不重复发票号；请填写日期和金额后由服务器核验。`
           : "未识别到发票号，请确认截图包含“发票号码”整列。",
       );
     } catch {
@@ -3187,15 +3016,7 @@ function InvoiceGroup({
     }
     const next = [
       ...entries.filter(anyInvoice),
-      ...fresh.map((invoice) => {
-        const match = findLedgerMatch(invoice, ledgerLookup, ledgerKeys);
-        return {
-          invoice,
-          date: match?.dates.length === 1 ? match.dates[0] : "",
-          amount: match ? match.amount.toFixed(2) : "",
-          note: "照片识别导入",
-        };
-      }),
+      ...fresh.map((invoice) => ({ invoice, date: "", amount: "", note: "照片识别导入" })),
     ];
     setEntries(next.length ? next : [blankInvoice()]);
     setPhotoInvoices([]);
@@ -3246,16 +3067,14 @@ function InvoiceGroup({
           )}
           {entries.map((entry, index) => {
             const has = hasInvoiceNumber(entry);
-            const matched = validLedgerEntry(entry, ledgerKeys);
+            const verification = verificationResults[index] ?? "pending";
             const status = !has
               ? ""
               : !entry.date || !entry.invoice || entry.amount === ""
                 ? T.incomplete
-                : !ledgerKeys
-                  ? T.loading
-                  : matched
+                : verification === "matched"
                     ? T.matched
-                    : T.missing;
+                    : verification === "not_found" ? T.missing : T.loading;
             return (
               <div className="invoice-entry" key={index}>
                 <div className="entry-head">
@@ -3308,14 +3127,14 @@ function InvoiceGroup({
                     ))}
                   </div>
                 )}
-                <TextField
+                <VoiceTextField
                   label={T.reason}
                   value={entry.note}
                   onChange={(value) => update(index, "note", value)}
                 />
                 {requiresReview && (
                   <p
-                    className={`ledger-check ${has && ledgerKeys ? (matched ? "matched" : "not-matched") : ""}`}
+                    className={`ledger-check ${has && verification !== "pending" ? (verification === "matched" ? "matched" : "not-matched") : ""}`}
                   >
                     {status || "填写完整发票号后将自动带出日期和金额"}
                   </p>
@@ -3358,17 +3177,23 @@ function OtherGroup({
     );
   const addImage = async (index: number, file?: File) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      window.alert("请选择图片文件。");
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      window.alert("仅支持 JPG、PNG、WEBP 图片。");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      window.alert("图片不能超过 2MB。");
+    if (!file.size) {
+      window.alert("图片文件不能为空。");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => update(index, "image", String(reader.result ?? ""));
-    reader.readAsDataURL(file);
+    if (file.size > MAX_ATTACHMENT_IMAGE_BYTES) {
+      window.alert("图片文件过大，请选择20MB以内的图片。");
+      return;
+    }
+    try {
+      const prepared = await prepareAttachmentImage(file);
+      const previewUrl = URL.createObjectURL(prepared.file);
+      setEntries(entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, pendingImage: prepared.file, previewUrl, removeImage: false } : entry));
+    } catch (error) { window.alert(error instanceof Error ? error.message : "图片优化失败，请重新选择图片。"); }
   };
   const [expanded, setExpanded] = useState(true);
   return (
@@ -3405,7 +3230,7 @@ function OtherGroup({
                 type="number"
                 onChange={(value) => update(index, "amount", value)}
               />
-              <TextField
+              <VoiceTextField
                 label={T.reason}
                 value={entry.note}
                 onChange={(value) => update(index, "note", value)}
@@ -3414,30 +3239,30 @@ function OtherGroup({
                 <span>图片附件</span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   onChange={(event) => {
                     void addImage(index, event.target.files?.[0]);
                     event.target.value = "";
                   }}
                 />
-                {entry.image && (
+                {(entry.previewUrl || (entry.image && !entry.removeImage)) && (
                   <div className="image-preview">
                     <button
                       type="button"
                       className="image-open"
-                      onClick={() => onPreview(entry.image!)}
+                      onClick={() => onPreview(entry.previewUrl || differenceAttachmentApi.url(entry.image!))}
                       aria-label={`查看其他（无发票）第 ${index + 1} 笔图片`}
                     >
                       <img
-                        src={entry.image}
+                        src={entry.previewUrl || differenceAttachmentApi.url(entry.image!)}
                         alt={`其他（无发票）第 ${index + 1} 笔附件`}
                       />
-                      <span>点击查看</span>
+                      <span>{entry.pendingImage ? `待保存：${entry.pendingImage.name}` : "点击查看"}</span>
                     </button>
                     <button
                       type="button"
                       className="remove-entry"
-                      onClick={() => update(index, "image", "")}
+                      onClick={() => setEntries(entries.map((current, currentIndex) => currentIndex === index ? { ...current, removeImage: true, pendingImage: undefined, previewUrl: undefined } : current))}
                     >
                       删除图片
                     </button>

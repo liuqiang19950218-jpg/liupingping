@@ -1,0 +1,7 @@
+.writeoff-adjustment-section { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin: 16px 0 14px; }
+.writeoff-adjustment-section .field { margin: 0; min-width: 0; }
+.writeoff-adjustment-section .solution-field-with-speech { min-width: 0; }
+.followup-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.followup-resolved-toggle { display: inline-flex; align-items: center; gap: 6px; color: #36546d; font-size: 13px; white-space: nowrap; }
+.followup-resolved-toggle input { width: auto; margin: 0; }
+@media (max-width: 640px) { .writeoff-adjustment-section { grid-template-columns: 1fr; gap: 12px; } }

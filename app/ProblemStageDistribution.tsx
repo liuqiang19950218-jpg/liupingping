@@ -14,7 +14,7 @@ const targetByColor = (data: StageItem[], color: string) =>
 export function ProblemStageDistribution({ data, onSelect }: Props) {
   const rows: StageRow[] = [
     { id: "closed", name: "已关闭", status: "已完成", icon: "✓", tone: "closed", count: countByColor(data, ["#b8bfd8"]), target: targetByColor(data, "#b8bfd8") },
-    { id: "sales", name: "等待销售处理", status: "处理中", icon: "◷", tone: "sales", count: countByColor(data, ["#1677ff", "#25bda5"]), target: targetByColor(data, "#25bda5") || targetByColor(data, "#1677ff") },
+    { id: "sales", name: "等待销售处理", status: "处理中", icon: "◷", tone: "sales", count: countByColor(data, ["#1677ff", "#25bda5"]), target: "等待销售处理" },
     { id: "finance", name: "待财务调账", status: "待处理", icon: "▤", tone: "finance", count: countByColor(data, ["#f6bd16"]), target: targetByColor(data, "#f6bd16") },
     { id: "checking", name: "核查中", status: "待处理", icon: "⌕", tone: "checking", count: countByColor(data, ["#20a8d8"]), target: targetByColor(data, "#20a8d8") },
   ];

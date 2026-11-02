@@ -3,34 +3,26 @@
 import { useEffect, useState } from "react";
 import { QuarterlyReconciliation } from "./QuarterlyReconciliation";
 import { ReconciliationHistoryDashboard } from "./ReconciliationHistoryDashboard";
-import { DashboardOverview } from "./DashboardOverview";
 import { Q1ActionPanel } from "./Q1ActionPanel";
 import { Q1SpecialPanels } from "./Q1SpecialPanels";
 import { UnresolvedFollowupDashboard } from "./UnresolvedFollowupDashboard";
 import { ManagementCockpit } from "./ManagementCockpit";
 import { ProblemDashboard } from "./ProblemDashboard";
 import { CurrentYearLinkedSummary } from "./CurrentYearLinkedSummary";
-import { ServerStateBridge } from "./ServerStateBridge";
-import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
+import { DashboardDataProvider, useDashboardData } from "./dashboard-postgres-data";
 import "./app-shell.css";
 import "./shell-overrides.css";
 import "./problem-dashboard-header.css";
+import "./dashboard-cockpit.css";
+import "./dashboard-management-layout.css";
 
-const T = { brand:"对账管理", sub:"季度对账与复核工具", history:"对账看板", current:"本季度对账详细情况", import:"数据导入", tracker:"未解决客户跟进", cockpit:"管理层驾驶舱", issue:"问题解决看板", local:"本机数据自动保存" };
+const T = { brand:"应收对账管理系统", sub:"AR RECONCILIATION MANAGEMENT", history:"对账看板", current:"本季度对账详细情况", import:"数据导入", tracker:"未解决客户跟进", cockpit:"管理层驾驶舱", issue:"问题解决看板", local:"自动保存：已保存" };
 type View = "history" | "current" | "import" | "tracker" | "cockpit" | "problem";
 
 function GlobalQuarterFilter() {
-  const [quarters, setQuarters] = useState<string[]>([]);
-  const [quarter, setQuarter] = useState("");
-  useEffect(() => {
-    const refresh = () => { setQuarters(quarterOptions()); setQuarter(selectedQuarter()); };
-    refresh();
-    window.addEventListener("reconciliation-quarter-updated", refresh);
-    window.addEventListener("reconciliation-quarter-selected", refresh);
-    return () => { window.removeEventListener("reconciliation-quarter-updated", refresh); window.removeEventListener("reconciliation-quarter-selected", refresh); };
-  }, []);
+  const { quarters, quarter, selectQuarter } = useDashboardData();
   if (!quarters.length) return null;
-  return <div className="global-quarter-filter"><label>对账季度<select value={quarter} aria-label="筛选看板季度" onChange={(event) => selectQuarter(event.target.value)}>{quarters.map((item) => <option value={item} key={item}>{item}</option>)}</select></label><span>切换后自动显示该季度数据</span></div>;
+  return <div className="global-quarter-filter"><label>对账季度<select value={quarter?.code ?? ""} aria-label="筛选看板季度" onChange={(event) => selectQuarter(event.target.value)}>{quarters.map((item) => <option value={item.code} key={item.code}>{item.label}</option>)}</select></label><span>切换后自动显示该季度数据</span></div>;
 }
 
 export default function Home() {
@@ -58,7 +50,11 @@ export default function Home() {
   useEffect(() => {
     const openCurrentDetail = () => setView("current");
     window.addEventListener("reconciliation-open-current-detail", openCurrentDetail);
-    return () => window.removeEventListener("reconciliation-open-current-detail", openCurrentDetail);
+    window.addEventListener("reconciliation-open-postgres-quarter", openCurrentDetail);
+    return () => {
+      window.removeEventListener("reconciliation-open-current-detail", openCurrentDetail);
+      window.removeEventListener("reconciliation-open-postgres-quarter", openCurrentDetail);
+    };
   }, []);
 
   useEffect(() => {
@@ -69,9 +65,9 @@ export default function Home() {
     return <main className="app-shell app-shell-loading" aria-busy="true"><div>正在加载本机对账数据…</div></main>;
   }
 
-  return <><ServerStateBridge /><main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
+  return <DashboardDataProvider><main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
     <aside className="side-nav">
-      <div className="side-brand"><i>账</i><div><strong>{T.brand}</strong><span>{T.sub}</span></div></div>
+      <div className="side-brand"><i>◈</i><div><strong>{T.brand}</strong><span>{T.sub}</span></div></div>
       <nav>
         <button className={view === "history" ? "selected" : ""} onClick={() => setView("history")}><i>◈</i>{T.history}</button>
         <button className={view === "current" ? "selected" : ""} onClick={() => setView("current")}><i>≡</i>{T.current}</button>
@@ -81,14 +77,22 @@ export default function Home() {
         <button className={view === "import" ? "selected" : ""} onClick={() => setView("import")}><i>↑</i>{T.import}</button>
         <button onClick={() => setView("current")}><i>⚙</i>系统设置</button>
       </nav>
-      <div className="side-note"><b>使用说明</b><span>已解决客户会从待解决清单移出，并保留解决时间和方案供后续查看。</span></div>
+      <div className="side-note"><b>让对账更简单</b><span>让数据更有价值</span></div>
     </aside>
     <section className="work-area">
-      <header className="work-header"><div><h1>{title}</h1><p>{hint}</p></div>{view === "problem" ? <div className="problem-header-actions"><small>{`◷ 数据更新时间：${updatedAt}`}</small><button onClick={() => window.dispatchEvent(new Event("problem-dashboard-refresh"))}>↻ 刷新数据</button><button className="primary" onClick={() => openTracker()}>进入未解决客户跟进 ›</button></div> : <div className="header-status"><span>◷ {T.local}</span><small>{`更新时间：${updatedAt}`}</small></div>}</header>
+      <header className="work-header"><div><span className="mobile-work-brand" aria-hidden="true">☰ {T.brand}</span><h1>{title}</h1><p>{hint}</p></div>{view === "problem" ? <div className="problem-header-actions"><small>{`◷ 数据更新时间：${updatedAt}`}</small><button onClick={() => window.dispatchEvent(new Event("problem-dashboard-refresh"))}>↻ 刷新数据</button><button className="primary" onClick={() => openTracker()}>进入未解决客户跟进 ›</button></div> : <div className="header-status"><span className="header-user">◉ 当前用户</span><small>{`数据更新时间：${updatedAt}`}</small><span>✓ {T.local}</span></div>}</header>
       <div className="work-content">
         {view !== "current" && view !== "import" && view !== "problem" && <GlobalQuarterFilter />}
-        {view === "history" ? <><CurrentYearLinkedSummary/><DashboardOverview selected={6}/><Q1ActionPanel/><Q1SpecialPanels/><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>} 
+        {view === "history" ? <><CurrentYearLinkedSummary/><section className="dashboard-management-layer"><Q1ActionPanel/><Q1SpecialPanels/></section><ReconciliationHistoryDashboard/></> : view === "current" ? <QuarterlyReconciliation/> : view === "import" ? <QuarterlyReconciliation mode="import"/> : view === "tracker" ? <UnresolvedFollowupDashboard/> : view === "problem" ? <ProblemDashboard onOpenFollowup={openTracker}/> : <ManagementCockpit activeTab={tab} onTabChange={setTab}/>}
       </div>
     </section>
-  </main></>;
+    <nav className="mobile-bottom-nav" aria-label="业务导航">
+      <button type="button" className={view === "history" ? "selected" : ""} aria-label={T.history} onClick={() => setView("history")}><i>◈</i><span>看板</span></button>
+      <button type="button" className={view === "current" ? "selected" : ""} aria-label={T.current} onClick={() => setView("current")}><i>≡</i><span>本季</span></button>
+      <button type="button" className={view === "tracker" ? "selected" : ""} aria-label={T.tracker} onClick={() => openTracker()}><i>●</i><span>跟进</span></button>
+      <button type="button" className={view === "cockpit" && tab === "cockpit" ? "selected" : ""} aria-label={T.cockpit} onClick={() => cockpit("cockpit")}><i>◴</i><span>驾驶舱</span></button>
+      <button type="button" className={view === "problem" ? "selected" : ""} aria-label={T.issue} onClick={() => setView("problem")}><i>!</i><span>问题</span></button>
+      <button type="button" className={view === "import" ? "selected" : ""} aria-label={T.import} onClick={() => setView("import")}><i>↑</i><span>导入</span></button>
+    </nav>
+  </main></DashboardDataProvider>;
 }

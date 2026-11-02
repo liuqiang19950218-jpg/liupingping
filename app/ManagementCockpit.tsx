@@ -1,8 +1,12 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { CockpitRow, cockpitRows, latestQuarterlyCockpitRows, updateDashboardSnapshot } from "./cockpit-data";
-import { quarterOptions, selectQuarter, selectedQuarter } from "./quarter-storage";
-import { CockpitTrendChart } from "./CockpitTrendChart";
+import { type CockpitRow } from "./cockpit-data";
+import { moneyToCents, useDashboardData } from "./dashboard-postgres-data";
+import { isSettled, isUnreconciled, isUnsettled, settlementRate } from "../lib/reconciliation-settlement-status.mjs";
+import {
+  formatDifferenceCategoryLabel,
+  formatFollowupStatusLabel,
+} from "../lib/ui-business-labels.mjs";
 import { DifferenceStructureChart } from "./DifferenceStructureChart";
 import {
   AgingBucket,
@@ -11,7 +15,6 @@ import {
   DifferenceAgingAnalysisCard,
   DifferenceAgingDetail,
 } from "./DifferenceAgingAnalysis";
-import { issuesForQuarter } from "./reconciliation-insights";
 import "./management-cockpit.css";
 import "./management-cockpit-refined.css";
 type Props = {
@@ -33,8 +36,7 @@ const money = (n: number) =>
     n === 0
       ? "0"
       : n.toLocaleString("zh-CN", { maximumFractionDigits: 2 }),
-  reconciliationStatus = (r: CockpitRow) =>
-    !r.filled ? "未对账" : r.cleared ? "对清" : "未对清",
+  reconciliationStatus = (r: CockpitRow) => r.reconciliationStatus,
   today = new Date("2026-05-20").getTime(),
   overdue = (r: CockpitRow) =>
     new Date(r.expectedDate).getTime() < today && !r.actualDate;
@@ -65,12 +67,13 @@ const historicalInvoiceAmount = (row: CockpitRow) => {
     row.transit + row.returned + (row.lost ?? 0) + (row.instrument ?? 0) + row.otherInvoice,
   );
 };
-const needsFollowUp = (r: CockpitRow) => r.followStatus !== "已解决";
 // Keep the cockpit aligned with the execution page: a reconciliation only
 // becomes an unresolved item after a first solution has been recorded, and it
 // leaves the pending list once it is resolved.
 const isPendingFollowUp = (r: CockpitRow) =>
   Boolean(r.solution.trim()) && r.followStatus !== "已解决";
+const matchesSettlementFilter = (row: CockpitRow, value: string) =>
+  value === "全部" || (value === "已对清" ? isSettled(row) : isUnsettled(row));
 const invoiceExceptionReason = (r: CockpitRow) =>
   [
     r.transitInvoiceFail && "在途明细缺少发票号、日期或金额",
@@ -100,10 +103,6 @@ const level = (r: CockpitRow) =>
       : score(r) >= 40
         ? "需关注"
         : "低风险";
-// D 区风险口径按超期天数统一：超过 30 天为高风险，其余为低风险。
-const overdueRiskLevel = (r: CockpitRow) =>
-  (r.overdueDays ?? 0) > 30 ? "高风险" : "低风险";
-
 const getRisks = (r: CockpitRow) =>
   [
     r.difference !==
@@ -124,6 +123,19 @@ const getRisks = (r: CockpitRow) =>
     r.duplicateInvoice && "存在重复发票",
   ].filter(Boolean) as string[];
 export function ManagementCockpit({ activeTab, onTabChange }: Props) {
+  const dashboard = useDashboardData();
+  const dashboardRows = useMemo<CockpitRow[]>(() => dashboard.rows.map((row) => {
+    const differences = dashboard.differencesByReconciliation.get(row.id) ?? [];
+    const amount = (category: string) => differences.filter((item) => item.category === category).reduce((sum, item) => sum + Number(moneyToCents(item.differenceAmount) ?? 0n) / 100, 0);
+    const followup = dashboard.followupsByReconciliation.get(row.id)?.[0];
+    return {
+      id: row.id, quarter: row.quarterCode, region: row.region ?? "未填写", accountSet: row.accountSet ?? "未填写账套", owner: row.ownerName ?? "未填写", customer: row.customer ?? "未填写客户名称",
+      companyReceivable: Number(moneyToCents(row.companyReceivable) ?? 0n) / 100, customerBook: Number(moneyToCents(row.customerBookAmount) ?? 0n) / 100, difference: Number(moneyToCents(row.reconciliationDifference) ?? 0n) / 100,
+      transit: amount("transit"), returned: amount("returned") + amount("returned_invoice"), lost: amount("lost") + amount("lost_invoice"), instrument: amount("instrument") + amount("equipment"), otherInvoice: amount("otherInvoice") + amount("other_with_invoice"), otherNoInvoice: amount("other") + amount("other_without_invoice"),
+      badDebt: Number(moneyToCents(row.badDebtAmount) ?? 0n) / 100, adjustment: Number(moneyToCents(row.adjustmentAmount) ?? 0n) / 100, badDebtReason: row.badDebtReason ?? "", adjustmentReason: row.adjustmentReason ?? "", reconciliationStatus: row.reconciliationStatus ?? "未对账", filled: isSettled(row) || isUnsettled(row), cleared: isSettled(row), cause: row.solution ?? "", followStatus: followup?.followStatus ?? "", solution: row.solution ?? "", expectedDate: followup?.expectedCompleteAt ?? "—", actualDate: followup?.closedAt ?? undefined, updatedAt: followup?.updatedAt ?? "—", latestFollowUpAt: followup?.latestEvent?.occurredAt ?? followup?.latestFollowUpAt ?? undefined, processStage: followup?.processStage ?? undefined,
+      differenceInvoices: differences.map((item) => ({ category: item.category, invoice: item.invoiceNo ?? "", date: item.invoiceDate ?? "", amount: Number(moneyToCents(item.differenceAmount) ?? 0n) / 100, note: item.differenceDescription ?? undefined })),
+    };
+  }), [dashboard.rows, dashboard.differencesByReconciliation, dashboard.followupsByReconciliation]);
   const [f, setF] = useState<Filters>({
       quarter: "2026 Q2",
       region: "全部",
@@ -136,14 +148,14 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     [modal, setModal] = useState<{ title: string; rows: CockpitRow[] } | null>(
       null,
     ),
-    [agingBucket, setAgingBucket] = useState<AgingBucket | null>(null),
-    [range, setRange] = useState(4);
+    [agingBucket, setAgingBucket] = useState<AgingBucket | null>(null);
   const [availableQuarters, setAvailableQuarters] = useState<string[]>([]);
   const [dataVersion, setDataVersion] = useState(0);
+  useEffect(() => { if (dashboard.quarter) setF((value) => ({ ...value, quarter: dashboard.quarter!.code })); }, [dashboard.quarter]);
   useEffect(() => {
     const syncQuarter = () => {
-      setAvailableQuarters(quarterOptions());
-      setF((value) => ({ ...value, quarter: selectedQuarter() || value.quarter }));
+      setAvailableQuarters(dashboard.quarters.map((item) => item.code));
+      setF((value) => ({ ...value, quarter: dashboard.quarter?.code || value.quarter }));
       setDataVersion((value) => value + 1);
     };
     syncQuarter();
@@ -151,16 +163,16 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     window.addEventListener("reconciliation-quarter-updated", syncQuarter);
     window.addEventListener("reconciliation-dashboard-updated", syncQuarter);
     return () => { window.removeEventListener("reconciliation-quarter-selected", syncQuarter); window.removeEventListener("reconciliation-quarter-updated", syncQuarter); window.removeEventListener("reconciliation-dashboard-updated", syncQuarter); };
-  }, []);
+  }, [dashboard.quarters, dashboard.quarter]);
   // The cockpit only reports customers that have been reconciled.  A blank
   // customer-book amount is "未对账"; even a customer-book amount of 0 is valid.
   const sourceQuarterRows = useMemo(
-    () => cockpitRows.filter((row) => row.quarter === f.quarter),
-    [f.quarter, dataVersion],
+    () => dashboardRows.filter((row) => row.quarter === f.quarter),
+    [f.quarter, dashboardRows],
   );
   const quarterRows = useMemo(
     () =>
-      sourceQuarterRows.filter((row) => row.filled),
+      sourceQuarterRows.filter((row) => isSettled(row) || isUnsettled(row)),
     [sourceQuarterRows],
   );
   const regions = useMemo(
@@ -184,8 +196,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           (f.accountSet === "全部" || r.accountSet === f.accountSet) &&
           (f.owner === "全部" || r.owner === f.owner) &&
           (!f.customer || r.customer.includes(f.customer)) &&
-          (f.cleared === "全部" ||
-            (f.cleared === "已对清" ? r.cleared : !r.cleared)) &&
+          matchesSettlementFilter(r, f.cleared) &&
           (f.follow === "全部" || r.followStatus === f.follow),
       ),
     [f, quarterRows],
@@ -194,7 +205,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     () =>
       sourceQuarterRows.filter(
         (row) =>
-          !row.filled &&
+          isUnreconciled(row) &&
           (f.region === "全部" || row.region === f.region) &&
           (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
           (f.owner === "全部" || row.owner === f.owner) &&
@@ -207,7 +218,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   // fields, including columns added after an older dashboard snapshot.
   const categoryRows = useMemo(
     () =>
-      latestQuarterlyCockpitRows().filter(
+      dashboardRows.filter(
         (row) =>
           row.quarter === f.quarter &&
           row.filled &&
@@ -215,30 +226,27 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
           (f.owner === "全部" || row.owner === f.owner) &&
           (!f.customer || row.customer.includes(f.customer)) &&
-          (f.cleared === "全部" ||
-            (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
+          matchesSettlementFilter(row, f.cleared) &&
           (f.follow === "全部" || row.followStatus === f.follow),
       ),
-    [f, dataVersion],
+    [f, dashboardRows],
   );
   // 应对账总额固定取本季度对账明细：只排除未对账客户，不继承驾驶舱其余筛选条件。
   const reconciliationTotalRows = useMemo(() => {
-    const latestRows = latestQuarterlyCockpitRows();
-    const source = latestRows.length ? latestRows : cockpitRows;
-    return source.filter((row) => row.quarter === f.quarter && row.filled);
-  }, [f.quarter, dataVersion]);
+    return dashboardRows.filter((row) => row.quarter === f.quarter && row.filled);
+  }, [f.quarter, dashboardRows]);
   const pendingFollowUpRows = useMemo(
     () =>
-      issuesForQuarter(f.quarter).filter(
+      dashboardRows.filter(isPendingFollowUp).filter(
         (row) =>
           (f.region === "全部" || row.region === f.region) &&
           (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
           (f.owner === "全部" || row.owner === f.owner) &&
           (!f.customer || row.customer.includes(f.customer)) &&
-          (f.cleared === "全部" || (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
+          matchesSettlementFilter(row, f.cleared) &&
           (f.follow === "全部" || row.followStatus === f.follow),
       ),
-    [f],
+    [f, dashboardRows],
   );
   const m = useMemo(() => {
     const currentDetailRows = categoryRows.length ? categoryRows : rows;
@@ -253,11 +261,11 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       ),
       amountRate: rows.reduce((sum, row) => sum + (row.cleared ? row.companyReceivable : 0), 0) / Math.max(rows.reduce((sum, row) => sum + row.companyReceivable, 0), 1) * 100,
       // 未对清金额按未对清客户的公司应收总额统计，不采用对账差额。
-      pendingConfirmation: rows.filter((row) => !row.cleared).reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0),
+      pendingConfirmation: rows.filter(isUnsettled).reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0),
       unaccounted: unaccountedRows.length,
       clear,
       unclear,
-      rate: rows.length ? (clear / rows.length) * 100 : 0,
+      rate: settlementRate({ settled: clear, unsettled: unclear }),
       unresolved: pendingFollowUpRows.reduce((sum, row) => sum + Math.abs(row.difference), 0),
       invoice: rows.filter(hasInvoiceException).length,
       overdue: rows.filter(overdue).length,
@@ -281,7 +289,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         region,
         x,
         clear,
-        unclear: x.filter((row) => !row.cleared).length,
+        unclear: x.filter(isUnsettled).length,
         rate: x.length ? (clear / x.length) * 100 : 0,
         amountRate:
           (x.reduce((sum, row) => sum + (row.cleared ? row.companyReceivable : 0), 0) /
@@ -289,7 +297,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           100,
         // 区域表现的金额口径：未对清客户的公司应收，不使用待解决清单差额。
         unreconciledAmount: x
-          .filter((row) => !row.cleared)
+          .filter(isUnsettled)
           .reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0),
         risk: x.reduce((s, r) => s + getRisks(r).length, 0),
       };
@@ -334,58 +342,9 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
   )
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
-  // D 区直接使用“未解决客户跟进”的待解决清单口径，不再额外按风险等级过滤。
-  // 因此 Top10 与执行页的待解决客户一致，并以未解决金额从高到低排序。
-  const highRiskUnresolvedCustomers = issuesForQuarter(f.quarter)
-    .filter(
-      (row) =>
-        (f.region === "全部" || row.region === f.region) &&
-        (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
-        (f.owner === "全部" || row.owner === f.owner) &&
-        (!f.customer || row.customer.includes(f.customer)) &&
-        (f.cleared === "全部" || (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
-        (f.follow === "全部" || row.followStatus === f.follow),
-    )
-    .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference) || b.overdueDays - a.overdueDays);
-  const priority = [...rows]
-      .filter(isPendingFollowUp)
-      .sort((a, b) => score(b) - score(a) || b.difference - a.difference),
-    trend = quarterOptions()
-      .slice()
-      .sort((a, b) => a.localeCompare(b))
-      .map((quarter) => {
-        const reconciled = cockpitRows.filter(
-          (row) =>
-            row.quarter === quarter &&
-            row.filled &&
-            (f.region === "全部" || row.region === f.region) &&
-            (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
-            (f.owner === "全部" || row.owner === f.owner) &&
-            (!f.customer || row.customer.includes(f.customer)) &&
-            (f.cleared === "全部" ||
-              (f.cleared === "已对清" ? row.cleared : !row.cleared)) &&
-            (f.follow === "全部" || row.followStatus === f.follow),
-        );
-        const cleared = reconciled.filter((row) => row.cleared).length;
-        return {
-          quarter,
-          rate: reconciled.length ? (cleared / reconciled.length) * 100 : 0,
-          unresolved: reconciled
-            .filter(isPendingFollowUp)
-            .reduce((sum, row) => sum + row.difference, 0),
-          overdue: reconciled
-            .filter(overdue)
-            .reduce((sum, row) => sum + row.difference, 0),
-          highRisk: reconciled
-            .filter((row) => level(row) === "高风险")
-            .reduce((sum, row) => sum + row.difference, 0),
-        };
-      })
-      .slice(-range),
-    compare = trend.length > 1 ? trend.at(-1)!.rate - trend.at(-2)!.rate : 0;
   const change = (key: keyof Filters, value: string) => {
       if (key === "quarter") {
-        selectQuarter(value);
+        dashboard.selectQuarter(value);
         setF((current) => ({
           ...current,
           quarter: value,
@@ -398,11 +357,11 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       setF((current) => ({ ...current, [key]: value }));
     },
     refreshData = () => {
-      updateDashboardSnapshot();
-      setAvailableQuarters(quarterOptions());
+      dashboard.refresh();
+      setAvailableQuarters(dashboard.quarters.map((item) => item.code));
       setF((current) => ({
         ...current,
-        quarter: selectedQuarter() || current.quarter,
+        quarter: dashboard.quarter?.code || current.quarter,
       }));
       setDataVersion((current) => current + 1);
     },
@@ -410,7 +369,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       setModal({ title, rows: list });
   const openAgingReconciliation = (detail: DifferenceAgingDetail) => {
     localStorage.setItem("reconciliation-detail-target", JSON.stringify(detail));
-    selectQuarter(detail.quarter);
+    dashboard.selectQuarter(detail.quarter);
     window.dispatchEvent(new CustomEvent("reconciliation-open-current-detail", { detail }));
     setAgingBucket(null);
   };
@@ -441,7 +400,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     { name: "应对账总额", value: money(m.reconciliationTotal), list: rows, tone: "blue", icon: "¥", note: "客户账面金额总额" },
     { name: CUSTOMER_RATE_DETAIL_TITLE, value: `${m.rate.toFixed(1)}%`, list: rows, tone: "blue", icon: "◎", note: "已对清客户占比" },
     { name: AMOUNT_RATE_DETAIL_TITLE, value: `${m.amountRate.toFixed(1)}%`, list: rows.filter((row) => row.cleared), tone: "green", icon: "✓", note: "较上季度 +0.6%" },
-    { name: "未对清金额", value: money(m.pendingConfirmation), list: rows.filter((row) => !row.cleared), tone: "orange", icon: "⌛", note: "未对清客户公司应收总额" },
+    { name: "未对清金额", value: money(m.pendingConfirmation), list: rows.filter(isUnsettled), tone: "orange", icon: "⌛", note: "未对清客户公司应收总额" },
     { name: "未解决差额", value: money(m.unresolved), list: pendingFollowUpRows, detailTitle: PENDING_LIST_DETAIL_TITLE, tone: "red", icon: "△", note: "来自待解决清单" },
     { name: "调账金额", value: money(m.adjustmentAmount), list: currentDetailRows.filter((row) => row.adjustment !== 0), tone: "orange", icon: "⇄", note: "来自本年度对账明细" },
     { name: "死账金额", value: money(m.badDebtAmount), list: currentDetailRows.filter((row) => row.badDebt !== 0), tone: "purple", icon: "▣", note: "来自本年度对账明细" },
@@ -541,17 +500,16 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             onChange={(e) => change("follow", e.target.value)}
           >
             <option>全部</option>
-            <option>待资料</option>
-            <option>待跟进</option>
-            <option>待财务复核</option>
-            <option>已解决</option>
+            <option value="pending">{formatFollowupStatusLabel("pending")}</option>
+            <option value="closed">{formatFollowupStatusLabel("closed")}</option>
+            <option value="reopened">{formatFollowupStatusLabel("reopened")}</option>
           </select>
         </label>
         <div className="filter-actions">
           <button
             onClick={() =>
               setF({
-                quarter: selectedQuarter() || f.quarter,
+                quarter: dashboard.quarter?.code || f.quarter,
                 region: "全部",
                 accountSet: "全部",
                 owner: "全部",
@@ -665,7 +623,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                   <td>{m.total}</td>
                   <td>{m.amountRate.toFixed(1)}%</td>
                   <td>{m.rate.toFixed(1)}%</td>
-                  <td>{money(rows.filter((row) => !row.cleared).reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0))}</td>
+                  <td>{money(rows.filter(isUnsettled).reduce((sum, row) => sum + Math.abs(row.companyReceivable), 0))}</td>
                   <td>{m.unclear}</td>
                 </tr>
               </tbody>
@@ -706,129 +664,6 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
               ))}
             </div>
           </div>
-        </article>
-      </section>
-      <section className="cockpit-lower">
-        <article className="panel follow-panel">
-          <h3>
-            D. 高风险未解决客户 Top10{" "}
-            <button onClick={() => open("全部高风险未解决客户", highRiskUnresolvedCustomers)}>
-              查看全部客户 ›
-            </button>
-          </h3>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>客户</th>
-                  <th>区域</th>
-                  <th>负责人</th>
-                  <th>对账差额</th>
-                  <th>超期天数</th>
-                  <th>状态</th>
-                  <th>预计完成</th>
-                  <th>风险</th>
-                </tr>
-              </thead>
-              <tbody>
-                {highRiskUnresolvedCustomers.slice(0, 10).map((r) => (
-                  <tr key={r.id} onClick={() => open(r.customer, [r])}>
-                    <td>{r.customer}</td>
-                    <td>{r.region}</td>
-                    <td>{r.owner}</td>
-                    <td>{money(r.difference)}</td>
-                    <td
-                      className={`overdue-days ${
-                        r.overdueDays > 30 ? "high" : ""
-                      }`}
-                    >
-                      {r.overdueDays}天
-                    </td>
-                    <td>
-                      <span className="status">{r.followStatus}</span>
-                    </td>
-                    <td>{r.expectedDate}</td>
-                    <td>
-                      <span
-                        className={`risk-badge ${
-                          overdueRiskLevel(r) === "高风险" ? "high" : ""
-                        }`}
-                      >
-                        {overdueRiskLevel(r)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-        {false && <article className="panel trend-panel">
-          <h3>
-            E. 历史趋势{" "}
-            <span>
-              <button
-                onClick={() => setRange(4)}
-                className={range === 4 ? "picked" : ""}
-              >
-                最近4季
-              </button>
-              <button
-                onClick={() => setRange(2)}
-                className={range === 2 ? "picked" : ""}
-              >
-                最近2季
-              </button>
-            </span>
-          </h3>
-          <CockpitTrendChart data={trend} onQuarterClick={(quarter) => change("quarter", quarter)} />
-          <p>
-            对清率较上季{" "}
-            <b className={compare >= 0 ? "up" : "down"}>
-              {compare >= 0 ? "提升" : "下降"} {Math.abs(compare).toFixed(1)}{" "}
-              个百分点
-            </b>
-            ，未解决差额呈 <b>{compare >= 0 ? "收窄" : "扩大"}</b> 趋势。
-          </p>
-        </article>}
-        <article className="panel analysis">
-          <h3>F. 自动财务分析结论</h3>
-          <ol>
-            <li>
-              本季度对清率为 <b>{m.rate.toFixed(1)}%</b>，较上季
-              {compare >= 0 ? "提升" : "下降"}{" "}
-              <b>{Math.abs(compare).toFixed(1)}</b> 个百分点；
-            </li>
-            <li>
-              {regionRows[0]?.region || "当前"}区域未对清金额最高，占比{" "}
-              <b>
-                {m.pendingConfirmation
-                  ? `${((regionRows[0]?.unreconciledAmount / m.pendingConfirmation) * 100).toFixed(1)}%`
-                  : "0%"}
-              </b>
-              ；
-            </li>
-            <li>
-              高风险客户{" "}
-              <b>{priority.filter((x) => level(x) === "高风险").length}</b>{" "}
-              家，优先处理逾期与连续未对清客户；
-            </li>
-            <li>
-              发票校验异常 <b>{m.invoice}</b>{" "}
-              笔，需完成票号、日期和金额一致性核验；
-            </li>
-            <li>
-              建议先推进{" "}
-              <b>
-                {priority
-                  .slice(0, 2)
-                  .map((x) => x.customer)
-                  .join("、") || "当前筛选客户"}
-              </b>{" "}
-              的方案闭环。
-            </li>
-          </ol>
-          <footer>数据统计截止：2026-05-20 18:00　数据仅供参考</footer>
         </article>
       </section>
       {f.quarter === "2026 Q1" && (
@@ -896,7 +731,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                         <td>{row.expectedDate || "—"}</td>
                         <td><span className="detail-clamp" title={row.solution}>{row.solution || "—"}</span></td>
                         <td>{row.processStage || "—"}</td>
-                        <td><span className="detail-status">{row.followStatus || "—"}</span></td>
+                        <td><span className="detail-status">{formatFollowupStatusLabel(row.followStatus)}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -954,7 +789,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
                           <td>{row.accountSet || "—"}</td>
                           <td>{row.region}</td>
                           <td className="detail-customer" title={row.customer}>{row.customer}</td>
-                          <td>{invoice.category}</td>
+                          <td>{formatDifferenceCategoryLabel(invoice.category)}</td>
                           <td>{invoice.date}</td>
                           <td>{invoice.invoice}</td>
                           <td className="detail-money difference-money">{detailMoney(invoice.amount)}</td>

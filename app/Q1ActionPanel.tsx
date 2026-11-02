@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { selectedQuarter, sheetForQuarter } from "./quarter-storage";
+import { useMemo, useState } from "react";
+import { useDashboardData } from "./dashboard-postgres-data";
+import { isUnsettled } from "../lib/reconciliation-settlement-status.mjs";
 import "./q1-action-panel.css";
 
-const SHEET_KEY = "local-quarterly-reconciliation";
 type ActionItem = {
+  id: string;
   region: string;
   customer: string;
   companyReceivable: string;
   cause: string;
   action: string;
 };
-type SavedSheet = { headers?: string[]; rows?: unknown[][] };
 const regionClass: Record<string, string> = {
   南京: "nanjing",
   南通: "nantong",
@@ -20,13 +20,6 @@ const regionClass: Record<string, string> = {
   无锡: "wuxi",
   泰州: "taizhou",
 };
-
-function valueAt(row: unknown[], headers: string[], name: string) {
-  const index = headers.findIndex(
-    (header) => String(header).replace(/\s/g, "") === name.replace(/\s/g, ""),
-  );
-  return index < 0 ? "" : String(row[index] ?? "").trim();
-}
 
 function splitResolutionSolution(value: string) {
   const solution = value.trim();
@@ -52,37 +45,6 @@ function splitResolutionSolution(value: string) {
   };
 }
 
-function actionRows(source?: SavedSheet | null): ActionItem[] {
-  try {
-    const sheet = source ?? (JSON.parse(
-      localStorage.getItem(SHEET_KEY) || "null",
-    ) as SavedSheet | null);
-    if (!sheet?.headers?.length || !sheet.rows?.length) return [];
-    const statusHeader = sheet.headers.find((header) => String(header).replace(/\s/g, "").includes("是否对清"));
-    if (
-      !sheet.headers.some(
-        (header) => String(header).replace(/\s/g, "") === String(statusHeader).replace(/\s/g, ""),
-      )
-    )
-      return [];
-    return sheet.rows
-      .filter((row) => valueAt(row, sheet.headers!, String(statusHeader)) === "未对清")
-      .map((row) => {
-        const split = splitResolutionSolution(
-          valueAt(row, sheet.headers!, "解决方案"),
-        );
-        return {
-          region: valueAt(row, sheet.headers!, "区域") || "未填写",
-          customer: valueAt(row, sheet.headers!, "客户名称") || "—",
-          companyReceivable: valueAt(row, sheet.headers!, "公司应收") || "—",
-          cause: split.cause,
-          action: split.action,
-        };
-      });
-  } catch {
-    return [];
-  }
-}
 
 function exportList(items: ActionItem[]) {
   const content = [
@@ -110,24 +72,21 @@ function exportList(items: ActionItem[]) {
 }
 
 export function Q1ActionPanel() {
-  const [items, setItems] = useState<ActionItem[]>([]);
-  useEffect(() => {
-    const sync = () => setItems(actionRows(sheetForQuarter(selectedQuarter()) as SavedSheet | undefined));
-    sync();
-    window.addEventListener("reconciliation-updated", sync);
-    window.addEventListener("reconciliation-quarter-selected", sync);
-    window.addEventListener("reconciliation-quarter-updated", sync);
-    return () => {
-      window.removeEventListener("reconciliation-updated", sync);
-      window.removeEventListener("reconciliation-quarter-selected", sync);
-      window.removeEventListener("reconciliation-quarter-updated", sync);
-    };
-  }, []);
+  const { quarter, rows, loading, error } = useDashboardData();
+  const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
+  const items = useMemo<ActionItem[]>(() => rows
+    .filter(isUnsettled)
+    .map((row) => {
+      const split = splitResolutionSolution(row.solution ?? "");
+      return { id: row.id, region: row.region || "未填写", customer: row.customer || "—", companyReceivable: row.companyReceivable || "—", cause: split.cause, action: split.action };
+    }), [rows]);
+  if (loading) return <section className="q1-actions" aria-busy="true">正在读取 PostgreSQL 季度数据…</section>;
+  if (error) return <section className="q1-actions dashboard-data-error" role="alert">重点行动清单读取失败：{error}</section>;
   return (
     <section className="q1-actions">
       <div className="action-heading">
         <div>
-          <p>2026 Q1 专项跟进</p>
+          <p>{quarter?.label ?? "当前季度"} 专项跟进</p>
           <h2>未对清客户重点行动清单</h2>
           <span>
             仅统计“26年1季度是否对清”明确为“未对清”的客户，共 {items.length}{" "}
@@ -167,8 +126,8 @@ export function Q1ActionPanel() {
                   </td>
                   <td>{item.customer}</td>
                   <td>{item.companyReceivable}</td>
-                  <td>{item.cause}</td>
-                  <td>{item.action}</td>
+                  <td title={item.cause}>{item.cause}</td>
+                  <td title={item.action}>{item.action}</td>
                 </tr>
               ))
             ) : (
@@ -180,6 +139,16 @@ export function Q1ActionPanel() {
             )}
           </tbody>
         </table>
+      </div>
+      <div className="mobile-action-list" aria-label="未对清客户重点行动清单">
+        {items.length ? items.map((item) => {
+          const key = item.id;
+          const expanded = expandedCustomer === key;
+          return <article className="mobile-action-row" key={key}>
+            <div className="mobile-action-summary"><strong>{item.customer}</strong><span>{item.region}</span><b>{item.companyReceivable}</b><button type="button" aria-expanded={expanded} onClick={() => setExpandedCustomer(expanded ? null : key)}>{expanded ? "收起详情⌃" : "展开详情⌄"}</button></div>
+            {expanded ? <div className="mobile-action-details"><div className="mobile-action-detail-item"><b className="mobile-action-detail-label">核心原因</b><span className="mobile-action-detail-value">{item.cause}</span></div><div className="mobile-action-detail-item"><b className="mobile-action-detail-label">下一步动作</b><span className="mobile-action-detail-value">{item.action}</span></div></div> : null}
+          </article>;
+        }) : <p className="mobile-action-empty">暂无“26年1季度是否对清”为“未对清”的客户数据。</p>}
       </div>
     </section>
   );

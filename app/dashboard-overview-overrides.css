@@ -2,6 +2,14 @@
   width: min(1080px, 92vw);
 }
 
+.dashboard-overview-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.dashboard-overview-single .overview-metric {
+  min-height: 154px;
+}
+
 .detail-drawer-summary {
   display: flex;
   align-items: baseline;

@@ -50,7 +50,3 @@ next-env.d.ts
 /*.tgz
 /tsconfig.tsbuildinfo
 /project-output/
-
-# local dev / migration artifacts
-.codex-local-dev*.log
-old-local-state.json

@@ -9,12 +9,13 @@
     "dev": "node scripts/run-vinext.mjs dev",
     "build": "node scripts/run-vinext.mjs build",
     "start": "node scripts/run-vinext.mjs start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "attachment-service": "node services/attachment-service/server.mjs",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/spd-dashboard.test.mjs",
     "lint": "eslint app scripts tests eslint.config.mjs",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "@types/pg": "^8.23.1",
+    "archiver": "^7.0.1",
     "drizzle-orm": "0.45.2",
     "echarts": "^5.6.0",
     "next": "16.2.6",

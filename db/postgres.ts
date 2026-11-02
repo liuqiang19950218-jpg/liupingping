@@ -62,6 +62,25 @@ export async function withPostgresDb<T>(
   return withPostgresClient((client) => callback(drizzle(client), client));
 }
 
+// Explicit BEGIN / COMMIT / ROLLBACK wrapper for multi-statement write
+// operations. Same request-scoped Client discipline as withPostgresClient:
+// no global pool, no long-lived connection, the socket is closed in finally.
+export async function withPostgresTransaction<T>(
+  callback: (client: PostgresClient) => Promise<T>,
+): Promise<T> {
+  return withPostgresClient(async (client) => {
+    await client.query("BEGIN");
+    try {
+      const result = await callback(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    }
+  });
+}
+
 export async function checkPostgresHealth(): Promise<PostgresHealth> {
   if (!isPostgresConfigured()) {
     return {

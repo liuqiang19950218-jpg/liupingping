@@ -20,7 +20,7 @@ test("builds the reconciliation worker and loading shell", async () => {
   assert.doesNotMatch(page, /Your site is taking shape/);
 });
 
-test("keeps browser-only reconciliation state behind hydration", async () => {
+test("does not mount the legacy browser business-snapshot bridge", async () => {
   const [page, layout] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
@@ -31,6 +31,7 @@ test("keeps browser-only reconciliation state behind hydration", async () => {
   assert.match(layout, /suppressHydrationWarning/);
   assert.match(page, /const \[hydrated, setHydrated\] = useState\(false\)/);
   assert.match(page, /if \(!hydrated\)/);
-  assert.match(page, /<ServerStateBridge \/>/);
+  assert.doesNotMatch(page, /ServerStateBridge/);
+  assert.doesNotMatch(page, /\/api\/(?:local-state|ledger-state)/);
   assert.doesNotMatch(page, /export const metadata:\s*Metadata/);
 });

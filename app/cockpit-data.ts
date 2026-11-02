@@ -1,4 +1,5 @@
 import { ensureArchiveFromActive, quarterOf } from "./quarter-storage";
+import { isSettled } from "../lib/reconciliation-settlement-status.mjs";
 
 export type CockpitRow = {
   id: string;
@@ -20,6 +21,7 @@ export type CockpitRow = {
   adjustment: number;
   badDebtReason?: string;
   adjustmentReason?: string;
+  reconciliationStatus: string;
   filled: boolean;
   cleared: boolean;
   cause: string;
@@ -404,6 +406,7 @@ const row = (x: (typeof urgent)[number], i: number): CockpitRow => ({
   otherNoInvoice: x[8],
   badDebt: x[16] || 0,
   adjustment: 0,
+  reconciliationStatus: i !== 6 && i !== 7 ? "未对清" : "未对账",
   filled: i !== 6 && i !== 7,
   cleared: false,
   cause: x[9],
@@ -437,6 +440,7 @@ const normal = (quarter: string, i: number): CockpitRow => {
     otherNoInvoice: 0,
     badDebt: 0,
     adjustment: 0,
+    reconciliationStatus: diff ? "未对清" : "已对清",
     filled: true,
     cleared: !diff,
     cause: diff ? "季度资料待补" : "账实一致",
@@ -627,7 +631,8 @@ const liveCockpitRows = (source?: LiveSheet | null): CockpitRow[] | null => {
           badDebtReason: detail?.badDebtReason || String(entry[badDebtReasonAt] ?? ""),
           adjustmentReason: detail?.adjustmentReason || String(entry[adjustmentReasonAt] ?? ""),
           filled,
-          cleared: String(entry[clearedAt] ?? "") === "对清",
+          reconciliationStatus: String(entry[clearedAt] ?? ""),
+          cleared: isSettled(String(entry[clearedAt] ?? "")),
           cause: String(entry[noteAt] ?? ""),
           followStatus:
             detail?.resolved === true ||
@@ -666,10 +671,12 @@ const archivedCockpitRows = (): CockpitRow[] => {
     liveCockpitRows(sheet as LiveSheet) ?? [],
   );
 };
-// Use the archived annual-detail sheets when a dashboard needs the latest
-// invoice-category amounts instead of an older manually saved dashboard view.
+// Legacy compatibility exports are deliberately inert in production.  Current
+// dashboard pages receive their data from DashboardDataProvider and PostgreSQL.
+// The browser snapshot readers above remain only for a future, explicit
+// migration/audit tool and are not a production business-data source.
 export const latestQuarterlyCockpitRows = (): CockpitRow[] =>
-  archivedCockpitRows();
+  [];
 const dashboardRows = (): CockpitRow[] | null => {
   if (typeof window === "undefined") return null;
   try {
@@ -680,27 +687,8 @@ const dashboardRows = (): CockpitRow[] | null => {
   }
 };
 export const updateDashboardSnapshot = () => {
-  const rows = archivedCockpitRows();
-  if (rows?.length) localStorage.setItem(DASHBOARD_KEY, JSON.stringify(rows));
-  window.dispatchEvent(new Event("reconciliation-dashboard-updated"));
-  return rows?.length ?? 0;
+  // Intentionally do not write business snapshots in production.
+  return 0;
 };
-// Before the first manual sync, use the current annual-detail sheet instead of
-// demo rows. Once a snapshot exists, it remains the source for every board
-// until the user explicitly clicks "一键更新其他看板" again.
-export const cockpitRows = new Proxy([] as CockpitRow[], {
-  get(_, property) {
-    // Quarterly detail is the source of truth.  Recalculate it first so an
-    // old saved dashboard snapshot cannot retain the pre-fix “未对账” count.
-    const liveRows = archivedCockpitRows();
-    const rows = liveRows.length ? liveRows : dashboardRows() ?? fallbackCockpitRows;
-    const value = Reflect.get(rows, property);
-    return typeof value === "function" ? value.bind(rows) : value;
-  },
-});
-export const trendData = [
-  { quarter: "2025 Q3", rate: 75.8, unresolved: 4210500 },
-  { quarter: "2025 Q4", rate: 79.6, unresolved: 3912300 },
-  { quarter: "2026 Q1", rate: 82.5, unresolved: 3758400 },
-  { quarter: "2026 Q2", rate: 86.7, unresolved: 3286000 },
-];
+export const cockpitRows: CockpitRow[] = [];
+export const trendData: Array<{ quarter: string; rate: number; unresolved: number }> = [];

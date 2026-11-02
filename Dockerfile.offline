@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=quarterly-recon:current-v14
+ARG BASE_IMAGE=quarterly-recon:current-v15
 FROM ${BASE_IMAGE}
 
 WORKDIR /app

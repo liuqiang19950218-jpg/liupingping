@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { reconciliationApi, type QuarterFollowupItem, type Reconciliation } from "../lib/api/reconciliation-api";
 import {
-  selectQuarter,
-  selectedQuarter,
-  sheetForQuarter,
-  writeArchivedSheet,
-} from "./quarter-storage";
+  isResolvedArchiveReconciliation,
+} from "../lib/closed-reconciliation-qualification.mjs";
+import { isCurrentOpenProblem } from "../lib/current-open-problems.mjs";
+import { businessDayDistance, normalizeDateOnly } from "../lib/date-only.mjs";
+import { matchesProblemDashboardStage, resolveProblemStage } from "../lib/problem-dashboard-stage.mjs";
+import { useDashboardData } from "./dashboard-postgres-data";
+import { VoiceInputButton } from "./VoiceInputButton";
 import "./unresolved-followup.css";
+import "./unresolved-followup-layout-overrides.css";
 
 type FollowUp = { time: string; solution: string };
 const PROCESS_STAGES = [
@@ -34,7 +38,7 @@ type Sheet = {
   details?: Record<string, Detail>;
 };
 type Risk = "高风险" | "中风险" | "一般关注";
-type Finance = "需财务复核" | "一般关注" | "无需关注";
+type Finance = "none" | "需财务复核" | "一般关注" | "无需关注";
 const TABLE_FILTER_COLUMNS = [
   { key: "quarter", label: "季度" },
   { key: "region", label: "区域" },
@@ -49,8 +53,10 @@ const TABLE_FILTER_COLUMNS = [
   { key: "stage", label: "问题处理阶段" },
 ] as const;
 type TableFilterKey = (typeof TABLE_FILTER_COLUMNS)[number]["key"];
-type Item = {
-  id: number;
+export type FollowupTrackerItem = {
+  id: string;
+  reconciliationId: string;
+  followupId?: string;
   quarter: string;
   accountSet: string;
   region: string;
@@ -62,9 +68,10 @@ type Item = {
   firstSolution: string;
   followUps: FollowUp[];
   resolved: boolean;
-  financeAttention?: Finance;
-  processStage?: Exclude<ProcessStage, "已关闭">;
+  financeAttention: Finance;
+  processStage: Exclude<ProcessStage, "已关闭"> | null;
 };
+type Item = FollowupTrackerItem;
 
 type DashboardMetricFilter =
   | ""
@@ -73,12 +80,13 @@ type DashboardMetricFilter =
   | "untouched"
   | "customer"
   | "internal"
+  | "finance_review"
+  | "leader_review"
   | "leader"
   | "week";
 
 const ALL = "全部区域";
 const OVERDUE_DAYS = 7;
-const LONG_UNTOUCHED_DAYS = 30;
 const HIGH_AMOUNT = 100000;
 
 const value = (row: unknown[], headers: string[], names: string[]) => {
@@ -95,49 +103,32 @@ const money = (value: number) =>
   value === 0
     ? "0"
     : value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
-const dayDistance = (value: string) => {
-  const time = new Date(`${value}T00:00:00`).getTime();
-  return Number.isNaN(time)
-    ? null
-    : Math.max(0, Math.floor((Date.now() - time) / 86_400_000));
-};
-const latest = (item: Item) =>
-  [...item.followUps]
+export const latestFollowupAt = (item: Item) =>
+  normalizeDateOnly([...item.followUps]
     .reverse()
     .find((entry) => entry.time.trim())
-    ?.time.trim() || item.firstTime;
+    ?.time.trim() || item.firstTime);
+const latest = latestFollowupAt;
+export const latestFollowupContent = (item: Item) =>
+  [...item.followUps].reverse().find((entry) => entry.solution.trim())?.solution.trim() || item.firstSolution;
+const dayDistance = (value: string) => businessDayDistance(value);
 const text = (item: Item) =>
   [item.firstSolution, ...item.followUps.map((entry) => entry.solution)].join(
     " ",
   );
-const financeOf = (item: Item): Finance => item.financeAttention ?? "无需关注";
-const stageOf = (item: Item): ProcessStage => {
-  if (item.resolved) return "已关闭";
-  if (item.processStage) return item.processStage;
-  const content = `${item.firstSolution} ${text(item)}`;
-  if (content.includes("调账") || content.includes("财务")) return "待财务调账";
-  if (content.includes("医院")) return "待销售去医院处理";
-  if (content.includes("申请")) return "待销售走申请";
-  return "待核查";
+const financeOf = (item: Item): Finance => item.financeAttention;
+const financeLabel = (value: Finance) => value === "none" ? "未设置" : value;
+export const followupStage = (item: Item): ProcessStage => {
+  return resolveProblemStage(item).stageName as ProcessStage;
 };
-const matchesDashboardMetric = (item: Item, filter: DashboardMetricFilter) => {
-  const daysSinceFollowUp = dayDistance(latest(item)) ?? 0;
-  switch (filter) {
-    case "overdue":
-      return (dayDistance(item.expectedDate) ?? 0) > 0;
-    case "untouched":
-      return daysSinceFollowUp >= OVERDUE_DAYS;
-    case "customer":
-      return stageOf(item) === "待销售走申请" || stageOf(item) === "待销售去医院处理";
-    case "internal":
-      return stageOf(item) === "待财务调账";
-    case "leader":
-      return financeOf(item) === "需财务复核";
-    case "week":
-      return daysSinceFollowUp <= 7;
-    default:
-      return true;
-  }
+const stageOf = followupStage;
+export const matchesFollowupDashboardMetric = (item: Item, filter: DashboardMetricFilter) => {
+  return matchesProblemDashboardStage({
+    stage: stageOf(item),
+    expectedDate: item.expectedDate,
+    latestFollowupAt: latest(item),
+    financeAttention: financeOf(item),
+  }, filter);
 };
 const riskOf = (item: Item): Risk => {
   const days = dayDistance(latest(item)) ?? 0;
@@ -176,69 +167,80 @@ const tableFilterValue = (item: Item, key: TableFilterKey) => {
       return stageOf(item);
   }
 };
-function toItems(source?: Sheet): Item[] {
-  if (!source?.headers?.length) return [];
-  const match = `${source.fileName} ${source.headers.join(" ")}`.match(
-    /(\d{2,4})\s*年?\s*([1-4])\s*季度/,
-  );
-  const quarter = match
-    ? `${match[1].length === 2 ? `20${match[1]}` : match[1]} Q${match[2]}`
-    : selectedQuarter() || "未识别季度";
-  return source.rows
-    .map((row, id) => {
-      const detail = source.details?.[String(id)] ?? {};
-      // 待解决清单只认可“本季度对账详细情况”填写弹层保存的值。
-      // 不能回退读取导入 Excel 行内可能遗留的解决方案/解决时间，
-      // 否则未在当前系统填写解决时间的客户会被误带入待解决清单。
-      const firstSolution = String(detail.resolutionSolution ?? "").trim();
-      const firstTime = String(detail.resolutionTime ?? "").trim();
-      const followUps = Array.isArray(detail.followUps)
-        ? detail.followUps
-            .filter((entry): entry is FollowUp =>
-              Boolean(entry && typeof entry.solution === "string"),
-            )
-            .map((entry) => ({
-              time: String(entry.time ?? ""),
-              solution: String(entry.solution ?? ""),
-            }))
-        : [];
-      return {
-        id,
-        quarter,
-        accountSet: value(row, source.headers, ["账套"]),
-        region: value(row, source.headers, ["区域"]) || "未填写区域",
-        customer: value(row, source.headers, ["客户名称"]),
-        owner: value(row, source.headers, ["对账负责人"]),
-        amount: amountOf(value(row, source.headers, ["对账差额"])),
-        firstTime,
-        expectedDate: value(row, source.headers, ["预计完成日期", "预计完成时间", "预计完成"]) || firstTime,
-        firstSolution,
-        followUps,
-        financeAttention: detail.financeAttention,
-        processStage: detail.processStage,
-        // 是否进入已解决档案只由人工归档状态决定，不能再把
-        // “填写了解决方案但未填写解决时间”的记录误判为已解决。
-        resolved: detail.resolved === true && detail.reopened !== true,
-      };
-    })
-    // 待解决清单沿用原有业务口径：只有已填写解决时间的客户才进入
-    // 未解决客户跟进；未填写解决时间的记录不在待解决清单中展示。
-    .filter((item) => item.customer && item.firstTime.trim());
+export function toItems(quarter: string, rows: Map<string, Reconciliation>, followups: QuarterFollowupItem[]): Item[] {
+  const followupByReconciliation = new Map(followups.map((item) => [item.reconciliationId, item]));
+  return [...rows.values()].flatMap((row) => {
+    const followup = followupByReconciliation.get(row.id);
+    const firstTime = row.solutionDate?.trim() ?? "";
+    if (!isCurrentOpenProblem(row) && !isResolvedArchiveReconciliation(row)) return [];
+    return [{
+      id: followup?.id ?? `solution:${row.id}`,
+      reconciliationId: row.id,
+      followupId: followup?.id,
+      quarter,
+      accountSet: row.accountSet ?? "",
+      region: row.region ?? "未填写区域",
+      customer: row.customer ?? "",
+      owner: row.ownerName ?? "",
+      amount: amountOf(row.reconciliationDifference),
+      firstTime,
+      expectedDate: firstTime,
+      firstSolution: row.solution?.trim() ?? "",
+      followUps: followup?.events.map((event) => ({ time: event.occurredAt, solution: event.content ?? "" })) ?? [],
+      financeAttention: row.financeAttention ?? "none",
+      processStage: followup?.processStage && followup.processStage !== "已关闭" ? followup.processStage as Exclude<ProcessStage, "已关闭"> : null,
+      resolved: isResolvedArchiveReconciliation(row),
+    }];
+  }).filter((item) => item.customer);
 }
 
-function saveDetail(id: number, changes: Partial<Detail>) {
-  const quarter = selectedQuarter();
-  const sheet = sheetForQuarter(quarter) as Sheet | undefined;
-  if (!sheet) return;
-  const next: Sheet = {
-    ...sheet,
-    details: {
-      ...(sheet.details ?? {}),
-      [String(id)]: { ...(sheet.details?.[String(id)] ?? {}), ...changes },
-    },
-  };
-  writeArchivedSheet(next);
-  window.dispatchEvent(new Event("reconciliation-updated"));
+/**
+ * The canonical read-only mapping for filters sent by ProblemDashboard.
+ * Both the secondary drawer and the formal tracker use this same function so
+ * a drill-down cannot silently grow or shrink its customer set.
+ */
+export function filterFollowupTrackerItems(items: Item[], filters: Record<string, string> = {}) {
+  const filter = (filters.filter ?? "") as DashboardMetricFilter;
+  const stage = filters.stage ?? "";
+  const query = (filters.owner || filters.customer || "").trim().toLocaleLowerCase();
+  const salesGroup = stage === "等待销售处理";
+  return filterFollowupTrackerItemsByState(items, {
+    tab: stage === "已关闭" ? "resolved" : "pending",
+    region: filters.region ?? ALL,
+    search: query,
+    risk: "全部",
+    finance: "全部",
+    processStage: salesGroup ? "全部" : stage || "全部",
+    dashboardMetricFilter: filter,
+    tableFilters: {},
+  }).filter((item) => !salesGroup || followupStage(item) === "待销售走申请" || followupStage(item) === "待销售去医院处理");
+}
+
+export type FollowupTrackerFilterState = {
+  tab: "pending" | "resolved";
+  region: string;
+  search: string;
+  risk: string;
+  finance: string;
+  processStage: string;
+  dashboardMetricFilter: DashboardMetricFilter;
+  tableFilters: Partial<Record<string, string>>;
+};
+
+/** The single predicate used by the formal tracker and dashboard drawer. */
+export function filterFollowupTrackerItemsByState(items: Item[], state: FollowupTrackerFilterState) {
+  return items.filter((item) =>
+    (state.tab === "resolved" ? item.resolved : !item.resolved) &&
+    (state.region === ALL || item.region === state.region) &&
+    (!state.search || [item.customer, item.owner, item.region, item.accountSet].join(" ").toLocaleLowerCase().includes(state.search)) &&
+    (state.risk === "全部" || riskOf(item) === state.risk) &&
+    (state.finance === "全部" || financeOf(item) === state.finance) &&
+    (state.processStage === "全部" || state.processStage === "已关闭" || followupStage(item) === state.processStage) &&
+    matchesFollowupDashboardMetric(item, state.dashboardMetricFilter) &&
+    Object.entries(state.tableFilters).every(([key, value]) =>
+      !value || tableFilterValue(item, key as TableFilterKey).toLocaleLowerCase().includes(value.trim().toLocaleLowerCase()),
+    ),
+  );
 }
 
 function Badge({
@@ -253,95 +255,9 @@ function Badge({
   return <span className={`uf-badge ${variant ?? ""} ${type}`}>{children}</span>;
 }
 
-function AgingCylinderChart({
-  data,
-}: {
-  data: { label: string; value: number }[];
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const paint = () => {
-      const rect = canvas.getBoundingClientRect();
-      const scale = window.devicePixelRatio || 1;
-      const width = Math.max(260, Math.floor(rect.width));
-      const height = 200;
-      canvas.width = width * scale;
-      canvas.height = height * scale;
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      context.setTransform(scale, 0, 0, scale, 0, 0);
-      context.clearRect(0, 0, width, height);
-      const max = Math.max(1, ...data.map((item) => item.value));
-      const chartTop = 25;
-      const chartBottom = 160;
-      const columnWidth = Math.min(38, Math.max(24, (width - 70) / 8));
-      context.font = "11px system-ui";
-      context.textAlign = "right";
-      context.fillStyle = "#7890a7";
-      [0, 0.25, 0.5, 0.75, 1].forEach((tick) => {
-        const y = chartBottom - (chartBottom - chartTop) * tick;
-        context.strokeStyle = "#e9f0f7";
-        context.beginPath();
-        context.moveTo(28, y);
-        context.lineTo(width - 8, y);
-        context.stroke();
-        context.fillText(String(Math.round(max * tick)), 22, y + 4);
-      });
-      data.forEach((item, index) => {
-        const step = (width - 45) / data.length;
-        const x = 34 + step * index + (step - columnWidth) / 2;
-        const valueHeight = Math.max(
-          item.value ? 9 : 0,
-          (item.value / max) * (chartBottom - chartTop),
-        );
-        const y = chartBottom - valueHeight;
-        const gradient = context.createLinearGradient(0, y, 0, chartBottom);
-        gradient.addColorStop(
-          0,
-          index === data.length - 1 ? "#f58a45" : "#86b9ff",
-        );
-        gradient.addColorStop(
-          1,
-          index === data.length - 1 ? "#ef4438" : "#1677ff",
-        );
-        context.fillStyle = gradient;
-        context.beginPath();
-        context.roundRect(x, y, columnWidth, valueHeight, [
-          columnWidth / 2,
-          columnWidth / 2,
-          5,
-          5,
-        ]);
-        context.fill();
-        context.fillStyle = "#1d4f83";
-        context.textAlign = "center";
-        context.font = "700 11px system-ui";
-        context.fillText(String(item.value), x + columnWidth / 2, y - 7);
-        context.fillStyle = "#617b95";
-        context.font = "10px system-ui";
-        context.fillText(item.label, x + columnWidth / 2, 181);
-      });
-    };
-    paint();
-    const observer = new ResizeObserver(paint);
-    observer.observe(canvas);
-    return () => observer.disconnect();
-  }, [data]);
-  const total = data.reduce((sum, item) => sum + item.value, 0);
-  return (
-    <canvas
-      ref={canvasRef}
-      className="uf-aging-canvas"
-      role="img"
-      aria-label={`超期账龄分布：${data.map((item) => `${item.label}${item.value}个，占比${total ? ((item.value / total) * 100).toFixed(1) : 0}%`).join("；")}`}
-    />
-  );
-}
-
 export function UnresolvedFollowupDashboard() {
-  const [items, setItems] = useState<Item[]>([]);
+  const { quarter, reconciliationById, followups, refresh } = useDashboardData();
+  const items = useMemo(() => toItems(quarter?.label ?? "", reconciliationById, followups), [quarter, reconciliationById, followups]);
   const [region, setRegion] = useState(ALL);
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
@@ -363,39 +279,32 @@ export function UnresolvedFollowupDashboard() {
   const [message, setMessage] = useState("");
   const overdueCardsRef = useRef<HTMLDivElement>(null);
   const scrollOverdueCards = (direction: number) => overdueCardsRef.current?.scrollBy({ left: direction * Math.max(260, overdueCardsRef.current.clientWidth * 0.72), behavior: "smooth" });
-  const sync = () =>
-    setItems(toItems(sheetForQuarter(selectedQuarter()) as Sheet | undefined));
   useEffect(() => {
-    sync();
     const initialFilter = Object.fromEntries(new URLSearchParams(window.location.search));
-    if (initialFilter.quarter && initialFilter.quarter !== selectedQuarter()) {
-      selectQuarter(initialFilter.quarter);
-    }
     if (initialFilter.region) setRegion(initialFilter.region);
     if (initialFilter.owner || initialFilter.customer) setQuery(initialFilter.owner || initialFilter.customer || "");
-    if (initialFilter.filter === "finance" || initialFilter.filter === "leader") setFinance("需财务复核");
+    if (initialFilter.filter === "finance" || initialFilter.filter === "finance_review") setFinance("需财务复核");
     if (PROCESS_STAGES.includes(initialFilter.stage as ProcessStage)) {
       setProcessStage(initialFilter.stage);
       setTab(initialFilter.stage === "已关闭" ? "resolved" : "pending");
     }
-    if (["all", "overdue", "untouched", "customer", "internal", "leader", "week"].includes(initialFilter.filter ?? "")) {
+    if (["all", "overdue", "untouched", "customer", "internal", "finance_review", "leader_review", "leader", "week"].includes(initialFilter.filter ?? "")) {
       setDashboardMetricFilter(initialFilter.filter as DashboardMetricFilter);
       setTab("pending");
     }
     const applyDashboardFilter = (event: Event) => {
       const filter = (event as CustomEvent<Record<string, string>>).detail;
       if (!filter) return;
-      if (filter.quarter && filter.quarter !== selectedQuarter()) selectQuarter(filter.quarter);
       if (filter.region) setRegion(filter.region);
       if (filter.owner || filter.customer) setQuery(filter.owner || filter.customer || "");
-      if (filter.filter === "finance" || filter.filter === "leader") setFinance("需财务复核");
+      if (filter.filter === "finance" || filter.filter === "finance_review") setFinance("需财务复核");
       if (PROCESS_STAGES.includes(filter.stage as ProcessStage)) {
         setDashboardMetricFilter("");
         setProcessStage(filter.stage);
         setTab(filter.stage === "已关闭" ? "resolved" : "pending");
         return;
       }
-      if (["all", "overdue", "untouched", "customer", "internal", "leader", "week"].includes(filter.filter ?? "")) {
+      if (["all", "overdue", "untouched", "customer", "internal", "finance_review", "leader_review", "leader", "week"].includes(filter.filter ?? "")) {
         setDashboardMetricFilter(filter.filter as DashboardMetricFilter);
         setProcessStage("全部");
         setRisk("全部");
@@ -405,14 +314,8 @@ export function UnresolvedFollowupDashboard() {
       } else setDashboardMetricFilter("");
       setTab("pending");
     };
-    window.addEventListener("reconciliation-updated", sync);
-    window.addEventListener("reconciliation-quarter-selected", sync);
-    window.addEventListener("reconciliation-quarter-updated", sync);
     window.addEventListener("reconciliation-followup-filter", applyDashboardFilter);
     return () => {
-      window.removeEventListener("reconciliation-updated", sync);
-      window.removeEventListener("reconciliation-quarter-selected", sync);
-      window.removeEventListener("reconciliation-quarter-updated", sync);
       window.removeEventListener("reconciliation-followup-filter", applyDashboardFilter);
     };
   }, []);
@@ -434,29 +337,9 @@ export function UnresolvedFollowupDashboard() {
     () => items.filter((item) => item.resolved),
     [items],
   );
-  const base = tab === "pending" ? pending : resolved;
   const visible = useMemo(
-    () =>
-      base.filter(
-        (item) =>
-          (region === ALL || item.region === region) &&
-          (!search ||
-            [item.customer, item.owner, item.region, item.accountSet]
-              .join(" ")
-              .toLocaleLowerCase()
-              .includes(search)) &&
-          (risk === "全部" || riskOf(item) === risk) &&
-          (finance === "全部" || financeOf(item) === finance) &&
-          (processStage === "全部" || stageOf(item) === processStage) &&
-          matchesDashboardMetric(item, dashboardMetricFilter) &&
-          Object.entries(tableFilters).every(([key, filter]) =>
-            !filter ||
-            tableFilterValue(item, key as TableFilterKey)
-              .toLocaleLowerCase()
-              .includes(filter.trim().toLocaleLowerCase()),
-          ),
-      ),
-    [base, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters],
+    () => filterFollowupTrackerItemsByState(items, { tab, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters }),
+    [items, tab, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters],
   );
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const rows = visible.slice((page - 1) * pageSize, page * pageSize);
@@ -512,43 +395,6 @@ export function UnresolvedFollowupDashboard() {
       Math.abs(b.amount) - Math.abs(a.amount) ||
       (dayDistance(latest(b)) ?? 0) - (dayDistance(latest(a)) ?? 0),
   );
-  const aging = ["30天内", "31-60天", "61-90天", "90天以上"].map(
-    (label, index) => ({
-      label,
-      value: overdue.filter((item) => {
-        const days = dayDistance(latest(item)) ?? 0;
-        return index === 0
-          ? days <= 30
-          : index === 1
-            ? days <= 60
-            : index === 2
-              ? days <= 90
-              : true;
-      }).length,
-    }),
-  );
-  const priority = useMemo(
-    () => ({
-      top: pending
-        .filter(
-          (item) =>
-            financeOf(item) === "需财务复核" ||
-            financeOf(item) === "一般关注",
-        )
-        .sort((a, b) => b.amount - a.amount)
-        .slice(0, 5),
-      untouched: pending.filter(
-        (item) => (dayDistance(latest(item)) ?? 0) > LONG_UNTOUCHED_DAYS,
-      ),
-      finance: pending.filter((item) => financeOf(item) === "需财务复核"),
-      stalled: pending.filter(
-        (item) =>
-          item.followUps.length >= 2 &&
-          (dayDistance(latest(item)) ?? 0) > OVERDUE_DAYS,
-      ),
-    }),
-    [pending],
-  );
   const reset = () => {
     setRegion(ALL);
     setQuery("");
@@ -564,42 +410,63 @@ export function UnresolvedFollowupDashboard() {
         ? columns.filter((item) => item !== column)
         : [...columns, column],
     );
-  const submitFollowUp = () => {
+  const submitFollowUp = async () => {
     if (!editing || !followSolution.trim()) {
       setMessage("请填写本次跟进解决方案。");
       return;
     }
-    saveDetail(editing.id, {
-      followUps: [
-        ...editing.followUps,
-        { time: followTime, solution: followSolution.trim() },
-      ],
-      resolved: false,
-      reopened: true,
-    });
+    if (!quarter) return;
+    const event = { eventType: "follow_up", content: followSolution.trim(), occurredAt: followTime || new Date().toISOString() };
+    if (editing.followupId) await reconciliationApi.createFollowupEvent(quarter.code, editing.reconciliationId, event);
+    else await reconciliationApi.createFollowup(quarter.code, editing.reconciliationId, { followStatus: "pending", event });
+    refresh();
     setEditing(null);
     setFollowTime("");
     setFollowSolution("");
     setMessage("已保存跟进记录，首次解决方案与首次时间保持不变。");
   };
-  const resolve = (item: Item) => {
-    saveDetail(item.id, { resolved: true, reopened: false });
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const withSaving = async (item: Item, action: () => Promise<void>) => {
+    setSavingIds((current) => new Set(current).add(item.reconciliationId));
+    try {
+      await action();
+      refresh();
+    } catch (caught) {
+      setMessage(caught instanceof Error ? `保存失败：${caught.message}` : "保存失败，请稍后重试。");
+    } finally {
+      setSavingIds((current) => { const next = new Set(current); next.delete(item.reconciliationId); return next; });
+    }
+  };
+  const resolve = (item: Item) => withSaving(item, async () => {
+    if (!quarter) return;
+    await reconciliationApi.patch(quarter.code, item.reconciliationId, { manualResolutionStatus: "resolved" });
     setMessage("已转入已解决档案。");
-  };
-  const restore = (item: Item) => {
-    saveDetail(item.id, { resolved: false, reopened: true });
+  });
+  const restore = (item: Item) => withSaving(item, async () => {
+    if (!quarter) return;
+    await reconciliationApi.patch(quarter.code, item.reconciliationId, { manualResolutionStatus: "reopened" });
     setMessage("已撤销解决状态，客户已回到待解决清单。");
-  };
+  });
   const updateFinanceAttention = (item: Item, financeAttention: Finance) => {
-    saveDetail(item.id, { financeAttention });
-    setMessage(`已将${item.customer}设置为${financeAttention}。`);
+    if (!quarter || item.financeAttention === financeAttention) return;
+    void withSaving(item, async () => {
+      await reconciliationApi.patch(quarter.code, item.reconciliationId, { financeAttention });
+      setMessage(`已将${item.customer}设置为${financeLabel(financeAttention)}。`);
+    });
   };
-  const updateProcessStage = (
+  const updateProcessStage = async (
     item: Item,
     nextStage: Exclude<ProcessStage, "已关闭">,
   ) => {
-    saveDetail(item.id, { processStage: nextStage });
-    setMessage(`已将${item.customer}设置为${nextStage}。`);
+    if (!quarter || item.processStage === nextStage) return;
+    if (!item.followupId) {
+      setMessage(`无法保存：${item.customer}（${item.reconciliationId}）没有可匹配的 followup_item。`);
+      return;
+    }
+    await withSaving(item, async () => {
+      await reconciliationApi.updateFollowup(quarter.code, item.reconciliationId, { processStage: nextStage });
+      setMessage(`已将${item.customer}设置为${nextStage}。`);
+    });
   };
   const exportRows = () => {
     const header = [
@@ -641,7 +508,7 @@ export function UnresolvedFollowupDashboard() {
     link.href = URL.createObjectURL(
       new Blob([`\ufeff${content}`], { type: "text/csv;charset=utf-8" }),
     );
-    link.download = `${selectedQuarter() || "季度"}-未解决客户跟进.csv`;
+    link.download = `${quarter?.label || "季度"}-未解决客户跟进.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
   };
@@ -690,7 +557,7 @@ export function UnresolvedFollowupDashboard() {
     link.href = URL.createObjectURL(
       new Blob([`\ufeff${content}`], { type: "text/csv;charset=utf-8" }),
     );
-    link.download = `${selectedQuarter() || "\u5bf9\u8d26\u5b63\u5ea6"}-${exportName}.csv`;
+    link.download = `${quarter?.label || "\u5bf9\u8d26\u5b63\u5ea6"}-${exportName}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
     setMessage(`\u5df2\u5bfc\u51fa${exportName}\uff08${exportItems.length}\u6761\uff09\u3002`);
@@ -700,39 +567,6 @@ export function UnresolvedFollowupDashboard() {
     ...regionStats.map((item) => item.list.length),
   );
   const maxAmount = Math.max(1, ...regionStats.map((item) => item.amount));
-  const recommendations = [
-    {
-      level: "high",
-      text: `优先处理 ${priority.finance.length} 个需财务复核客户`,
-      action: "提交财务专项处理",
-    },
-    {
-      level: "high",
-      text: `催办 ${aging[3].value} 个超过 90 天未更新事项`,
-      action: "升级管理层关注",
-    },
-    {
-      level: "medium",
-      text: `跟进 ${priority.untouched.length} 个长期未更新客户`,
-      action: "提醒负责人更新",
-    },
-    {
-      level: "medium",
-      text: `复核 ${priority.stalled.length} 个多次跟进无进展事项`,
-      action: "核对当前解决方案",
-    },
-    {
-      level: "normal",
-      text: `持续推进 ${pending.length} 个待解决客户的处理闭环`,
-      action: "查看待解决清单",
-    },
-  ].filter(
-    (item) =>
-      !item.text.startsWith("优先处理 0") &&
-      !item.text.startsWith("催办 0") &&
-      !item.text.startsWith("跟进 0") &&
-      !item.text.startsWith("复核 0"),
-  );
   return (
     <section className="uf-page" aria-busy={false}>
       <section className="uf-kpis" aria-label="未解决客户核心指标">
@@ -980,7 +814,8 @@ export function UnresolvedFollowupDashboard() {
                         <select
                           aria-label={`${item.customer} 财务关注`}
                           className={`uf-finance-select ${financeOf(item) === "需财务复核" ? "is-review" : financeOf(item) === "一般关注" ? "is-general" : ""}`}
-                          value={financeOf(item)}
+                          value={item.financeAttention}
+                          disabled={savingIds.has(item.reconciliationId)}
                           onChange={(event) =>
                             updateFinanceAttention(
                               item,
@@ -988,36 +823,32 @@ export function UnresolvedFollowupDashboard() {
                             )
                           }
                         >
+                          <option value="none">未设置</option>
                           <option value="无需关注">无需关注</option>
                           <option value="一般关注">一般关注</option>
                           <option value="需财务复核">需财务复核</option>
                         </select>
                       </td>
                       <td>
-                        {item.resolved ? (
-                          <span className="uf-stage-closed">已关闭</span>
-                        ) : (
-                          <select
-                            aria-label={`${item.customer} 问题处理阶段`}
-                            className={`uf-stage-select ${stageOf(item) === "待财务调账" ? "is-finance" : ""}`}
-                            value={stageOf(item)}
-                            onChange={(event) =>
-                              updateProcessStage(
-                                item,
-                                event.target.value as Exclude<
-                                  ProcessStage,
-                                  "已关闭"
-                                >,
-                              )
-                            }
-                          >
-                            {PROCESS_STAGES.filter(
-                              (stage) => stage !== "已关闭",
-                            ).map((stage) => (
-                              <option key={stage}>{stage}</option>
-                            ))}
-                          </select>
-                        )}
+                        <select
+                          aria-label={`${item.customer} 问题处理阶段`}
+                          className={`uf-stage-select ${item.processStage === "待财务调账" ? "is-finance" : ""}`}
+                          value={item.processStage ?? ""}
+                          disabled={!item.followupId || savingIds.has(item.reconciliationId)}
+                          onChange={(event) =>
+                            updateProcessStage(
+                              item,
+                              event.target.value as Exclude<ProcessStage, "已关闭">,
+                            )
+                          }
+                        >
+                          <option value="" disabled>未设置</option>
+                          {PROCESS_STAGES.filter(
+                            (stage) => stage !== "已关闭",
+                          ).map((stage) => (
+                            <option key={stage}>{stage}</option>
+                          ))}
+                        </select>
                       </td>
                       <td className="uf-actions">
                         <button
@@ -1043,16 +874,18 @@ export function UnresolvedFollowupDashboard() {
                             type="button"
                             className="uf-resolve"
                             onClick={() => resolve(item)}
+                            disabled={savingIds.has(item.reconciliationId)}
                           >
-                            已解决
+                            {savingIds.has(item.reconciliationId) ? "保存中…" : "已解决"}
                           </button>
                         ) : (
                           <button
                             type="button"
                             className="uf-secondary"
                             onClick={() => restore(item)}
+                            disabled={savingIds.has(item.reconciliationId)}
                           >
-                            撤销
+                            {savingIds.has(item.reconciliationId) ? "保存中…" : "撤销"}
                           </button>
                         )}
                       </td>
@@ -1193,7 +1026,7 @@ export function UnresolvedFollowupDashboard() {
                                 : "uf-finance-none"
                           }
                         >
-                          {financeOf(item)}
+                          {financeLabel(financeOf(item))}
                         </b>
                       </span>
                     </button>
@@ -1277,41 +1110,6 @@ export function UnresolvedFollowupDashboard() {
               </button>
             ))}
         </article>
-        <article className="uf-card">
-          <h2>超期账龄分布</h2>
-          <AgingCylinderChart data={aging} />
-          <p className="uf-chart-caption">
-            按最近跟进时间统计，悬停或聚焦可查看账龄数量。
-          </p>
-        </article>
-        <article className="uf-card uf-advice">
-          <h2>下一步处理建议</h2>
-          {recommendations.length ? (
-            recommendations.map((item) => (
-              <div key={item.text}>
-                <Badge
-                  type={
-                    item.level === "high"
-                      ? "高风险"
-                      : item.level === "medium"
-                        ? "中风险"
-                        : "一般关注"
-                  }
-                >
-                  {item.level === "high"
-                    ? "高优先级"
-                    : item.level === "medium"
-                      ? "中优先级"
-                      : "一般优先级"}
-                </Badge>
-                <span>{item.text}</span>
-                <small>{item.action}</small>
-              </div>
-            ))
-          ) : (
-            <p className="uf-no-data">当前没有需要升级处理的事项。</p>
-          )}
-        </article>
       </section>
       {editing && (
         <div
@@ -1347,14 +1145,17 @@ export function UnresolvedFollowupDashboard() {
                 onChange={(event) => setFollowTime(event.target.value)}
               />
             </label>
-            <label>
+            <div className="uf-voice-field">
+              <label>
               跟进解决方案
               <textarea
                 value={followSolution}
                 placeholder="填写本次跟进处理过程与下一步动作"
                 onChange={(event) => setFollowSolution(event.target.value)}
               />
-            </label>
+              </label>
+              <VoiceInputButton value={followSolution} onChange={setFollowSolution} />
+            </div>
             <button className="uf-primary" onClick={submitFollowUp}>
               保存本次跟进
             </button>
@@ -1400,7 +1201,7 @@ export function UnresolvedFollowupDashboard() {
                 <dt>财务关注</dt>
                 <dd>
                   <Badge type={financeOf(detail)} variant="finance">
-                    {financeOf(detail)}
+                    {financeLabel(financeOf(detail))}
                   </Badge>
                 </dd>
               </div>

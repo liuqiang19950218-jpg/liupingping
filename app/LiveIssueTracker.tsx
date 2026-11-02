@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * Historical local-storage tracker retained only for migration/audit reference.
+ * Do not mount this component in production business flows: it does not use
+ * the PostgreSQL API source of truth. Use UnresolvedFollowupDashboard instead.
+ */
 import {
   useEffect,
   useState,
