@@ -39,3 +39,20 @@
   .mobile-bottom-nav>button.selected { background:#eef5ff; color:#0969e8; }
 }
 @media (min-width: 761px) { .mobile-work-brand,.mobile-bottom-nav { display:none; } }
+
+/* Six-page phone shell: only the header and existing navigation are shared.
+   Content padding and inherited typography stay unchanged for protected panels. */
+@media (max-width: 760px) {
+  .app-shell > .work-area > .work-header { gap:8px; padding:12px; background:#f3f8fe; }
+  .app-shell > .work-area > .work-header > div:first-child { flex-wrap:wrap; gap:6px 8px; }
+  .app-shell > .work-area > .work-header .mobile-work-brand { font-size:14px; font-weight:650; }
+  .app-shell > .work-area > .work-header h1 { font-size:14px; font-weight:500; line-height:1.5; white-space:normal; overflow-wrap:anywhere; }
+  .app-shell > .work-area > .work-header:has(.problem-header-actions) { flex-direction:column; align-items:stretch; }
+  .app-shell > .work-area > .work-header .problem-header-actions { display:flex; flex-direction:row; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; }
+  .app-shell > .work-area > .work-header .problem-header-actions small { width:100%; font-size:11px; font-weight:400; }
+  .app-shell > .work-area > .work-header .problem-header-actions button { flex:1; min-width:0; min-height:38px; padding:6px; font-size:12px; font-weight:500; white-space:normal; }
+  .app-shell > .mobile-bottom-nav { padding-bottom:calc(5px + env(safe-area-inset-bottom)); }
+  .app-shell > .mobile-bottom-nav > button { min-height:50px; }
+  .app-shell > .mobile-bottom-nav > button span { font-size:11px; font-weight:500; }
+  .app-shell > .mobile-bottom-nav > button i { font-size:20px; height:22px; line-height:22px; }
+}

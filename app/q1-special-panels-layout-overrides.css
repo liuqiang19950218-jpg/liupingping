@@ -217,3 +217,183 @@
 @media (min-width:761px) {
   .overview-card .mobile-expand-button { display:none; }
 }
+
+/* Phone-only bounded lists. The headers and controls stay outside the scroll
+   areas so expanded real-data rows do not extend the page indefinitely. */
+@media (max-width:760px) {
+  .q1-special { --mobile-list-card-height:max(320px,min(460px,58dvh)); }
+  .q1-special .overview-card,.q1-special .special-legacy-panel,.dashboard-management-layer .q1-special .collection-dashboard > .overview-card,.dashboard-management-layer .q1-special .collection-dashboard > .special-legacy-panel { box-sizing:border-box; display:flex; flex-direction:column; height:var(--mobile-list-card-height); min-width:0; min-height:0; max-height:none; overflow:hidden; }
+  .overview-card .collection-card-head,.overview-card .mobile-expand-button,.special-legacy-panel .mobile-unaccounted-expand { flex:none; }
+  .overview-card .collection-table-wrap,.special-legacy-panel .special-scroll-shell { flex:1 1 auto; min-width:0; min-height:0; overflow:hidden; }
+  .overview-card .collection-table-wrap { overflow-y:auto; overscroll-behavior:contain; }
+  .special-legacy-panel .special-scroll-list,.dashboard-management-layer .q1-special .special-legacy-panel .special-scroll-list { min-width:0; max-height:none; height:100%; overflow-y:auto; overscroll-behavior:contain; }
+  .special-legacy-panel .special-scroll-list td,.special-legacy-panel .special-scroll-list .unaccounted-reason { min-width:0; overflow-wrap:anywhere; word-break:break-word; white-space:normal; }
+  .special-legacy-panel .special-scroll-actions { display:none; }
+  .special-legacy-panel .special-scroll-list .mobile-collapsed-row { display:none; }
+  .overview-card .mobile-expand-button,.special-legacy-panel .mobile-unaccounted-expand { display:block; width:100%; min-height:36px; margin:0; padding:0 10px; border:0; border-top:1px solid #dce9f8; background:#f7fbff; color:#075aca; font-size:13px; font-weight:700; text-align:center; cursor:pointer; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+  .overview-card .mobile-expand-button:active,.special-legacy-panel .mobile-unaccounted-expand:active { background:#edf5ff; }.overview-card .mobile-expand-button:focus-visible,.special-legacy-panel .mobile-unaccounted-expand:focus-visible { outline:2px solid #075aca; outline-offset:-3px; }
+  .special-tabs button,.collection-drill-row { -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+  .special-tabs button:not(.active):active,.collection-drill-row:active { background:#edf5ff; color:#17233d; box-shadow:none; }
+  .special-tabs button:focus-visible,.collection-drill-row:focus-visible { outline:2px solid #075aca; outline-offset:2px; }
+}
+
+@media (min-width:761px) {
+  .special-legacy-panel .mobile-unaccounted-expand { display:none; }
+}
+
+/* Preserve the original compact type scale while keeping every real follow-up
+   region paired with its rate on phones. */
+.collection-follow-item:not(:last-child)::after { content:"、"; }
+@media (max-width:760px) {
+  .q1-special .overview-card .collection-overview-table { font-family:inherit; }
+  .q1-special .overview-card .collection-material-name { font-size:13px; font-weight:600; line-height:1.35; }
+  .q1-special .overview-card .collection-numeric { font-size:15px; font-weight:700; line-height:1.35; }
+  .q1-special .overview-card .collection-rate { font-size:16px; font-weight:700; line-height:1.35; }
+  .q1-special .overview-card .collection-follow { font-size:12px; font-weight:400; line-height:1.35; }
+  /* Follow-up regions must span the row below the mobile field label instead
+     of inheriting the table cell's narrow value column. */
+  .q1-special .overview-card .collection-overview-table td.collection-follow { grid-template-columns:minmax(0,1fr); width:100%; min-width:0; }
+  .q1-special .overview-card .collection-overview-table td.collection-follow::before,
+  .q1-special .overview-card .collection-follow-list { display:grid; grid-column:1 / -1; gap:4px; width:100%; min-width:0; }
+  .q1-special .overview-card .collection-follow-item { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:baseline; gap:8px; width:100%; min-width:0; padding:2px 0; border-bottom:1px dashed #dce7f3; }
+  .q1-special .overview-card .collection-follow-item:last-child { border-bottom:0; }
+  .q1-special .overview-card .collection-follow-item:not(:last-child)::after { display:none; }
+  .q1-special .overview-card .collection-follow-name { min-width:0; overflow-wrap:anywhere; }
+  .q1-special .overview-card .collection-follow-rate { font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; }
+  /* The dashboard layer is the history-view surface that sits above the fixed
+     six-tab bar; reserve scroll-out room without changing other pages. */
+  .dashboard-management-layer { padding-bottom:calc(78px + env(safe-area-inset-bottom)); }
+}
+
+/* The desktop overview remains a four-data-column table.  Phone-only controls
+   are separate cells so their clicks never reach the existing drill-down row. */
+.collection-mobile-follow-toggle-head,
+.collection-mobile-follow-toggle,
+.collection-follow-detail-row { display:none; }
+
+@media (max-width:760px) {
+  .q1-special .overview-card .collection-overview-table { display:table; width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; }
+  .q1-special .overview-card .collection-overview-table thead { position:static; display:table-header-group; width:auto; height:auto; overflow:visible; clip:auto; }
+  .q1-special .overview-card .collection-overview-table tbody { display:table-row-group; width:auto; }
+  .q1-special .overview-card .collection-overview-table tr { display:table-row; padding:0; border:0; border-radius:0; background:transparent; }
+  .q1-special .overview-card .collection-overview-table th,
+  .q1-special .overview-card .collection-overview-table td { display:table-cell; box-sizing:border-box; min-width:0; height:auto; padding:8px 4px; border-bottom:1px solid #e8edf5; color:#1f2937; font-size:11px; vertical-align:middle; text-align:left; word-break:normal; }
+  .q1-special .overview-card .collection-overview-table th { height:38px; color:#385476; background:#f4f9ff; font-weight:600; text-align:center; }
+  .q1-special .overview-card .collection-overview-table td::before { display:none; }
+  .q1-special .overview-card .collection-overview-table th:nth-child(1) { width:32%; text-align:left; }
+  .q1-special .overview-card .collection-overview-table th:nth-child(2) { width:29%; }
+  .q1-special .overview-card .collection-overview-table th:nth-child(3) { width:22%; }
+  .q1-special .overview-card .collection-overview-table th:nth-child(4),
+  .q1-special .overview-card .collection-overview-table td.collection-follow { display:none; }
+  .q1-special .overview-card .collection-overview-table th.collection-mobile-follow-toggle-head,
+  .q1-special .overview-card .collection-overview-table td.collection-mobile-follow-toggle { display:table-cell; width:17%; padding-right:0; text-align:right; }
+  .q1-special .overview-card .collection-material-name { gap:0; font-size:11px; line-height:1.35; }
+  .q1-special .overview-card .collection-material-icon { display:none; }
+  .q1-special .overview-card .collection-numeric,
+  .q1-special .overview-card .collection-rate { font-size:12px; text-align:center; white-space:nowrap; }
+  .q1-special .overview-card .collection-mobile-follow-toggle button { min-width:0; min-height:30px; padding:3px 4px; border:0; border-radius:6px; background:transparent; color:#0969e8; font:inherit; font-weight:700; line-height:1.2; cursor:pointer; -webkit-tap-highlight-color:transparent; touch-action:manipulation; white-space:nowrap; }
+  .q1-special .overview-card .collection-mobile-follow-toggle button:active { background:#edf5ff; }
+  .q1-special .overview-card .collection-mobile-follow-toggle button:focus-visible { outline:2px solid #075aca; outline-offset:1px; }
+  .q1-special .overview-card .collection-follow-detail-row { display:table-row; }
+  .q1-special .overview-card .collection-follow-detail-row > td { display:table-cell; padding:0 4px 9px; border-bottom:1px solid #e8edf5; background:#fff; }
+  .q1-special .overview-card .collection-follow-detail { display:grid; gap:5px; padding:9px 10px; border-radius:7px; background:#f5f9ff; color:#263653; font-size:12px; line-height:1.55; }
+  .q1-special .overview-card .collection-follow-detail strong { color:#075aca; font-size:12px; font-weight:700; }
+  .q1-special .overview-card .collection-follow-detail span { min-width:0; overflow-wrap:anywhere; word-break:break-word; }
+}
+
+/* Three-way phone navigation reuses the existing cards; desktop keeps its
+   original two-tab arrangement and four-column overview table. */
+.mobile-special-tabs { display:none; }
+
+@media (min-width:761px) {
+  .q1-special.desktop-special-collection .mobile-unaccounted-panel { display:none; }
+  .q1-special.desktop-special-unaccounted .reply-card { display:none; }
+}
+
+@media (max-width:760px) {
+  .q1-special .desktop-special-tabs { display:none; }
+  .q1-special .mobile-special-tabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); width:100%; gap:4px; padding:3px; }
+  .q1-special .mobile-special-tabs button { min-width:0; min-height:36px; padding:5px 3px; font-size:12px; line-height:1.25; }
+  .q1-special.mobile-special-collection .reply-card,
+  .q1-special.mobile-special-collection .mobile-unaccounted-panel,
+  .q1-special.mobile-special-reply .overview-card,
+  .q1-special.mobile-special-reply .mobile-unaccounted-panel,
+  .q1-special.mobile-special-unaccounted .overview-card,
+  .q1-special.mobile-special-unaccounted .reply-card { display:none; }
+
+  .q1-special .reply-card,
+  .dashboard-management-layer .q1-special .collection-dashboard > .reply-card { box-sizing:border-box; display:flex; flex-direction:column; height:var(--mobile-list-card-height); min-width:0; min-height:0; max-height:none; overflow:hidden; }
+  .q1-special .reply-card .collection-card-head,
+  .q1-special .reply-card .reply-legend { flex:none; }
+  .q1-special .reply-card .reply-rate-list { flex:1 1 auto; min-width:0; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+}
+
+/* State gates deliberately include the dashboard layer.  They must outrank
+   the shared card sizing rule that sets direct dashboard children to flex. */
+@media (max-width:760px) {
+  .dashboard-management-layer .q1-special .desktop-special-tabs { display:none; }
+  .dashboard-management-layer .q1-special .mobile-special-tabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .dashboard-management-layer .q1-special.mobile-special-collection .collection-dashboard > .reply-card,
+  .dashboard-management-layer .q1-special.mobile-special-collection .collection-dashboard > .mobile-unaccounted-panel,
+  .dashboard-management-layer .q1-special.mobile-special-reply .collection-dashboard > .overview-card,
+  .dashboard-management-layer .q1-special.mobile-special-reply .collection-dashboard > .mobile-unaccounted-panel,
+  .dashboard-management-layer .q1-special.mobile-special-unaccounted .collection-dashboard > .overview-card,
+  .dashboard-management-layer .q1-special.mobile-special-unaccounted .collection-dashboard > .reply-card { display:none; }
+}
+
+@media (min-width:761px) {
+  .dashboard-management-layer .q1-special .mobile-special-tabs { display:none; }
+  .dashboard-management-layer .q1-special .desktop-special-tabs { display:grid; }
+}
+
+/* The history dashboard retains its desktop skin; these phone rules only keep
+   KPI labels, empty states and drill-down tables readable on narrow screens. */
+@media (max-width:760px) {
+  .q1-special { min-width:0!important; background:#fff!important; color:#1f2937!important; }
+  .q1-special .special-head h2,
+  .q1-special .collection-card-head h3 { color:#102a4c!important; text-shadow:none; }
+  .q1-special .special-head p,
+  .q1-special .collection-follow { color:#64748b!important; }
+  .q1-special .special-tabs { overflow-x:auto; background:#f7fbff!important; border-color:#dbe5ef!important; }
+  .q1-special .special-tabs button { flex:0 0 auto; min-width:84px; white-space:nowrap; color:#475569!important; }
+  .q1-special .special-tabs button.active { background:#1677ff!important; box-shadow:none!important; color:#fff!important; }
+  .q1-special .collection-card,
+  .q1-special .special-legacy-panel { border-color:#dbe5ef!important; background:#fff!important; box-shadow:0 3px 12px rgba(16,42,76,.05)!important; }
+  .q1-special .collection-table-wrap,
+  .q1-special .special-scroll-shell { max-width:100%; overflow-x:auto; overscroll-behavior-x:contain; }
+  .q1-special .collection-overview-table,
+  .q1-special .special-scroll-list { min-width:520px; }
+  .q1-special .collection-dashboard [class*="empty"],
+  .q1-special .special-scroll-list td[colspan] { padding:18px 12px; color:#64748b!important; line-height:1.65; overflow-wrap:break-word; word-break:normal; writing-mode:horizontal-tb; text-align:center; }
+  .q1-actions .mobile-action-list .mobile-action-empty { box-sizing:border-box; display:block; width:100%; max-width:100%; min-width:0; writing-mode:horizontal-tb; white-space:normal; word-break:normal; overflow-wrap:anywhere; }
+  .q1-actions .mobile-action-list:has(.mobile-action-empty) { grid-template-rows:auto; }
+  .q1-actions:has(.mobile-action-empty) .mobile-action-list { flex:none!important; }
+}
+
+/* First-level material cards only. No drill dialog or history selectors. */
+@media (max-width:760px) {
+  .dashboard-management-layer > .q1-special { padding:12px!important; border-radius:12px; }
+  .dashboard-management-layer > .q1-special > .special-head h2 { font-size:16px; font-weight:650; line-height:1.45; }
+  .dashboard-management-layer > .q1-special > .special-head p { font-size:11px; font-weight:400; }
+  .dashboard-management-layer > .q1-special .mobile-special-tabs { gap:2px; overflow:visible; }
+  .dashboard-management-layer > .q1-special .mobile-special-tabs button { min-width:0; padding:7px 3px; min-height:40px; font-size:11px; font-weight:500; line-height:1.4; white-space:normal; }
+  .dashboard-management-layer > .q1-special .collection-dashboard > .overview-card { height:auto; min-height:0; max-height:none; border-radius:9px; box-shadow:none!important; }
+  .dashboard-management-layer > .q1-special .collection-card-head { padding:9px; }
+  .dashboard-management-layer > .q1-special .collection-card-head h3 { font-size:14px; font-weight:600; }
+  .dashboard-management-layer > .q1-special .collection-overview-table { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; }
+  .dashboard-management-layer > .q1-special .collection-overview-table th,
+  .dashboard-management-layer > .q1-special .collection-overview-table td { padding:9px 4px; font-size:11px; line-height:1.4; font-weight:400; vertical-align:middle; }
+  .dashboard-management-layer > .q1-special .collection-overview-table th { background:#f1f7fd; font-weight:500; color:#5d7393; white-space:normal; }
+  .dashboard-management-layer > .q1-special .collection-overview-table th:first-child { width:32%; }
+  .dashboard-management-layer > .q1-special .collection-overview-table th:nth-child(2) { width:30%; }
+  .dashboard-management-layer > .q1-special .collection-overview-table th:nth-child(3) { width:22%; }
+  .dashboard-management-layer > .q1-special .collection-material-name { gap:0; font-weight:500; white-space:normal; }
+  .dashboard-management-layer > .q1-special .collection-material-name svg { display:none; }
+  .dashboard-management-layer > .q1-special .collection-numeric,
+  .dashboard-management-layer > .q1-special .collection-rate { white-space:nowrap; text-align:center; font-variant-numeric:tabular-nums; }
+  .dashboard-management-layer > .q1-special .collection-mobile-follow-toggle button { min-height:32px; padding:0; font-size:11px; font-weight:500; }
+  .dashboard-management-layer > .q1-special .mobile-expand-button { min-height:36px; margin:4px 8px 8px; font-size:12px; font-weight:500; }
+  .dashboard-management-layer > .q1-special .reply-rate-row strong,
+  .dashboard-management-layer > .q1-special .reply-rate-row b { font-weight:600; }
+  .dashboard-management-layer > .q1-special .special-legacy-panel td { font-weight:400; line-height:1.5; }
+}

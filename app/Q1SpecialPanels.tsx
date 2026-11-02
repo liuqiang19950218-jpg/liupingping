@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useDashboardData } from "./dashboard-postgres-data";
 import { differenceReasonsByReconciliation } from "../lib/difference-reason-summary.mjs";
 import type { MaterialStatus, QuarterDifferenceItem, Reconciliation, SpdDashboardData } from "../lib/api/reconciliation-api";
@@ -42,6 +42,18 @@ type CollectionDrillSelection =
   | { type: "material"; material: MaterialDefinition }
   | { type: "reply"; region: string };
 
+const PHONE_LAYOUT_QUERY = "(max-width: 760px)";
+function subscribePhoneLayout(onStoreChange: () => void) {
+  const query = window.matchMedia(PHONE_LAYOUT_QUERY);
+  query.addEventListener("change", onStoreChange);
+  return () => query.removeEventListener("change", onStoreChange);
+}
+function getPhoneLayoutSnapshot() { return window.matchMedia(PHONE_LAYOUT_QUERY).matches; }
+function getServerPhoneLayoutSnapshot() { return false; }
+function usePhoneLayout() {
+  return useSyncExternalStore(subscribePhoneLayout, getPhoneLayoutSnapshot, getServerPhoneLayoutSnapshot);
+}
+
 const S = {
   specialInfo: "\u4e13\u9879\u7ba1\u7406\u4fe1\u606f",
   pageTitle: "\u8d44\u6599\u6536\u96c6\u4e0e\u672a\u5bf9\u8d26\u5ba2\u6237",
@@ -59,7 +71,7 @@ const S = {
   unaccountedEmpty: "\u5f53\u524d\u5b63\u5ea6\u6682\u65e0\u672a\u5bf9\u8d26\u5ba2\u6237\u3002",
   region: "\u533a\u57df",
   customer: "\u5ba2\u6237",
-  note: "\u5dee\u989d\u539f\u56e0\u5907\u6ce8",
+  note: "\u672a\u5bf9\u8d26\u539f\u56e0",
 };
 
 const MATERIALS: readonly MaterialDefinition[] = [
@@ -342,28 +354,29 @@ function ReplyLevelDot({ rank, rate }: { rank: number; rate: number }) {
   return <span className={`reply-rank ${level}`}>{rank}</span>;
 }
 
-function VerticalScrollList({ children, label }: { children: ReactNode; label: string }) {
-  const listRef = useRef<HTMLDivElement>(null);
-  const scroll = (top: number) => listRef.current?.scrollBy({ top, behavior: "smooth" });
+function VerticalScrollList({ children }: { children: ReactNode }) {
   return <div className="special-scroll-shell">
-    <div className="special-scroll-list" ref={listRef}>{children}</div>
-    <div className="special-scroll-actions" aria-label={`${label}\u4e0a\u4e0b\u6eda\u52a8`}>
-      <button type="button" onClick={() => scroll(-180)} aria-label="向上滚动">⌃</button>
-      <button type="button" onClick={() => scroll(180)} aria-label="向下滚动">⌄</button>
-    </div>
+    <div className="special-scroll-list">{children}</div>
   </div>;
 }
 
-function CollectionOverviewCard({ rows, onDrilldown, expanded, onToggle }: { rows: CollectionRow[]; onDrilldown: (material: MaterialDefinition) => void; expanded: boolean; onToggle: () => void }) {
+function CollectionOverviewCard({ rows, onDrilldown, expanded, onToggle, followScope, expandedFollowKey, onToggleFollow }: { rows: CollectionRow[]; onDrilldown: (material: MaterialDefinition) => void; expanded: boolean; onToggle: () => void; followScope: string; expandedFollowKey: string | null; onToggleFollow: (key: string) => void }) {
   return <article className="collection-card overview-card">
     <header className="collection-card-head"><h3>{S.overview} <InfoTip text="展示各类资料的收集完成情况及需重点跟进区域。" /></h3></header>
-    <div className="collection-table-wrap"><table className="collection-overview-table"><thead><tr><th>{S.materialType}</th><th>{S.collected}</th><th>{S.rate}</th><th>{S.followRegions}</th></tr></thead>
-      <tbody>{rows.length ? rows.map((item, index) => <tr key={item.name} className={`collection-drill-row ${!expanded && index >= 4 ? "mobile-collapsed-row" : ""}`} tabIndex={0} onClick={() => onDrilldown(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onDrilldown(item); } }}>
-        <td><div className="collection-material-name"><MaterialIcon kind={item.kind} /><span>{item.name}</span></div></td>
-        <td className="collection-numeric">{item.completed} / {item.total}</td>
-        <td className={`collection-rate ${item.rate < 90 ? "low" : ""}`}>{formatPercent(item.rate)}</td>
-        <td className="collection-follow">{item.followRegions.length ? item.followRegions.map((region) => `${region.name}${formatPercent(region.rate)}`).join("、") : S.allComplete}</td>
-      </tr>) : <tr><td colSpan={4} className="collection-empty">{S.noData}</td></tr>}</tbody>
+    <div className="collection-table-wrap"><table className="collection-overview-table"><thead><tr><th>{S.materialType}</th><th>{S.collected}</th><th>{S.rate}</th><th>{S.followRegions}</th><th className="collection-mobile-follow-toggle-head" aria-label="操作" /></tr></thead>
+      <tbody>{rows.length ? rows.map((item, index) => {
+        const followKey = `${followScope}-${item.kind}-${item.name}`;
+        const followOpen = expandedFollowKey === followKey;
+        const followDetailId = `collection-follow-detail-${index}`;
+        const followText = item.followRegions.length ? item.followRegions.map((region) => `${region.name}${formatPercent(region.rate)}`).join("、") : S.allComplete;
+        return <Fragment key={item.name}><tr className={`collection-drill-row ${!expanded && index >= 4 ? "mobile-collapsed-row" : ""}`} tabIndex={0} onClick={() => onDrilldown(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onDrilldown(item); } }}>
+          <td><div className="collection-material-name"><MaterialIcon kind={item.kind} /><span>{item.name}</span></div></td>
+          <td className="collection-numeric">{item.completed} / {item.total}</td>
+          <td className={`collection-rate ${item.rate < 90 ? "low" : ""}`}>{formatPercent(item.rate)}</td>
+          <td className="collection-follow">{item.followRegions.length ? <span className="collection-follow-list">{item.followRegions.map((region) => <span className="collection-follow-item" key={region.name}><span className="collection-follow-name">{region.name}</span><span className="collection-follow-rate">{formatPercent(region.rate)}</span></span>)}</span> : S.allComplete}</td>
+          <td className="collection-mobile-follow-toggle"><button type="button" aria-expanded={followOpen} aria-controls={followDetailId} onClick={(event) => { event.stopPropagation(); onToggleFollow(followKey); }} onKeyDown={(event) => event.stopPropagation()}>{followOpen ? "收起" : "展开"}</button></td>
+        </tr>{followOpen ? <tr id={followDetailId} className="collection-follow-detail-row"><td colSpan={5}><div className="collection-follow-detail"><strong>{S.followRegions}</strong><span>{followText}</span></div></td></tr> : null}</Fragment>;
+      }) : <tr><td colSpan={5} className="collection-empty">{S.noData}</td></tr>}</tbody>
     </table></div>{rows.length > 4 ? <button type="button" className="mobile-expand-button" aria-expanded={expanded} onClick={onToggle}>{expanded ? `收起全部 ${rows.length} 项⌃` : `展开全部 ${rows.length} 项⌄`}</button> : null}
   </article>;
 }
@@ -416,11 +429,21 @@ function CollectionDrilldownDialog({ data, onClose }: { data: CollectionDrilldow
 
 export function Q1SpecialPanels() {
   const { quarter: selected, rows, differenceItems, materialStatus, spdDashboard, loading, error } = useDashboardData();
+  const phoneLayout = usePhoneLayout();
   const [tab, setTab] = useState<"collection" | "unaccounted">("unaccounted");
+  const [mobileTab, setMobileTab] = useState<"collection" | "reply" | "unaccounted">("collection");
   const [drillSelection, setDrillSelection] = useState<CollectionDrillSelection | null>(null);
   const [collectionExpandedQuarter, setCollectionExpandedQuarter] = useState<string | null>(null);
+  const [unaccountedExpandedQuarter, setUnaccountedExpandedQuarter] = useState<string | null>(null);
+  const [expandedFollowKey, setExpandedFollowKey] = useState<string | null>(null);
   const quarter = selected?.label ?? "";
   const collectionExpanded = collectionExpandedQuarter === selected?.code;
+  const unaccountedExpanded = unaccountedExpandedQuarter === selected?.code;
+  const showCollection = phoneLayout ? mobileTab === "collection" : true;
+  // Desktop presents the three existing management blocks together below the
+  // full-width action list.  Phone navigation remains deliberately unchanged.
+  const showReply = phoneLayout ? mobileTab === "reply" : true;
+  const showUnaccounted = phoneLayout ? mobileTab === "unaccounted" : true;
   const sheet = useMemo(() => pgSheet(rows, materialStatus, differenceItems, selected?.code ?? ""), [rows, materialStatus, differenceItems, selected?.code]);
   const spdSheet = useMemo(() => pgSpdSheet(spdDashboard), [spdDashboard]);
   const data = useMemo(() => withSpdSummary(specialData(sheet, spdSheet), spdDashboard), [sheet, spdSheet, spdDashboard]);
@@ -431,14 +454,18 @@ export function Q1SpecialPanels() {
   if (!quarter) return null;
   if (error) return <section className="q1-special"><p className="collection-empty">无法读取本季度资料看板：{error}</p></section>;
   if (loading) return <section className="q1-special"><p className="collection-empty">正在读取本季度资料看板…</p></section>;
-  return <section className="q1-special">
-    <div className="special-head"><div><p>{quarter} {S.specialInfo}</p><h2>{S.pageTitle}</h2></div><div className="special-tabs" role="tablist" aria-label={S.pageTitle}>
+  return <section className={`q1-special desktop-special-${tab} mobile-special-${mobileTab}`}>
+    <div className="special-head"><div><p>{quarter} {S.specialInfo}</p><h2>{S.pageTitle}</h2></div><div className="special-tabs desktop-special-tabs" role="tablist" aria-label={S.pageTitle}>
       <button role="tab" aria-selected={tab === "collection"} className={tab === "collection" ? "active" : ""} onClick={() => setTab("collection")}>{S.collection}</button>
       <button role="tab" aria-selected={tab === "unaccounted"} className={tab === "unaccounted" ? "active" : ""} onClick={() => setTab("unaccounted")}>{S.unaccounted}</button>
+    </div><div className="special-tabs mobile-special-tabs" role="tablist" aria-label="专项管理情况手机内容切换">
+      <button type="button" role="tab" aria-selected={mobileTab === "collection"} className={mobileTab === "collection" ? "active" : ""} onClick={() => setMobileTab("collection")}>{S.collection}</button>
+      <button type="button" role="tab" aria-selected={mobileTab === "reply"} className={mobileTab === "reply" ? "active" : ""} onClick={() => setMobileTab("reply")}>{S.effectiveReply}</button>
+      <button type="button" role="tab" aria-selected={mobileTab === "unaccounted"} className={mobileTab === "unaccounted" ? "active" : ""} onClick={() => setMobileTab("unaccounted")}>{S.unaccounted}</button>
     </div></div>
-    <div className="collection-dashboard"><CollectionOverviewCard rows={data.collection} expanded={collectionExpanded} onToggle={() => setCollectionExpandedQuarter((value) => value === selected?.code ? null : selected?.code ?? null)} onDrilldown={(material) => setDrillSelection({ type: "material", material })} />
-      {tab === "collection" ? <ReplyRateCard rows={data.replyRates} onDrilldown={(region) => setDrillSelection({ type: "reply", region })} />
-        : <div className="special-legacy-panel"><VerticalScrollList label={S.unaccounted}><table><thead><tr><th>{S.region}</th><th>{S.customer}</th><th>{S.note}</th></tr></thead><tbody>{data.unaccounted.length ? data.unaccounted.map((item) => <tr key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td className="unaccounted-reason" title={item.note || undefined}>{item.note || "—"}</td></tr>) : <tr><td colSpan={3}>{S.unaccountedEmpty}</td></tr>}</tbody></table></VerticalScrollList></div>}
+    <div className="collection-dashboard">{showCollection ? <CollectionOverviewCard rows={data.collection} expanded={collectionExpanded} onToggle={() => setCollectionExpandedQuarter((value) => value === selected?.code ? null : selected?.code ?? null)} followScope={selected?.code ?? ""} expandedFollowKey={expandedFollowKey} onToggleFollow={(key) => setExpandedFollowKey((value) => value === key ? null : key)} onDrilldown={(material) => setDrillSelection({ type: "material", material })} /> : null}
+      {showReply ? <ReplyRateCard rows={data.replyRates} onDrilldown={(region) => setDrillSelection({ type: "reply", region })} /> : null}
+      {showUnaccounted ? <div className={`special-legacy-panel mobile-unaccounted-panel${unaccountedExpanded ? " is-expanded" : ""}`}><VerticalScrollList><table><colgroup><col className="unaccounted-region-column" /><col className="unaccounted-customer-column" /><col className="unaccounted-reason-column" /></colgroup><thead><tr><th>{S.region}</th><th>{S.customer}</th><th>{S.note}</th></tr></thead><tbody>{data.unaccounted.length ? data.unaccounted.map((item, index) => <tr className={!unaccountedExpanded && index >= 4 ? "mobile-collapsed-row" : ""} key={`${item.region}-${item.customer}`}><td>{item.region}</td><td>{item.customer}</td><td className="unaccounted-reason-cell"><span className="unaccounted-reason-text" title={item.note || undefined}>{item.note || "—"}</span></td></tr>) : <tr><td colSpan={3}>{S.unaccountedEmpty}</td></tr>}</tbody></table></VerticalScrollList>{data.unaccounted.length > 4 ? <button type="button" className="mobile-unaccounted-expand" aria-expanded={unaccountedExpanded} onClick={() => setUnaccountedExpandedQuarter((value) => value === selected?.code ? null : selected?.code ?? null)}>{unaccountedExpanded ? "收起⌃" : `展开全部 ${data.unaccounted.length} 家⌄`}</button> : null}</div> : null}
     </div>
     {drilldown && <CollectionDrilldownDialog data={drilldown} onClose={() => setDrillSelection(null)} />}
   </section>;

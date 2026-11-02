@@ -159,3 +159,377 @@
 .aging-detail-dialog .aging-status.cleared{border-color:#86efac;background:#dcfce7;color:#166534}.aging-detail-dialog .aging-status.uncleared{border-color:#fda4af;background:#ffe4e6;color:#be123c}.aging-detail-dialog .aging-status.unaccounted{border-color:#fcd34d;background:#fef3c7;color:#92400e}
 .aging-detail-dialog .aging-show-all{background:#fff;color:#1d4ed8;font-weight:700}.aging-detail-dialog .aging-show-all:hover{background:#eff6ff;color:#1e40af;text-shadow:none}
 .aging-detail-dialog .aging-empty{background:#fff;color:#64748b!important;font-weight:500}
+
+/* Mobile-only financial dashboard: retains the desktop cockpit and its data flows. */
+@media (max-width: 760px) {
+  .cockpit {
+    --cockpit-ink: #102a4c;
+    --cockpit-muted: #64748b;
+    --cockpit-line: #dbe6f2;
+    --cockpit-panel: #fff;
+    color: #1f2937;
+  }
+
+  .cockpit .cockpit-filter,
+  .cockpit .cockpit-conclusion,
+  .cockpit .metric-card,
+  .cockpit .panel {
+    border-color: #dbe6f2;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(27, 54, 97, .06);
+    backdrop-filter: none;
+  }
+
+  .cockpit .cockpit-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    min-height: 0;
+    padding: 12px;
+    border-radius: 13px;
+  }
+
+  .cockpit .cockpit-filter label {
+    min-width: 0;
+    color: #475569;
+    font-size: 12px;
+  }
+
+  .cockpit .cockpit-filter select,
+  .cockpit .cockpit-filter input {
+    height: 38px;
+    min-width: 0;
+    border-color: #d9e5f1;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: none;
+    color: #1f2937;
+    font-size: 13px;
+  }
+
+  .cockpit .cockpit-filter input::placeholder { color: #94a3b8; }
+  .cockpit .cockpit-filter select:focus,
+  .cockpit .cockpit-filter input:focus { border-color: #60a5fa; outline: 2px solid rgba(37, 99, 235, .12); }
+  .cockpit .cockpit-filter .customer-search { grid-column: span 2; }
+  .cockpit .cockpit-filter .cockpit-follow-filter { display: none; }
+
+  .cockpit .filter-actions {
+    display: grid;
+    grid-column: span 2;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .cockpit .filter-actions button {
+    min-width: 0;
+    height: 38px;
+    padding: 0 5px;
+    border-color: #bdd8fb;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: none;
+    color: #1769e0;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .cockpit .filter-actions .primary {
+    border-color: #1677ff;
+    background: #1677ff;
+    color: #fff;
+  }
+
+  .cockpit .cockpit-conclusion {
+    display: block;
+    min-height: 0;
+    min-width: 0;
+    margin: 11px 0;
+    padding: 12px 13px;
+    border-color: #d6e7fb;
+    border-radius: 12px;
+    background: #f1f7ff;
+    color: #284665;
+    font-size: 13px;
+    letter-spacing: normal;
+    line-height: 1.65;
+    overflow-wrap: normal;
+    white-space: normal;
+    word-break: normal;
+    writing-mode: horizontal-tb;
+  }
+
+  .cockpit .cockpit-conclusion::after { display: none; }
+  .cockpit .cockpit-conclusion b,
+  .cockpit .cockpit-conclusion em,
+  .cockpit .cockpit-conclusion strong {
+    display: inline;
+    white-space: normal;
+    word-break: keep-all;
+  }
+  .cockpit .cockpit-conclusion em { color: #1769e0; }
+  .cockpit .cockpit-conclusion strong { color: #ef4444; text-shadow: none; }
+
+  .cockpit .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .cockpit .metric-card {
+    min-height: 126px;
+    padding: 13px 12px 12px;
+    overflow: hidden;
+    border-radius: 13px;
+    color: #1f2937;
+  }
+
+  .cockpit .metric-card::before { display: none; }
+  .cockpit .metric-card > span:not(.metric-icon) { max-width: calc(100% - 28px); color: #475569; font-size: 12px; }
+  .cockpit .metric-card b,
+  .cockpit .metric-card.blue b,
+  .cockpit .metric-card.green b,
+  .cockpit .metric-card.red b,
+  .cockpit .metric-card.orange b,
+  .cockpit .metric-card.purple b {
+    margin: 16px 0 9px;
+    overflow: hidden;
+    color: #102a4c;
+    font-size: clamp(20px, 5.8vw, 25px);
+    letter-spacing: -.04em;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    text-shadow: none;
+    white-space: nowrap;
+  }
+  .cockpit .metric-card.green b { color: #16835f; }
+  .cockpit .metric-card.orange b { color: #b7791f; }
+  .cockpit .metric-card.red b { color: #dc3d45; }
+  .cockpit .metric-card.purple b { color: #6750a4; }
+  .cockpit .metric-card i { color: #64748b; font-size: 11px; line-height: 1.45; }
+  .cockpit .metric-icon,
+  .cockpit .metric-card.green .metric-icon,
+  .cockpit .metric-card.orange .metric-icon,
+  .cockpit .metric-card.red .metric-icon,
+  .cockpit .metric-card.purple .metric-icon {
+    border: 0;
+    background: #eaf3ff;
+    box-shadow: none;
+    color: #1677ff !important;
+  }
+
+  .cockpit .cockpit-three {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .cockpit .panel { border-radius: 13px; }
+  .cockpit .panel h3 {
+    min-height: 46px;
+    padding: 0 13px;
+    border-bottom-color: #e7eef6;
+    color: #102a4c;
+    font-size: 15px;
+    text-shadow: none;
+  }
+  .cockpit .panel h3 small,
+  .cockpit .aging-footnote { color: #64748b; }
+
+  .cockpit .difference-aging-panel { min-height: 0; }
+  .cockpit .aging-list { gap: 0; padding: 4px 13px 8px; }
+  .cockpit .aging-row {
+    grid-template-columns: 74px minmax(32px, 1fr) minmax(62px, auto) 38px;
+    gap: 6px;
+    min-height: 48px;
+    border-bottom-color: #edf2f7;
+    color: #1f2937;
+  }
+  .cockpit .aging-row:hover:not(:disabled) { background: #f8fbff; }
+  .cockpit .aging-name strong,
+  .cockpit .aging-amount { color: #102a4c; text-shadow: none; }
+  .cockpit .aging-name i,
+  .cockpit .aging-percent { color: #64748b; }
+  .cockpit .aging-track,
+  .cockpit .region-panel .rate i { background: #e8eff7; }
+  .cockpit .aging-track span,
+  .cockpit .region-panel .rate.blue i { background: linear-gradient(90deg, #1677ff, #55c7f7); box-shadow: none; }
+  .cockpit .aging-row.attention .aging-track span,
+  .cockpit .region-panel .rate.orange i { background: #f7b84b; }
+  .cockpit .aging-row.highAttention .aging-track span { background: #f7934c; }
+  .cockpit .aging-row.highRisk .aging-track span,
+  .cockpit .region-panel .rate.red i { background: #ef5b64; }
+
+  .cockpit .region-panel .table-wrap {
+    max-width: 100%;
+    max-height: 270px;
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior-x: contain;
+  }
+  .cockpit .region-panel table { min-width: 620px; }
+  .cockpit .panel table,
+  .cockpit .panel td,
+  .cockpit .panel th { color: #1f2937; }
+  .cockpit .panel th { border-color: #e1eaf3; background: #f5f8fc; color: #52647e; }
+  .cockpit .panel td { border-color: #edf2f7; }
+  .cockpit .panel tbody tr:not(.total):hover,
+  .cockpit .panel tbody tr:not(.total):hover td { background: #f5f9ff; color: #1f2937; }
+  .cockpit .panel .total td { background: #f1f6fc; color: #102a4c; }
+  .cockpit .region-panel .rate { color: #1f2937; }
+  .cockpit .region-panel .rate.green { color: #16835f; }
+  .cockpit .region-panel .rate.orange { color: #b7791f; }
+  .cockpit .region-panel .rate.red { color: #dc3d45; }
+
+  .cockpit .donut-panel { grid-column: auto; }
+  .cockpit .donut-wrap {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 12px;
+    background: #fff;
+  }
+  .cockpit .difference-chart { width: 132px; height: 132px; flex: 0 0 132px; filter: none; }
+  .cockpit .donut-wrap > div { min-width: min(100%, 185px); flex: 1 1 180px; }
+  .cockpit .legend { border-bottom-color: #edf2f7; background: transparent; color: #475569; font-size: 11px; }
+  .cockpit .legend:hover { background: #f5f9ff; color: #1f2937; }
+  .cockpit .legend b { color: #102a4c; }
+  .cockpit .legend small { color: #64748b; }
+
+  /* Cockpit drill-downs only: the existing desktop theme remains untouched. */
+  .cockpit-modal,
+  .aging-drawer-overlay { background: rgba(15, 35, 65, .3); backdrop-filter: blur(3px); }
+  .cockpit .cockpit-detail-dialog,
+  .cockpit .aging-detail-dialog {
+    border-color: #dbe6f2;
+    background: #fff;
+    box-shadow: 0 18px 46px rgba(27, 54, 97, .18);
+    color: #1f2937;
+  }
+  .cockpit .cockpit-detail-head {
+    border-bottom-color: #e3ebf4;
+    background: #fff;
+  }
+  .cockpit .cockpit-detail-head span { color: #1677ff; }
+  .cockpit .cockpit-detail-head h2 { color: #102a4c; }
+  .cockpit .cockpit-detail-head p { color: #64748b; }
+  .cockpit .cockpit-detail-head .modal-close,
+  .cockpit .modal-close {
+    border-color: #d5e1ee;
+    background: #fff;
+    color: #475569;
+  }
+  .cockpit .cockpit-detail-head .modal-close:hover,
+  .cockpit .modal-close:hover { border-color: #9cc4f7; background: #f4f8fd; color: #102a4c; }
+  .cockpit .cockpit-detail-table-wrap,
+  .cockpit .aging-drawer-body { background: #fff; }
+  .cockpit .cockpit-detail-table th,
+  .cockpit .aging-invoice-table th { border-color: #dfe8f2; background: #f3f7fb; color: #475569; }
+  .cockpit .cockpit-detail-table td,
+  .cockpit .aging-invoice-table td { border-color: #e8eef5; background: #fff; color: #1f2937; }
+  .cockpit .cockpit-detail-table tbody tr:hover td,
+  .cockpit .aging-invoice-table tbody tr:hover td { background: #f5f9ff; color: #1f2937; }
+  .cockpit .detail-customer,
+  .cockpit .primary-money,
+  .cockpit .aging-customer-main b,
+  .cockpit .aging-customer-metrics strong { color: #102a4c !important; }
+  .cockpit .difference-money,
+  .cockpit .aging-invoice-money,
+  .cockpit .aging-invoice-days,
+  .cockpit .highRisk .aging-customer-metrics > span:first-child strong { color: #dc3d45 !important; }
+  .cockpit .aging-summary-strip,
+  .cockpit .aging-customer-group { border-color: #dbe6f2; background: #fff; }
+  .cockpit .aging-summary-strip > div { border-color: #e5edf5; }
+  .cockpit .aging-summary-strip small,
+  .cockpit .aging-customer-metrics > span,
+  .cockpit .aging-reason,
+  .cockpit .aging-drawer-summary,
+  .cockpit .aging-pagination { color: #64748b; }
+  .cockpit .aging-summary-strip strong { color: #102a4c; }
+  .cockpit .aging-customer-head:hover { background: #f6f9fd; }
+  .cockpit .aging-customer-main span { background: #f1f5f9; color: #475569; }
+  .cockpit .aging-invoice-table-wrap { border-color: #e1eaf3; }
+  .cockpit .aging-invoice-link,
+  .cockpit .aging-show-all,
+  .cockpit .aging-expand { color: #1769e0; text-shadow: none; }
+  .cockpit .aging-invoice-link:hover,
+  .cockpit .aging-show-all:hover,
+  .cockpit .aging-expand:hover { color: #124fa7; text-shadow: none; }
+  .cockpit .aging-drawer-filters select,
+  .cockpit .aging-drawer-filters input {
+    border-color: #d9e5f1;
+    background: #fff;
+    box-shadow: none;
+    color: #1f2937;
+  }
+  .cockpit .aging-filter-reset { border-color: #c9d9eb; background: #fff; color: #475569; }
+  .cockpit .aging-filter-query { border-color: #1677ff; background: #1677ff; color: #fff; }
+}
+
+@media (max-width: 390px) {
+  .cockpit .filter-actions button { font-size: 11px; }
+  .cockpit .aging-row { grid-template-columns: 68px minmax(28px, 1fr) minmax(56px, auto) 34px; gap: 4px; }
+  .cockpit .aging-amount,
+  .cockpit .aging-percent { font-size: 11px; }
+}
+
+/* Mobile aging drill-downs keep each invoice readable without changing the
+   existing bucket calculation or the desktop detail tables. */
+@media (max-width:760px) {
+  .aging-drawer-overlay { padding:0; align-items:stretch; }
+  .aging-drawer-overlay .aging-detail-dialog,
+  .cockpit .cockpit-detail-dialog { display:flex; flex-direction:column; width:100%; min-width:0; max-width:100vw; height:100dvh; max-height:100dvh; border-radius:18px 18px 0 0; }
+  .aging-drawer-overlay .cockpit-detail-head,
+  .cockpit .cockpit-detail-head { position:sticky; top:0; z-index:5; flex:none; align-items:center; padding:14px 16px; }
+  .aging-drawer-overlay .cockpit-detail-head > div,
+  .cockpit .cockpit-detail-head > div { min-width:0; }
+  .aging-drawer-overlay .cockpit-detail-head h2,
+  .cockpit .cockpit-detail-head h2 { font-size:18px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .aging-drawer-overlay .modal-close,
+  .cockpit .cockpit-detail-head .modal-close { position:static; display:grid; flex:0 0 44px; place-items:center; width:44px; height:44px; padding:0; border:1px solid #d5e1ee; border-radius:50%; background:#fff; color:#102a4c; font-size:28px; line-height:1; }
+  .aging-drawer-overlay .aging-drawer-body,
+  .cockpit .cockpit-detail-table-wrap { min-height:0; flex:1 1 auto; overflow:auto; overscroll-behavior:contain; }
+  .aging-drawer-overlay .aging-drawer-filters { grid-template-columns:1fr 1fr; padding:12px; }
+  .aging-drawer-overlay .aging-drawer-filters input { grid-column:1 / -1; min-width:0; }
+  .aging-drawer-overlay .aging-customer-head { align-items:flex-start; gap:10px; padding:13px; }
+  .aging-drawer-overlay .aging-customer-main,
+  .aging-drawer-overlay .aging-customer-metrics { min-width:0; }
+  .aging-drawer-overlay .aging-customer-main b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .aging-drawer-overlay .aging-customer-metrics { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  .aging-drawer-overlay .aging-open-reconciliation { grid-column:1 / 2; min-height:40px; }
+  .aging-drawer-overlay .aging-expand { grid-column:2 / 3; min-height:40px; }
+  .aging-drawer-overlay .aging-invoice-table-wrap { overflow:visible; border:0; }
+  .aging-drawer-overlay .aging-invoice-table,
+  .aging-drawer-overlay .aging-invoice-table tbody,
+  .aging-drawer-overlay .aging-invoice-table tr,
+  .aging-drawer-overlay .aging-invoice-table td { display:block; width:100%; min-width:0; box-sizing:border-box; }
+  .aging-drawer-overlay .aging-invoice-table thead { display:none; }
+  .aging-drawer-overlay .aging-invoice-table tr { margin:10px; padding:12px; border:1px solid #dbe5ef; border-radius:12px; background:#fff; }
+  .aging-drawer-overlay .aging-invoice-table td { min-height:0; padding:5px 0 5px 92px; border:0; background:#fff; color:#1f2937; line-height:1.55; white-space:normal; text-align:left; overflow-wrap:break-word; word-break:break-word; }
+  .aging-drawer-overlay .aging-invoice-table td::before { position:absolute; left:0; width:82px; color:#64748b; content:""; font-size:12px; }
+  .aging-drawer-overlay .aging-invoice-table td { position:relative; }
+  .aging-drawer-overlay .aging-invoice-table td:nth-child(1)::before { content:"发票日期"; }
+  .aging-drawer-overlay .aging-invoice-table td:nth-child(2)::before { content:"发票号"; }
+  .aging-drawer-overlay .aging-invoice-table td:nth-child(3)::before { content:"差额金额"; }
+  .aging-drawer-overlay .aging-invoice-table td:nth-child(4)::before { content:"差额说明"; }
+  .aging-drawer-overlay .aging-invoice-table td:nth-child(5)::before { content:"账龄"; }
+  .aging-drawer-overlay .aging-invoice-table td:nth-child(6)::before { content:"对账状态"; }
+  .aging-drawer-overlay .aging-invoice-link,
+  .aging-drawer-overlay .aging-reason { display:block; overflow:visible; max-width:none; white-space:normal; text-overflow:clip; overflow-wrap:anywhere; word-break:break-word; }
+  .aging-drawer-overlay .aging-show-all { min-height:44px; margin:2px 10px 12px; }
+}
+
+/* Strict scope: top filter only. Metrics, charts and drill-downs are untouched. */
+@media (max-width:760px) {
+  .cockpit > .cockpit-filter { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:12px; border-radius:12px; }
+  .cockpit > .cockpit-filter > label { display:grid; min-width:0; gap:5px; font-size:11px; font-weight:400; color:#60718d; }
+  .cockpit > .cockpit-filter > .customer-search { grid-column:auto; }
+  .cockpit > .cockpit-filter > label:nth-child(1) { order:1; }
+  .cockpit > .cockpit-filter > label:nth-child(2) { order:3; }
+  .cockpit > .cockpit-filter > label:nth-child(3) { order:5; }
+  .cockpit > .cockpit-filter > label:nth-child(4) { order:2; }
+  .cockpit > .cockpit-filter > label:nth-child(5) { order:4; }
+  .cockpit > .cockpit-filter > label:nth-child(6) { order:6; }
+  .cockpit > .cockpit-filter > .cockpit-follow-filter { order:7; }
+  .cockpit > .cockpit-filter > label > select,
+  .cockpit > .cockpit-filter > label > input { width:100%; min-width:0; height:38px; padding:0 7px; border:1px solid #d5e1ee; border-radius:7px; background:#fff; color:#102247; font-size:12px; font-weight:400; }
+  .cockpit > .cockpit-filter > .filter-actions { order:8; display:grid; grid-column:1 / -1; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; width:100%; margin:0; }
+  .cockpit > .cockpit-filter > .filter-actions > button { width:100%; min-width:0; height:38px; padding:0 4px; border-radius:7px; font-size:11px; font-weight:500; white-space:normal; }
+}

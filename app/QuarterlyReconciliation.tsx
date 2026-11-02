@@ -36,6 +36,7 @@ import {
 } from "../lib/difference-category-adapter.mjs";
 import { MAX_IMAGE_BYTES as MAX_ATTACHMENT_IMAGE_BYTES, prepareAttachmentImage } from "../lib/attachment-image-optimization.mjs";
 import "./reconciliation.css";
+import "./reconciliation-mobile.css";
 import "./reconciliation-writeoff-section.css";
 import "./data-import-tech.css";
 
@@ -2119,6 +2120,30 @@ export function QuarterlyReconciliation({
                 </tbody>
               </table>
             </div>
+            <section className="mobile-reconciliation-list" aria-label="客户对账明细列表">
+              {pagedRows.length ? pagedRows.map(({ row, id }) => {
+                const customerAmount = row[customerBookIndex];
+                const differenceAmount = num(row[index(T.difference)]);
+                const status = clearedIndex >= 0 ? String(row[clearedIndex] ?? "") : "";
+                return <article className="mobile-reconciliation-card" key={id}>
+                  <div className="mobile-reconciliation-card-head">
+                    <span className="mobile-row-number">{row[0] || "—"}</span>
+                    <div><h3>{String(row[customerIndex] ?? T.customerFallback)}</h3><span className="mobile-region-tag">{String(row[regionIndex] ?? "—")}</span></div>
+                    {status && <span className={`status-badge ${clearedBadgeClass(status)}`}>{status}</span>}
+                  </div>
+                  <div className="mobile-reconciliation-meta"><span>账套：<b>{String(row[accountIndex] ?? "—")}</b></span><span>对账负责人：<b>{String(row[responsibleIndex] ?? "—")}</b></span></div>
+                  <div className="mobile-reconciliation-amounts">
+                    <span>公司应收<b>{money(num(row[companyIndex]))}</b></span>
+                    <span>客户账面金额<b>{displayTableValue(T.customerBook, customerAmount, customerAmount)}</b></span>
+                    <span className={differenceAmount ? "has-difference" : ""}>对账差额<b>{displayTableValue(T.difference, row[index(T.difference)], customerAmount)}</b></span>
+                  </div>
+                  <div className="mobile-reconciliation-footer">
+                    <span>在途 {displayTableValue(T.transit, row[index(T.transit)], customerAmount)}　退票 {displayTableValue(T.returned, row[index(T.returned)], customerAmount)}　丢票 {displayTableValue(T.lost, row[index(T.lost)], customerAmount)}</span>
+                    <button className="fill-button" type="button" onClick={() => open(id)}>{T.fill}<i aria-hidden="true">›</i></button>
+                  </div>
+                </article>;
+              }) : <p className="mobile-reconciliation-empty">暂无符合当前筛选条件的对账记录</p>}
+            </section>
             <div className="table-pagination">
               <span>
                 共 {shown.length} 条，第 {page} / {pageCount} 页
@@ -2805,6 +2830,7 @@ function DifferenceDetailDrawer({
           <tfoot><tr><td colSpan={meta.invoice ? 6 : 4}>合计：{meaningfulEntries.length} 笔</td><td>{money(subtotal)}</td></tr></tfoot>
         </table>
       </div>
+      <div className="drawer-mobile-save"><span>合计：{meaningfulEntries.length} 笔　<b>金额：{money(subtotal)}</b></span><button type="button" onClick={onClose}>返回差额汇总</button></div>
     </aside>
   );
 }

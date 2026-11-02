@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SidebarIcon } from "./SidebarIcon";
 import { QuarterlyReconciliation } from "./QuarterlyReconciliation";
 import { ReconciliationHistoryDashboard } from "./ReconciliationHistoryDashboard";
 import { Q1ActionPanel } from "./Q1ActionPanel";
@@ -67,16 +68,17 @@ export default function Home() {
 
   return <DashboardDataProvider><main className={`app-shell ${view === "current" ? "reconciliation-page" : ""}`}>
     <aside className="side-nav">
-      <div className="side-brand"><i>◈</i><div><strong>{T.brand}</strong><span>{T.sub}</span></div></div>
-      <nav>
-        <button className={view === "history" ? "selected" : ""} onClick={() => setView("history")}><i>◈</i>{T.history}</button>
-        <button className={view === "current" ? "selected" : ""} onClick={() => setView("current")}><i>≡</i>{T.current}</button>
-        <button className={view === "tracker" ? "selected" : ""} aria-current={view === "tracker" ? "page" : undefined} onClick={() => openTracker()}><i>●</i>{T.tracker}</button>
-        <button className={view === "cockpit" && tab === "cockpit" ? "selected" : ""} onClick={() => cockpit("cockpit")}><i>◴</i>{T.cockpit}</button>
-        <button className={view === "problem" ? "selected" : ""} aria-current={view === "problem" ? "page" : undefined} onClick={() => setView("problem")}><i>!</i>{T.issue}</button>
-        <button className={view === "import" ? "selected" : ""} onClick={() => setView("import")}><i>↑</i>{T.import}</button>
-        <button onClick={() => setView("current")}><i>⚙</i>系统设置</button>
+      <div className="side-brand"><span className="sidebar-logo-wrap" aria-hidden="true"><span className="sidebar-logo-glow" /><svg className="sidebar-logo" viewBox="0 0 48 50"><image href="/sidebar-neon/logo.png" width="48" height="50" /></svg></span><div><strong>{T.brand}</strong><span>AR RECONCILIATION<br />MANAGEMENT</span></div></div>
+      <nav aria-label="桌面业务导航">
+        <button className={view === "history" ? "selected" : ""} onClick={() => setView("history")}><i><SidebarIcon name="dashboard" solid={view === "history"} /></i>{T.history}</button>
+        <button className={view === "current" ? "selected" : ""} onClick={() => setView("current")}><i><SidebarIcon name="document" solid={view === "current"} /></i><span className="sidebar-long-label">{T.current}</span></button>
+        <button className={view === "tracker" ? "selected" : ""} aria-current={view === "tracker" ? "page" : undefined} onClick={() => openTracker()}><i><SidebarIcon name="customer" solid={view === "tracker"} /></i>{T.tracker}</button>
+        <button className={view === "cockpit" && tab === "cockpit" ? "selected" : ""} onClick={() => cockpit("cockpit")}><i><SidebarIcon name="clock" solid={view === "cockpit" && tab === "cockpit"} /></i>{T.cockpit}</button>
+        <button className={view === "problem" ? "selected" : ""} aria-current={view === "problem" ? "page" : undefined} onClick={() => setView("problem")}><i><SidebarIcon name="issue" solid={view === "problem"} /></i>{T.issue}</button>
+        <button className={view === "import" ? "selected" : ""} onClick={() => setView("import")}><i><SidebarIcon name="upload" solid={view === "import"} /></i>{T.import}</button>
+        <button onClick={() => setView("current")}><i><SidebarIcon name="settings" /></i>系统设置</button>
       </nav>
+      <div className="sidebar-illustration" aria-hidden="true" />
       <div className="side-note"><b>让对账更简单</b><span>让数据更有价值</span></div>
     </aside>
     <section className="work-area">

@@ -1,3 +1,703 @@
 .side-nav nav{gap:7px}.side-nav nav button{height:46px}.side-note{margin-top:30px}
 
 @media (min-width:761px){.app-shell{height:100dvh;min-height:0;overflow:hidden}.side-nav{height:100dvh;min-height:0;overflow-y:auto;overscroll-behavior:contain}.work-area{display:flex;min-height:0;height:100dvh;flex-direction:column;overflow:hidden}.work-header{flex:0 0 auto}.work-content{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain}}
+
+/* Desktop white-and-navy business theme.  This final desktop-only layer keeps
+   the existing DOM and all phone rules intact while removing legacy cockpit
+   glow, grids, and dark panel surfaces. */
+@media (min-width:761px) {
+  :root { --desktop-ink:#142b45; --desktop-muted:#6e7f94; --desktop-line:#dce5ee; --desktop-soft:#f5f8fb; --desktop-blue:#285c91; --desktop-navy:#08253f; }
+  .app-shell { background:#fff!important; background-image:none!important; color:var(--desktop-ink)!important; }
+  /* V1.6.5.5 desktop sidebar: one replacement of the previous sidebar theme. */
+  .app-shell { grid-template-columns:240px minmax(0,1fr); }
+  .side-nav {
+    display:flex; flex-direction:column; position:relative; isolation:isolate;
+    padding:0; border-right:0!important; overflow-x:hidden;
+    background:radial-gradient(ellipse at 100% 32%,#032252 0%,transparent 56%),linear-gradient(160deg,#031a3e 0%,#001333 58%,#001c49 100%)!important;
+    box-shadow:inset -2px 0 0 #1875d04d,2px 0 8px #0a39751a!important;
+  }
+  .side-nav:before {
+    display:block!important; position:absolute; inset:76px 0 auto; height:50px;
+    background:url('/sidebar-neon/top-arc.png') center/100% 100% no-repeat;
+    content:""; pointer-events:none; z-index:-1; mask-image:linear-gradient(transparent,#000 10%,#000 90%,transparent);
+  }
+  .side-nav:after {
+    position:absolute; top:320px; left:-155px; width:370px; height:260px;
+    border-right:1px solid #0062d32e; border-bottom:1px solid #0062d32e;
+    border-radius:50%; transform:rotate(-25deg); content:""; pointer-events:none; z-index:-1;
+  }
+  .side-brand { flex:none; height:130px; padding:22px 20px 55px; gap:10px; align-items:flex-start; }
+  .side-brand .sidebar-logo-wrap { position:relative; display:block; flex:0 0 48px; width:48px; height:50px; margin:0; line-height:0; isolation:isolate; overflow:visible; }
+  .side-brand .sidebar-logo-glow { position:absolute; z-index:-1; inset:4px; border-radius:48%; background:radial-gradient(circle,#42dcffba 0 23%,#167eff82 45%,transparent 73%); filter:blur(6px); transform:scale(1.28); pointer-events:none; }
+  .side-brand .sidebar-logo { position:relative; z-index:1; display:block; width:48px; height:50px; filter:drop-shadow(0 1px 1px #06183f) drop-shadow(0 0 3px #27c9ffbd); clip-path:polygon(50% 6%,90% 28%,90% 72%,50% 94%,8% 72%,8% 28%); }
+  .side-brand>div { padding-top:4px; min-width:0; }
+  .side-brand strong { color:#f7fbff!important; font-size:16px; font-weight:800; line-height:22px; white-space:nowrap; letter-spacing:-.45px; text-shadow:0 1px 5px #2e83df33; }
+  .side-brand span { margin-top:5px; color:#a4bddb!important; font-size:9px; font-weight:500; line-height:12px; letter-spacing:.2px; }
+  .side-nav nav { flex:none; display:grid; gap:6px; margin:0 16px; z-index:1; }
+  .side-nav nav button {
+    position:relative; width:100%; height:54px; padding:0 22px 0 7px; gap:14px;
+    border:1px solid transparent!important; border-radius:9px; background:transparent!important;
+    color:#c1d7ef!important; font-size:16px; font-weight:500; line-height:1.2; white-space:nowrap;
+    box-shadow:none; transition:background .16s ease,border-color .16s ease,box-shadow .16s ease;
+  }
+  .side-nav nav button i {
+    flex:0 0 38px; width:38px; height:40px; border-radius:15px;
+    background:linear-gradient(140deg,#123967,#0c2d5a)!important; color:#b6d9ff!important;
+  }
+  .side-nav nav button i svg { display:block; width:23px; height:23px; }
+  .side-nav nav button:nth-child(4) i,.side-nav nav button:nth-child(5) i,.side-nav nav button:nth-child(6) i { color:#fff!important; }
+  .side-nav .sidebar-long-label { font-size:13px; letter-spacing:-.2px; }
+  .side-nav nav button:after { position:absolute; right:14px; top:50%; width:7px; height:7px; border-top:1.4px solid currentColor; border-right:1.4px solid currentColor; transform:translateY(-50%) rotate(45deg); content:""; color:#82aedc; }
+  .side-nav nav button:hover { background:linear-gradient(90deg,#11477899,#08285988)!important; color:#fff!important; }
+  .side-nav nav button.selected {
+    border-color:#48dcff!important; background:linear-gradient(110deg,#087eff 0%,#1555b5 47%,#073780 100%)!important;
+    box-shadow:-1px 0 2px #d1ffff,inset 1px 0 3px #8efaff,inset 0 0 8px #168fff,0 0 3px #00c8ff,0 0 12px #006fff80!important;
+    color:#fff!important; font-weight:800;
+  }
+  .side-nav nav button.selected i { background:transparent!important; color:#fff!important; filter:drop-shadow(0 0 5px #83f8ff88); }
+  .side-nav nav button.selected i .sidebar-solid-icon { width:22px; height:22px; fill:#fff; filter:drop-shadow(0 1px 1px #0050ab); }
+  .side-nav nav button.selected:after { color:#fff; filter:drop-shadow(0 0 3px #47efff); }
+  .side-nav nav button:focus-visible { outline:2px solid #a4f7ff; outline-offset:4px; }
+  .side-nav .sidebar-illustration { flex:1 1 auto; min-height:180px; max-height:300px; width:100%; margin-top:auto; background:url('/sidebar-neon/illustration.png') center/contain no-repeat; mask-image:linear-gradient(transparent,#000 4%,#000 93%,transparent); pointer-events:none; }
+  .side-note { position:relative; inset:auto; flex:none; display:grid; gap:4px; margin:0; padding:0 30px 48px; border:0!important; border-radius:0; background:transparent!important; color:#aeccec!important; font-size:14px; line-height:21px; letter-spacing:.04em; text-align:left!important; }
+  .side-note b { color:#fff!important; font-size:20px; font-weight:800; line-height:28px; letter-spacing:-.4px; text-shadow:0 1px 6px #0c6dce,0 0 12px #3cbcff77; }
+  .side-note:before { display:none!important; }
+  .side-note:after { display:block!important; position:static; width:48px; height:3px; margin-top:11px; border-radius:3px; background:#15cfff; box-shadow:0 0 9px #16caff,55px 0 0 -1px #0754ab,77px 0 0 -1px #073e82,101px 0 0 -1px #063674; content:""; opacity:1; transform:none; animation:none; }
+  @media (max-height:840px) {
+    .side-brand { height:112px; padding-top:18px; padding-bottom:37px; }
+    .side-nav nav { gap:5px; }
+    .side-nav nav button { height:50px; }
+    .side-nav .sidebar-illustration { min-height:132px; }
+    .side-note { padding-bottom:25px; }
+  }
+  .work-header:before,.work-header:after { display:none!important; }
+
+  .work-area,.work-content { background:#fff!important; color:var(--desktop-ink)!important; }
+  .work-header { border-bottom:1px solid var(--desktop-line)!important; background:#fff!important; box-shadow:none!important; }
+  .work-header h1 { color:#142b45!important; text-shadow:none!important; }.work-header p,.header-status small { color:var(--desktop-muted)!important; }
+  .header-status span { border-color:#d9e5ef!important; background:#f5f8fb!important; color:#315b82!important; }.header-status .header-user { color:#315b82!important; }
+  .global-quarter-filter,.quarter-archive-control { color:var(--desktop-muted)!important; }.global-quarter-filter label,.quarter-archive-control label { color:#294967!important; }
+  .global-quarter-filter select,.quarter-archive-control select,select,input,textarea { border-color:#cfdbe6!important; background:#fff!important; color:#243b54!important; box-shadow:none!important; }
+  .global-quarter-filter select:focus,select:focus,input:focus,textarea:focus { border-color:#6790b6!important; outline:2px solid rgba(73,121,163,.14)!important; }
+
+  /* Shared dashboard, KPI and table surfaces across the six existing pages. */
+  .work-content :is(.history-dashboard,.q1-actions,.q1-special,.collection-card,.special-legacy-panel,.overview-card,.reply-card,.history-trend-card,.history-region-card,.management-cockpit,.cockpit-card,.dashboard-card,.dashboard-overview,.problem-dashboard,.problem-dashboard-layout,.unresolved-followup-dashboard,.uf-page,.data-import-tool,.local-tool,.detail-table-tool,.reconciliation-toolbar,.local-toolbar,.import-kpi-card,.import-history-card,.import-status,.quarter-archive-download,.quarter-archive-control,.issue-card,.pfd-drawer,.import-detail-drawer,.import-operation-drawer,.sales-modal,.difference-detail-drawer) { border-color:var(--desktop-line)!important; background:#fff!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:var(--desktop-ink)!important; }
+  .work-content :is(.history-dashboard,.q1-actions,.q1-special,.collection-card,.special-legacy-panel,.overview-card,.reply-card,.history-trend-card,.history-region-card,.management-cockpit,.cockpit-card,.dashboard-card,.dashboard-overview,.problem-dashboard,.unresolved-followup-dashboard,.data-import-tool,.local-tool,.detail-table-tool,.reconciliation-toolbar,.local-toolbar,.import-kpi-card,.import-history-card,.import-status,.quarter-archive-download,.quarter-archive-control) { border-radius:12px!important; }
+  .work-content :is(h2,h3,h4,.card-title,.collection-card-head h3,.special-head h2,.import-dashboard-heading h3,.import-history-head h3) { color:#17324d!important; text-shadow:none!important; }
+  .work-content :is(p,small,.muted,.subtitle,.eyebrow,.collection-follow,.history-card-subtitle) { text-shadow:none!important; }
+  .work-content :is(.q1-actions,.q1-special,.collection-card,.special-legacy-panel,.history-dashboard,.history-trend-card,.history-region-card,.management-cockpit,.problem-dashboard,.unresolved-followup-dashboard,.data-import-tool) :is(th) { border-color:#dce5ee!important; background:#f4f7fa!important; color:#3c536c!important; box-shadow:none!important; }
+  .work-content :is(.q1-actions,.q1-special,.collection-card,.special-legacy-panel,.history-dashboard,.history-trend-card,.history-region-card,.management-cockpit,.problem-dashboard,.unresolved-followup-dashboard,.data-import-tool) :is(td) { border-color:#e7edf3!important; background:#fff!important; color:#284057!important; }
+  .work-content :is(table,tbody,tr) { color:#284057!important; }.work-content tbody tr:nth-child(even) td { background:#fbfcfe!important; }
+  .work-content tbody tr:hover td { background:#f1f6fa!important; box-shadow:none!important; }
+  .work-content :is(.action-table,.collection-table-wrap,.special-scroll-list,.history-table,.local-table,.import-history-table-wrap,.pfd-table-wrap,.difference-drawer-table) { border-color:#dce5ee!important; background:#fff!important; box-shadow:none!important; }
+  .work-content :is(.action-table,.collection-table-wrap,.special-scroll-list,.history-table,.local-table,.import-history-table,.difference-drawer-table) :is(th) { background:#f3f7fa!important; color:#3b536c!important; }
+  .work-content :is(.action-table,.collection-table-wrap,.special-scroll-list,.history-table,.local-table,.import-history-table,.difference-drawer-table) :is(td) { background:#fff!important; color:#294158!important; }
+  .work-content :is(.kpi-card,.summary-card,.overview-stat,.import-kpi-card,.management-kpi-card,.dashboard-kpi-card) { border-color:#dbe5ee!important; background:#fff!important; box-shadow:0 3px 12px rgba(29,61,91,.055)!important; }
+  .work-content :is(.kpi-card,.summary-card,.overview-stat,.import-kpi-card,.management-kpi-card,.dashboard-kpi-card) strong { color:#183b5c!important; text-shadow:none!important; }
+  .work-content :is(.chart-card,.cockpit-chart-card,.trend-card,.history-trend-card,.history-region-card) { border-color:#dce5ee!important; background:#fff!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; }
+
+  /* Controls retain existing behavior while sharing one restrained business treatment. */
+  .work-content button:not(.mobile-expand-button):not(.mobile-unaccounted-expand),.pfd-drawer button,.import-detail-drawer button,.import-operation-drawer button { border-color:#c9d8e5!important; background:#fff!important; color:#31536f!important; box-shadow:none!important; text-shadow:none!important; }
+  .work-content button:hover:not(:disabled),.pfd-drawer button:hover:not(:disabled),.import-detail-drawer button:hover:not(:disabled),.import-operation-drawer button:hover:not(:disabled) { border-color:#8aa9c3!important; background:#edf4f9!important; color:#204c73!important; }
+  .work-content :is(.primary,.save-button,.top-save-button,.fill-button,.export-button,.import-action-button,.archive-download-button,.pfd-primary) { border-color:#285c91!important; background:#285c91!important; color:#fff!important; box-shadow:0 3px 8px rgba(34,82,125,.16)!important; }
+  .work-content :is(.primary,.save-button,.top-save-button,.fill-button,.export-button,.import-action-button,.archive-download-button,.pfd-primary):hover { background:#204d78!important; }
+  .status-badge,.import-status-badge,.summary-tag { box-shadow:none!important; }.status-badge.is-cleared,.import-status-badge.success { background:#eaf7ef!important; color:#237b54!important; }.status-badge.is-uncleared,.import-status-badge.failed { background:#fff0f0!important; color:#b74646!important; }.status-badge.is-unreconciled,.import-status-badge.partial { background:#fff5e6!important; color:#a56513!important; }
+
+  /* White detail surfaces for drawers and modal overlays. */
+  :is(.pfd-backdrop,.modal-backdrop,.import-drawer-backdrop,.import-operation-backdrop) { background:rgba(20,43,66,.32)!important; backdrop-filter:blur(2px)!important; }
+  :is(.pfd-drawer,.import-detail-drawer,.import-operation-drawer,.sales-modal,.difference-detail-drawer) { border-color:#d7e2ec!important; background:#fff!important; color:#263f58!important; box-shadow:-12px 0 30px rgba(24,53,79,.14)!important; }
+  :is(.pfd-header,.pfd-summary,.pfd-body,.pfd-footer,.import-detail-drawer header,.import-operation-drawer header,.sales-modal-sticky,.difference-detail-drawer header) { border-color:#dce5ee!important; background:#fff!important; color:#294158!important; }
+  :is(.pfd-header,.import-detail-drawer header,.import-operation-drawer header,.sales-modal-sticky,.difference-detail-drawer header) :is(h2,h3,p,span,strong) { color:#1b3855!important; text-shadow:none!important; }
+  :is(.pfd-table-wrap,.pfd-table-wrap td,.pfd-table-wrap th,.difference-drawer-table,.difference-drawer-table td,.difference-drawer-table th) { border-color:#dce5ee!important; background:#fff!important; color:#294158!important; }
+  :is(.pfd-table-wrap th,.difference-drawer-table th) { background:#f3f7fa!important; color:#3b536c!important; }
+  :is(.pfd-tools input,.pfd-pagination,.pfd-footer,.drawer-tools,.difference-summary-row,.amount-bar) { border-color:#dce5ee!important; background:#fff!important; color:#294158!important; }
+  .reconciliation-page .work-content { background:#fff!important; }
+  .reconciliation-page :is(.local-table,.column-menu,.column-filter,.multi-column-filter,.sales-modal,.difference-detail-drawer,.reconciliation-toolbar,.detail-table-tool .local-toolbar) { border-color:#dce5ee!important; background:#fff!important; color:#294158!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; }
+  .reconciliation-page :is(.local-table th,.detail-table-tool .local-table th,.difference-drawer-table th) { background:#f3f7fa!important; color:#3b536c!important; }.reconciliation-page :is(.local-table td,.detail-table-tool .local-table td,.difference-drawer-table td) { background:#fff!important; color:#294158!important; }
+  .reconciliation-page :is(.sticky-index,.sticky-account,.sticky-customer,.sticky-action) { background:#fff!important; box-shadow:none!important; }
+  .work-content .dashboard-data-error { border-color:#d9e5ee!important; background:#fff!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#52677d!important; text-shadow:none!important; }
+
+  /* V1.1: close the remaining legacy desktop technology surfaces only. */
+  .work-content :is(.pd-filter,.pd-stage-card,.pd-owner-card,.pd-preview) { border-color:#dce5ee!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#263f58!important; }
+  .work-content .pd-alert { border-color:#efd5a6!important; background:#fffaf1!important; background-image:none!important; box-shadow:0 3px 10px rgba(119,84,25,.05)!important; color:#875716!important; }
+  .work-content .pd-preview :is(th,.pd-priority-head) { background:#f3f7fa!important; color:#3b536c!important; }.work-content .pd-preview td { border-color:#e7edf3!important; background:#fff!important; color:#294158!important; }
+  .work-content :is(.uf-card,.uf-table-card) { border-color:#dce5ee!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#263f58!important; }
+  .work-content .uf-table-card .uf-table-wrap th { border-color:#dce5ee!important; background:#f3f7fa!important; color:#3b536c!important; }.work-content .uf-table-card .uf-table-wrap td { border-color:#e7edf3!important; background:#fff!important; color:#294158!important; }
+  .work-content :is(.cockpit-conclusion,.cockpit-filter) { border-color:#dce5ee!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#263f58!important; }
+  .work-content .special-tabs { border-color:#dce5ee!important; background:#f6f9fc!important; background-image:none!important; box-shadow:none!important; }.work-content .special-tabs button { color:#48627d!important; text-shadow:none!important; }.work-content .special-tabs button.active { background:#e8f1f9!important; color:#285c91!important; box-shadow:inset 0 -2px #285c91!important; }
+  body:has(.data-import-tool) :is(.app-shell,.work-area,.work-content),.app-shell:has(.data-import-tool) :is(.work-area,.work-content) { background:#fff!important; background-image:none!important; }
+  body:has(.data-import-tool) .work-content::before,body:has(.data-import-tool) .work-content::after,.app-shell:has(.data-import-tool) .work-content::before,.app-shell:has(.data-import-tool) .work-content::after { display:none!important; background:none!important; background-image:none!important; content:none!important; }
+
+  /* V1.2: page-level desktop cascade closure for legacy cockpit skins. */
+  .work-content .q1-actions { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#263f58!important; }.work-content .q1-actions::before { display:none!important; }.work-content .q1-actions :is(p,h2) { color:#17324d!important; text-shadow:none!important; }.work-content .q1-actions p::before { border-color:#c7d8e7!important; background:#eef5fb!important; color:#285c91!important; box-shadow:none!important; }.work-content .action-table { border-color:#dbe5ef!important; background:#fff!important; }.work-content .action-table :is(th,td) { border-color:#e4ebf2!important; background:#fff!important; color:#294158!important; }.work-content .action-table th { background:#f3f7fa!important; color:#3b536c!important; }.work-content .action-table tbody tr:hover { background:#f1f6fa!important; }
+  .work-content .history-dashboard :is(.history-card,.history-trend-card,.history-region-card,.history-table,.history-chart-scroll) { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#294158!important; }.work-content .history-dashboard :is(h2,h3,.history-summary,.history-card-subtitle,.history-tags span) { color:#294158!important; text-shadow:none!important; }.work-content .history-dashboard .history-table :is(th,td) { border-color:#e4ebf2!important; background:#fff!important; color:#294158!important; }.work-content .history-dashboard .history-table th { background:#f3f7fa!important; color:#3b536c!important; }.work-content .history-dashboard .history-table tbody tr:nth-child(even) td { background:#fbfcfe!important; }
+  .reconciliation-page .work-content :is(.local-tool,.local-toolbar,.local-summary,.file-info,.file-meta,.table-pagination,.local-pagination,.pagination) { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; color:#294158!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; }.reconciliation-page .work-content :is(.local-table,.local-table tbody,.local-table tr,.local-table td) { background:#fff!important; color:#294158!important; }.reconciliation-page .work-content .local-table th { background:#f3f7fa!important; color:#3b536c!important; }.reconciliation-page .work-content .local-table tbody tr:nth-child(even) td { background:#fbfcfe!important; }.reconciliation-page .work-content :is(.local-pagination,.pagination,.table-pagination) :is(button,select,input) { border-color:#cddce8!important; background:#fff!important; color:#31536f!important; }
+  .work-content .uf-page :is(.uf-card,.uf-kpi,.uf-table-wrap,.uf-region-body aside,.uf-region-metrics b,.uf-customer-card,.uf-priority-tabs) { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#294158!important; }.work-content .uf-page .uf-kpi::after,.work-content .uf-page .uf-card::before,.work-content .uf-page .uf-card::after{display:none!important}.work-content .uf-page :is(.uf-kpi span,.uf-kpi small,.uf-card-head span,.uf-card h2,.uf-card-head h2,.uf-region h2,.uf-priority h2,.uf-customer-card strong,.uf-customer-card>span,.uf-customer-card small,.uf-region-metrics small) { color:#52677d!important; text-shadow:none!important; }.work-content .uf-page :is(.uf-kpi strong,.uf-card-head h2,.uf-region h2,.uf-priority h2,.uf-customer-card strong) { color:#17324d!important; }.work-content .uf-page :is(.uf-tools input,.uf-tools select,.uf-pagination,.uf-pagination button,.uf-pagination select,.uf-region-body aside button,.uf-finance-select,.uf-stage-select) { border-color:#cddce8!important; background:#fff!important; color:#31536f!important; box-shadow:none!important; }.work-content .uf-page .uf-tabs button { background:#fff!important; color:#52677d!important; }.work-content .uf-page .uf-tabs button.active { border-color:#285c91!important; color:#285c91!important; }.work-content .uf-page .uf-table-wrap :is(th,td,td:last-child) { border-color:#e4ebf2!important; background:#fff!important; color:#294158!important; }.work-content .uf-page .uf-table-wrap th { background:#f3f7fa!important; color:#3b536c!important; }.work-content .uf-page .uf-table-wrap thead th:nth-child(n){background:#f3f7fa!important}.work-content .uf-page .uf-table-wrap tbody tr:nth-child(even) td { background:#fbfcfe!important; }.work-content .uf-page .uf-table-wrap tbody tr:hover td { background:#f1f6fa!important; color:#294158!important; }.work-content .uf-page .uf-region-body aside button.selected { background:#e8f1f9!important; box-shadow:none!important; color:#285c91!important; }
+  .work-content .cockpit :is(.cockpit-filter,.cockpit-conclusion,.metric-card,.panel,.difference-aging-panel,.region-panel,.donut-panel) { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#294158!important; }.work-content .cockpit .metric-card::before { display:none!important; }.work-content .cockpit :is(.cockpit-filter label,.metric-card>span:not(.metric-icon),.metric-card i,.panel h3 small,.aging-info,.aging-footnote,.aging-name i,.aging-percent,.legend small) { color:#62758a!important; }.work-content .cockpit :is(.metric-card b,.cockpit .panel h3,.panel h3,.legend b,.region-panel .rate) { color:#17324d!important; text-shadow:none!important; }.work-content .cockpit :is(.cockpit-filter select,.cockpit-filter input) { border-color:#cddce8!important; background:#fff!important; color:#294158!important; box-shadow:none!important; }.work-content .cockpit .panel :is(th,td) { border-color:#e4ebf2!important; background:#fff!important; color:#294158!important; }.work-content .cockpit .panel th { background:#f3f7fa!important; color:#3b536c!important; }.work-content .cockpit .panel tbody tr:not(.total):hover :is(td) { background:#f1f6fa!important; color:#294158!important; }.work-content .cockpit .panel .total td { background:#f4f8fc!important; color:#294158!important; }
+  .work-content .pd-page :is(.pd-filter,.pd-kpi,.pd-card) { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#294158!important; }.work-content .pd-page .pd-kpi::after { display:none!important; }.work-content .pd-page :is(.pd-filter label,.pd-kpi span,.pd-kpi small,.pd-card h2 small,.pd-stage-row small,.pd-stage-list small,.pd-legend-list small) { color:#62758a!important; }.work-content .pd-page :is(.pd-kpi strong,.pd-card h2,.pd-stage-row>b,.pd-stage-list b,.pd-legend-list b) { color:#17324d!important; text-shadow:none!important; }.work-content .pd-page :is(.pd-filter select,.pd-filter button:not(.primary)) { border-color:#cddce8!important; background:#fff!important; color:#31536f!important; box-shadow:none!important; }.work-content .pd-page .pd-card:hover,.work-content .pd-page .pd-kpi:hover { border-color:#c6d8e7!important; background:#fff!important; box-shadow:0 5px 16px rgba(29,61,91,.08)!important; }.work-content .pd-page :is(.pd-stage-header,.pd-owner-card th,.pd-preview th,.pd-priority-table th) { background:#f3f7fa!important; color:#3b536c!important; }.work-content .pd-page :is(.pd-owner-card td,.pd-preview td) { border-color:#e4ebf2!important; background:#fff!important; color:#294158!important; }.work-content .pd-page :is(.pd-owner-card tbody tr:hover,.pd-preview tbody tr:hover) { background:#f1f6fa!important; }.work-content .pd-page :is(.pd-stage-total,.pd-stage-progress) { background:#edf3f8!important; color:#31536f!important; }
+  body:has(.data-import-tool) .data-import-tool { background:#fff!important; background-image:none!important; color:#294158!important; } body:has(.data-import-tool) .data-import-tool :is(.local-toolbar,.quarter-archive-control,.quarter-archive-download,.import-status,.import-dashboard,.import-kpi-card,.import-history-card,.import-history-head,.import-history-table,.import-history-table tbody,.import-history-table tr,.import-history-table td,.import-pagination) { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#294158!important; } body:has(.data-import-tool) .data-import-tool .local-toolbar::before,body:has(.data-import-tool) .data-import-tool .local-toolbar::after,body:has(.data-import-tool) .data-import-tool .import-dashboard::before,body:has(.data-import-tool) .data-import-tool .import-kpi-card::after{display:none!important} body:has(.data-import-tool) .data-import-tool :is(.local-toolbar h2,.import-dashboard h3,.import-history-head h3,.quarter-archive-download h3,.import-status strong,.import-kpi-card strong) { color:#17324d!important; text-shadow:none!important; } body:has(.data-import-tool) .data-import-tool :is(.local-toolbar p,.quarter-archive-control span,.quarter-archive-download span,.import-dashboard-heading p,.import-kpi-card small,.import-status span,.archive-summary,.archive-message) { color:#62758a!important; } body:has(.data-import-tool) .data-import-tool :is(.quarter-archive-control label,.quarter-archive-download label,.import-kpi-card>div>span) { color:#31536f!important; } body:has(.data-import-tool) .data-import-tool :is(.quarter-archive-control select,.quarter-archive-download select,.import-pagination button,.import-pagination select,.import-pagination input,.import-detail-button) { border-color:#cddce8!important; background:#fff!important; color:#31536f!important; box-shadow:none!important; text-shadow:none!important; } body:has(.data-import-tool) .data-import-tool .import-history-table th { border-color:#dbe5ef!important; background:#f3f7fa!important; color:#3b536c!important; } body:has(.data-import-tool) .data-import-tool .import-history-table tbody tr:nth-child(even) td { background:#fbfcfe!important; } body:has(.data-import-tool) .data-import-tool .import-history-table tbody tr:hover td { background:#f1f6fa!important; box-shadow:none!important; }
+  /* V1.5: close the remaining desktop-only legacy dark surfaces and low-contrast text. */
+  .work-content .current-year-linked-summary { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#263445!important; }.work-content .current-year-linked-summary::before,.work-content .current-year-linked-summary::after { display:none!important; background:none!important; content:none!important; }.work-content .current-year-linked-summary .summary-intro { border:1px solid #e2eaf2!important; background:#f7f9fc!important; box-shadow:none!important; }.work-content .current-year-linked-summary :is(p,h2,span,small) { color:#52677d!important; text-shadow:none!important; }.work-content .current-year-linked-summary h2 { color:#172b43!important; }.work-content .current-year-linked-summary p,.work-content .current-year-linked-summary .summary-metric b { color:#1458a6!important; }.work-content .current-year-linked-summary .summary-metric { border:1px solid #dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 3px 12px rgba(29,61,91,.055)!important; }.work-content .current-year-linked-summary .amount-metric b { color:#b64040!important; }.work-content .current-year-linked-summary .summary-metric>i { border-color:#c8daec!important; background:#edf5fc!important; box-shadow:none!important; color:#1458a6!important; }.work-content .current-year-linked-summary .amount-metric>i { border-color:#f0c9c9!important; background:#fff3f3!important; color:#b64040!important; }.work-content .current-year-linked-summary .summary-metric em { color:#287d56!important; }.work-content .current-year-linked-summary .amount-metric em { color:#b64040!important; }.work-content .current-year-linked-summary :is(.mini-bars,.mini-line) { opacity:.72!important; filter:none!important; }
+  .work-content:has(.uf-page) > .global-quarter-filter { position:static!important; z-index:auto!important; display:flex!important; align-items:center!important; justify-content:flex-end!important; min-height:58px!important; margin:0 0 14px!important; padding:10px 12px!important; border:1px solid #dbe5ef!important; border-radius:10px!important; background:#fff!important; box-sizing:border-box!important; color:#52677d!important; }.work-content:has(.uf-page) > .global-quarter-filter label { color:#294158!important; }.work-content:has(.uf-page) > .global-quarter-filter select { border-color:#cfdbe6!important; background:#fff!important; color:#263445!important; }.work-content:has(.uf-page) .uf-page { clear:both!important; }
+  .work-content .uf-page :is(.uf-card-head p,.uf-region header p,.uf-priority header p,.uf-distribution header span,.uf-sticky-customer small,.uf-message,.uf-pagination,.uf-detail p,.uf-detail span) { color:#52677d!important; text-shadow:none!important; }.work-content .uf-page :is(.uf-card h2,.uf-detail h3,.uf-region-metrics b,.uf-distribution h2,.uf-priority h2) { color:#172b43!important; }.work-content .uf-page :is(.uf-badge.高风险,.uf-badge.需财务复核,.uf-badge.待财务反馈) { border:1px solid #f0cccc!important; background:#fff3f2!important; color:#b64040!important; }.work-content .uf-page :is(.uf-badge.中风险,.uf-badge.财务关注) { border:1px solid #f0dfb7!important; background:#fff8e9!important; color:#9b650d!important; }.work-content .uf-page :is(.uf-badge.一般关注,.uf-badge.处理中) { border:1px solid #cfe0f3!important; background:#edf5ff!important; color:#1458a6!important; }.work-content .uf-page .uf-badge.已关闭 { border:1px solid #cde5d6!important; background:#effaf3!important; color:#267a4e!important; }.work-content .uf-page :is(.uf-badge.待处理,.uf-badge.无需关注) { border:1px solid #dbe5ef!important; background:#f7f9fc!important; color:#52677d!important; }
+  html:has(.data-import-tool),body:has(.data-import-tool) { background:#fff!important; background-image:none!important; }.app-shell:has(.data-import-tool),.app-shell:has(.data-import-tool) .work-area,.app-shell:has(.data-import-tool) .work-content,body:has(.data-import-tool) :is(.app-shell,.work-area,.work-content) { background:#fff!important; background-image:none!important; }.app-shell:has(.data-import-tool)::before,.app-shell:has(.data-import-tool)::after,body:has(.data-import-tool) .work-content::before,body:has(.data-import-tool) .work-content::after { display:none!important; background:none!important; content:none!important; }.app-shell:has(.data-import-tool) .data-import-tool,body:has(.data-import-tool) .data-import-tool :is(.local-tool-body,.import-dashboard,.import-history-card,.import-history-table-wrap) { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:none!important; color:#263445!important; }.app-shell:has(.data-import-tool) .data-import-tool :is(.local-toolbar,.quarter-archive-control,.quarter-archive-download,.import-status,.import-kpi-card) { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#263445!important; }.app-shell:has(.data-import-tool) .data-import-tool :is(.local-toolbar::before,.local-toolbar::after,.import-dashboard::before,.import-kpi-card::after) { display:none!important; background:none!important; content:none!important; }.app-shell:has(.data-import-tool) .data-import-tool :is(.eyebrow,.local-toolbar p,.import-dashboard-heading p,.import-kpi-card small,.import-status span,.archive-summary,.archive-message) { color:#52677d!important; text-shadow:none!important; }.app-shell:has(.data-import-tool) .data-import-tool :is(.local-toolbar h2,.import-dashboard h3,.import-history-head h3,.quarter-archive-download h3,.import-status strong,.import-kpi-card strong,.number-cell) { color:#172b43!important; text-shadow:none!important; }.app-shell:has(.data-import-tool) .data-import-tool .import-history-table :is(th,td) { border-color:#dbe5ef!important; color:#263445!important; }.app-shell:has(.data-import-tool) .data-import-tool .import-history-table th { background:#f3f7fa!important; color:#294158!important; }.app-shell:has(.data-import-tool) .data-import-tool .import-history-table tbody tr:nth-child(even) td { background:#fbfcfe!important; }
+  .reconciliation-page .work-content .local-tool p { color:#52677d!important; }
+  .work-content .cockpit .aging-amount { color:#294158!important; }
+  .work-content .cockpit .aging-row.highRisk .aging-amount { color:#f04444!important; }
+/* ================= V1.6: 十项统一整改 (desktop only) ================= */
+
+  /* 01 对账看板: 三张 KPI 数字取消发光 */
+  .work-content .current-year-linked-summary .summary-metric b,
+  .work-content .current-year-linked-summary .summary-metric strong { text-shadow:none!important; }
+
+  /* 02 对账看板: 指定浅色说明文字加深 */
+  .work-content .current-year-linked-summary .summary-intro :is(p,span,small) { color:#52677d!important; text-shadow:none!important; }
+  .work-content .q1-special { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#294158!important; }
+  .work-content .q1-special .special-head h2 { color:#172b43!important; text-shadow:none!important; }
+  .work-content .q1-special .special-head p { color:#1458a6!important; text-shadow:none!important; }
+  .work-content .q1-special :is(.collection-card-head h3,.collection-info,.collection-material-name,.collection-numeric,.collection-follow,.special-scroll-list th,.special-scroll-list td,.reply-rate-row strong,.reply-count,.reply-rate-row b,.special-scroll-actions button) { color:#294158!important; text-shadow:none!important; }
+  .work-content .q1-special .collection-info { color:#52677d!important; }
+  .work-content .q1-special .collection-rate { color:#168a52!important; }
+  .work-content .q1-special .collection-rate.low { color:#c85e2d!important; }
+  .work-content .q1-special :is(.collection-overview-table th,.special-scroll-list th) { background:#f3f7fa!important; color:#3b536c!important; }
+  .work-content .q1-special :is(.collection-overview-table td,.special-scroll-list td) { background:#fff!important; color:#294158!important; }
+  .work-content .q1-special .collection-material-icon { border-color:#c8d8e8!important; background:#eef5fb!important; color:#285c91!important; box-shadow:none!important; }
+  .work-content .history-dashboard :is(p,small,.history-summary,.history-card-subtitle,.history-tags span) { color:#52677d!important; text-shadow:none!important; }
+
+  /* 03 本季度对账详细情况: 文字/金额/表头/橘色竖条 (.reconciliation-page 位于 app-shell, 是 work-content 的祖先) */
+  .reconciliation-page .work-content .detail-table-tool .local-table th { background:#0b2b47!important; color:#fff!important; font-weight:800!important; }
+  .reconciliation-page .work-content .local-table td { color:#17233d!important; }
+  .reconciliation-page .local-table .money-cell .cell-value { color:#174a7e!important; font-weight:700!important; }
+  .reconciliation-page .local-table .has-difference .difference-cell .cell-value { color:#b42318!important; font-weight:800!important; }
+  .reconciliation-page .local-table .difference-cell .cell-value.is-empty-money { color:#6b7a8e!important; }
+  .reconciliation-page .work-content :is(.local-toolbar p,.reconciliation-toolbar p,.quarter-archive-control span,.file-summary span:last-child,.table-pagination,.table-controls,.eyebrow) { color:#52677d!important; text-shadow:none!important; }
+  .reconciliation-page .file-summary strong { color:#172b43!important; text-shadow:none!important; }
+  .reconciliation-page .file-icon { border-color:#c8d8e8!important; background:#eef5fb!important; color:#285c91!important; box-shadow:none!important; }
+  .reconciliation-page .detail-table-tool .local-table tbody tr.has-history-difference td:first-child,
+  .reconciliation-page .detail-table-tool .local-table tbody tr.has-difference:not(.has-history-difference) td:first-child { box-shadow:inset 3px 0 #fa8c16!important; }
+
+  /* 04 未解决客户跟进: KPI 图标去发光 + 数值去发光 */
+  .work-content .uf-page .uf-kpi strong { text-shadow:none!important; }
+  .work-content .uf-page .uf-kpi > i { border:1px solid #c8d8e8!important; background:#eef5fb!important; box-shadow:none!important; color:#285c91!important; }
+  .work-content .uf-page .uf-kpi.orange > i { border-color:#f5dfbd!important; background:#fff7e8!important; color:#b45309!important; }
+  .work-content .uf-page .uf-kpi.red > i { border-color:#f5c9c4!important; background:#fff1f0!important; color:#b42318!important; }
+  .work-content .uf-page .uf-kpi.purple > i { border-color:#ded0ff!important; background:#f3efff!important; color:#7c5ce5!important; }
+  .work-content .uf-page .uf-kpi.green > i { border-color:#c3e8d3!important; background:#eaf8f1!important; color:#218747!important; }
+
+  /* 05 未解决客户跟进: 两个列表表头恢复深海藏蓝 */
+  .work-content .uf-page .uf-table-wrap thead th:nth-child(n) { background:#0b2b47!important; color:#fff!important; font-weight:800!important; }
+  .work-content .uf-page .uf-table-wrap th:last-child { background:#0b2b47!important; color:#fff!important; }
+
+  /* 06 未解决客户跟进: 财务关注等级语义颜色 (需财务复核=红, 无需关注=蓝, 一般关注=橙) */
+  .work-content .uf-page .uf-badge.需财务复核 { border:1px solid #f0cccc!important; background:#fff3f2!important; color:#b42318!important; }
+  .work-content .uf-page .uf-badge.无需关注 { border:1px solid #cfe0f3!important; background:#edf5ff!important; color:#1458a6!important; }
+  .work-content .uf-page .uf-badge.一般关注 { border:1px solid #f5dfbd!important; background:#fff7e8!important; color:#b45309!important; }
+
+  /* 07 未解决客户跟进: 区域跟踪/区域分布文字加深 */
+  .work-content .uf-page .uf-region-metrics :is(b,strong,span,em,small) { color:#172b43!important; background:#f5f8fc!important; font-weight:800!important; }
+  .work-content .uf-page :is(.uf-region header p,.uf-priority header p) { color:#1458a6!important; }
+  .work-content .uf-page :is(.uf-region-body aside button,.uf-region-body aside span) { color:#31536f!important; }
+  .work-content .uf-page .uf-distribution :is(span,small,b,strong) { color:#294158!important; }
+
+  /* 08 管理层驾驶舱: 文字/图标/差额结构背景 */
+  .work-content .cockpit .donut-wrap { background:#fff!important; background-image:none!important; }
+  .work-content .cockpit .difference-chart { filter:none!important; }
+  .work-content .cockpit :is(.metric-card b,.metric-card strong,.metric-card em,.metric-card span,.metric-card i) { text-shadow:none!important; }
+  .work-content .cockpit .metric-card em { color:#172b43!important; }
+  .work-content .cockpit .metric-card strong { color:#172b43!important; }
+  .work-content .cockpit .metric-card.red strong { color:#b42318!important; }
+  .work-content .cockpit .metric-card.red b { color:#b42318!important; }
+  .work-content .cockpit .metric-icon { border:1px solid #c8d8e8!important; background:#eef5fb!important; box-shadow:none!important; color:#285c91!important; }
+  .work-content .cockpit .metric-card.orange .metric-icon { border-color:#f5dfbd!important; background:#fff7e8!important; color:#b45309!important; }
+  .work-content .cockpit .metric-card.red .metric-icon { border-color:#f5c9c4!important; background:#fff1f0!important; color:#b42318!important; }
+  .work-content .cockpit .metric-card.green .metric-icon { border-color:#c3e8d3!important; background:#eaf8f1!important; color:#218747!important; }
+  .work-content .cockpit .aging-name strong { color:#294158!important; }
+  .work-content .cockpit :is(.region-panel .rate,.legend b,.legend small,.panel h3 small) { color:#294158!important; }
+
+  /* 09 问题解决看板: 文字/图标加深去发光 */
+  .work-content .pd-page .pd-kpi > i { border:1px solid #c8d8e8!important; background:#eef5fb!important; box-shadow:none!important; color:#285c91!important; }
+  .work-content .pd-page .pd-kpi.orange > i { border-color:#f5dfbd!important; background:#fff7e8!important; color:#b45309!important; }
+  .work-content .pd-page .pd-kpi.purple > i { border-color:#ded0ff!important; background:#f3efff!important; color:#7c5ce5!important; }
+  .work-content .pd-page .pd-kpi.cyan > i { border-color:#bcefea!important; background:#e6fbfb!important; color:#0e8a8c!important; }
+  .work-content .pd-page .pd-alert :is(b,strong) { color:#b42318!important; text-shadow:none!important; }
+  .work-content .pd-page .pd-alert em { color:#9b650d!important; text-shadow:none!important; }
+  .work-content .pd-page :is(.pd-stage-list small,.pd-legend-list small,.pd-stage-row small,.pd-card h2 small) { color:#415a7a!important; }
+  .work-content .pd-page .pd-priority-row b { color:#b42318!important; }
+
+  /* 10 数据导入: 彻底清除可见蓝色背景 (含 .local-tool.data-import-tool 双径向渐变) */
+  html:has(.data-import-tool) body:has(.data-import-tool) .data-import-tool.local-tool,
+  body:has(.data-import-tool) .local-tool.data-import-tool { background:#fff!important; background-image:none!important; }
+  body:has(.data-import-tool) .data-import-tool .import-kpi-icon { border:1px solid #c8d8e8!important; background:#eef5fb!important; color:#285c91!important; box-shadow:none!important; }
+  body:has(.data-import-tool) .data-import-tool .import-status-badge { border:1px solid #cfe0f3!important; background:#edf5ff!important; color:#1458a6!important; }
+  body:has(.data-import-tool) .data-import-tool .import-status-badge.success { border-color:#c3e8d3!important; background:#eaf8f1!important; color:#218747!important; }
+  body:has(.data-import-tool) .data-import-tool .import-status-badge.failed { border-color:#f5c9c4!important; background:#fff1f0!important; color:#b42318!important; }
+  body:has(.data-import-tool) .data-import-tool .file-dropzone { border-color:#c8d8e8!important; background:#f5f8fb!important; color:#294158!important; }
+  /* V1.6.1: desktop dashboard flow, readable text, and semantic state repair. */
+  .work-content .dashboard-management-layer { display:grid!important; grid-template-columns:minmax(0,1fr)!important; gap:18px!important; align-items:start!important; }
+  .work-content .dashboard-management-layer>.q1-actions { width:100%!important; height:auto!important; min-height:0!important; }
+  .work-content .dashboard-management-layer>.q1-actions .action-card-list { max-height:none!important; overflow:visible!important; }
+  .work-content .dashboard-management-layer>.q1-special { width:100%!important; min-width:0!important; height:auto!important; min-height:0!important; margin:0!important; padding:20px!important; }
+  .work-content .dashboard-management-layer .desktop-special-tabs { display:none!important; }
+  .work-content .dashboard-management-layer .collection-dashboard { display:grid!important; grid-template-columns:repeat(auto-fit,minmax(340px,1fr))!important; gap:16px!important; align-items:start!important; min-width:0!important; }
+  /* V1.6.1 fix: base css gates reply-card/mobile-unaccounted-panel by the tab-state wrapper classes
+     (desktop-special-collection/unaccounted, mobile-special-collection/unaccounted). The TSX now renders all
+     three blocks on desktop, so un-hide both panels inside the desktop dashboard layer. */
+  .work-content .dashboard-management-layer .q1-special .collection-card.reply-card { display:flex!important; }
+  .work-content .dashboard-management-layer .q1-special .mobile-unaccounted-panel { display:block!important; }
+  .work-content .dashboard-management-layer :is(.collection-card,.special-legacy-panel) { box-sizing:border-box!important; width:auto!important; min-width:0!important; height:auto!important; min-height:360px!important; }
+  .work-content .dashboard-management-layer .collection-table-wrap { min-width:0!important; overflow-x:auto!important; overscroll-behavior-x:contain!important; }
+  .work-content .dashboard-management-layer .collection-overview-table { min-width:640px!important; table-layout:fixed!important; }
+  .work-content .dashboard-management-layer .collection-overview-table th:nth-child(1) { width:30%!important; }.work-content .dashboard-management-layer .collection-overview-table th:nth-child(2) { width:18%!important; }.work-content .dashboard-management-layer .collection-overview-table th:nth-child(3) { width:15%!important; }.work-content .dashboard-management-layer .collection-overview-table th:nth-child(4) { width:37%!important; }
+  .work-content .dashboard-management-layer :is(.collection-material-name,.collection-follow,.collection-follow-list,.collection-follow-item) { min-width:0!important; overflow-wrap:anywhere!important; word-break:normal!important; writing-mode:horizontal-tb!important; }.work-content .dashboard-management-layer .collection-follow { line-height:1.55!important; }.work-content .dashboard-management-layer .collection-overview-table :is(th,td) { white-space:normal!important; }
+  .work-content .dashboard-management-layer .q1-actions :is(.action-heading p,.action-heading span,.action-risk-card,.action-detail,.action-card-list td,.action-card-list p,.action-card-list small) { color:#111827!important; text-shadow:none!important; opacity:1!important; }
+  .work-content .dashboard-management-layer .q1-actions :is(.action-table th,.action-card-list th) { color:#111827!important; }
+  .work-content .q1-special :is(.special-head p,.collection-card-head h3,.collection-material-name,.collection-numeric,.collection-follow,.reply-rate-row strong,.reply-count,.reply-legend,.special-scroll-list td,.history-card-subtitle) { color:#111827!important; text-shadow:none!important; opacity:1!important; }.work-content .q1-special .collection-rate { color:#1458a6!important; }.work-content .q1-special .collection-rate.low { color:#b45309!important; }.work-content .q1-special .collection-material-icon { box-shadow:none!important; filter:none!important; text-shadow:none!important; }
+  .reconciliation-page .work-content :is(.local-toolbar label,.local-toolbar p,.file-info,.file-meta,.column-filter label,.multi-column-filter label,.local-table td,.status-badge) { color:#1f2937!important; opacity:1!important; text-shadow:none!important; }.reconciliation-page .work-content .local-table th { background:#0b2b47!important; color:#fff!important; font-weight:800!important; }.reconciliation-page .work-content :is(.money-cell,.primary-money) { color:#174a7e!important; font-weight:700!important; }.reconciliation-page .work-content .difference-cell { color:#b42318!important; font-weight:800!important; }.reconciliation-page .work-content tr.has-difference td:first-child { box-shadow:inset 3px 0 #fa8c16!important; }
+  .work-content .uf-page :is(.uf-tools input::placeholder,.uf-card-head p,.uf-card-head span,.uf-customer-card strong,.uf-customer-card>span,.uf-customer-card small,.uf-region header p,.uf-region-body aside button,.uf-region-body aside button :is(b,span,em),.uf-distribution :is(span,strong,em),.uf-priority header p) { color:#111827!important; opacity:1!important; text-shadow:none!important; }.work-content .uf-page .uf-table-wrap thead th,.work-content .uf-page .uf-table-wrap thead th:nth-child(n) { background:#0b2b47!important; color:#fff!important; font-weight:800!important; vertical-align:middle!important; }.work-content .uf-page .uf-table-wrap th:last-child { background:#0b2b47!important; color:#fff!important; }.work-content .uf-page .uf-finance-select { color:#111827!important; text-shadow:none!important; box-shadow:none!important; }.work-content .uf-page .uf-finance-select.is-review { border-color:#f3c4c4!important; background:#fee2e2!important; color:#111827!important; }.work-content .uf-page .uf-finance-select.is-general { border-color:#f2d68b!important; background:#fef3c7!important; color:#111827!important; }.work-content .uf-page .uf-finance-select:has(option[value="无需关注"]:checked) { border-color:#b8d6f3!important; background:#dbeafe!important; color:#111827!important; }.work-content .uf-page :is(.uf-kpi>i,.uf-kpi::before) { box-shadow:none!important; filter:none!important; text-shadow:none!important; }
+  .work-content .cockpit :is(.cockpit-filter label,.cockpit-filter p,.metric-card>span:not(.metric-icon),.metric-card i,.panel h3 small,.aging-info,.aging-footnote,.aging-name i,.aging-percent,.legend small,.region-panel .rate,.difference-chart :is(span,p,small,b,em)) { color:#111827!important; opacity:1!important; text-shadow:none!important; }.work-content .cockpit .difference-chart,.work-content .cockpit .donut-wrap { background:#fff!important; background-image:none!important; box-shadow:none!important; filter:none!important; }.work-content .cockpit .difference-chart::before,.work-content .cockpit .difference-chart::after { display:none!important; content:none!important; }.work-content .cockpit .metric-icon { box-shadow:none!important; filter:none!important; text-shadow:none!important; }
+  .work-content .pd-page :is(.pd-filter label,.pd-kpi span,.pd-kpi small,.pd-card h2 small,.pd-stage-row,.pd-stage-list,.pd-legend-list,.pd-owner-card td,.pd-preview td,.pd-risk-tag,.pd-follow-tag,.pd-avatar) { color:#111827!important; opacity:1!important; text-shadow:none!important; }.work-content .pd-page :is(.pd-kpi>i,.pd-avatar) { box-shadow:none!important; filter:none!important; }.work-content .pd-page :is(.pd-risk-tag,.pd-follow-tag) { color:#111827!important; }
+  html:has(.data-import-tool),body:has(.data-import-tool),body:has(.data-import-tool) :is(.app-shell,.work-area,.work-content),body:has(.data-import-tool) .local-tool.data-import-tool { background:#fff!important; background-image:none!important; }.app-shell:has(.data-import-tool)::before,.app-shell:has(.data-import-tool)::after,body:has(.data-import-tool) .data-import-tool :is(.local-toolbar::before,.local-toolbar::after,.import-dashboard::before,.import-dashboard::after,.import-kpi-card::before,.import-kpi-card::after) { display:none!important; background:none!important; box-shadow:none!important; filter:none!important; content:none!important; }.work-content .data-import-tool :is(p,small,span,label,.eyebrow,.import-dashboard-heading,.import-history-head,.import-status) { color:#111827!important; opacity:1!important; text-shadow:none!important; }.work-content .data-import-tool :is(.import-kpi-icon,.local-toolbar i) { box-shadow:none!important; filter:none!important; text-shadow:none!important; }
+
+  /* ================= V1.6.2: 剩余问题一次性修复 (desktop only) ================= */
+
+  /* 一、看板下方三块 = 独立固定等高卡片, 内容区内滚动 (不再异常拉长) */
+  .work-content .dashboard-management-layer .collection-dashboard { align-items:stretch!important; }
+  .work-content .dashboard-management-layer :is(.collection-card,.special-legacy-panel) { height:400px!important; min-height:400px!important; max-height:400px!important; }
+  .work-content .dashboard-management-layer .collection-card.overview-card { display:flex!important; flex-direction:column!important; }
+  .work-content .dashboard-management-layer .collection-card.overview-card .collection-card-head { flex:none!important; }
+  .work-content .dashboard-management-layer .collection-card.overview-card .collection-table-wrap { flex:1 1 auto!important; min-height:0!important; overflow-y:auto!important; }
+  .work-content .dashboard-management-layer .collection-card.overview-card .mobile-expand-button { flex:none!important; }
+  .work-content .dashboard-management-layer .reply-card .reply-rate-list { flex:1 1 auto!important; min-height:0!important; max-height:none!important; overflow-y:auto!important; }
+  .work-content .dashboard-management-layer .special-legacy-panel { display:flex!important; flex-direction:column!important; }
+  .work-content .dashboard-management-layer .special-legacy-panel .special-scroll-shell { flex:1 1 auto!important; min-height:0!important; overflow-y:auto!important; }
+
+
+  /* 三、全页残留浅色文字 / 占位字 / 筛选标签统一深色 */
+  .work-content input::placeholder, .work-content textarea::placeholder { color:#52677d!important; opacity:1!important; }
+  .reconciliation-page .work-content :is(.table-controls label,.quarter-archive-control label,.search-control span,.search-control input,.file-info,.file-meta) { color:#1f2937!important; opacity:1!important; text-shadow:none!important; }
+  .work-content .uf-page .uf-table-wrap .uf-sticky-customer strong { color:#172b43!important; text-shadow:none!important; }
+  .work-content .uf-page .uf-table-wrap .uf-sticky-customer small { color:#52677d!important; }
+
+  /* 四、数据导入右侧抽屉层级修复: 解除 local-toolbar/toolbar-actions 的 isolation 堆叠上下文,
+        使 backdrop(fixed z2000)/drawer(z2001) 提升到根堆叠层, 主区内容块不再压住抽屉 */
+  body:has(.data-import-tool) .data-import-tool :is(.local-toolbar,.toolbar-actions,.upload-actions) { isolation:auto!important; }
+  body:has(.data-import-tool) .import-operation-backdrop { position:fixed!important; inset:0!important; z-index:2000!important; display:flex!important; justify-content:flex-end!important; align-items:stretch!important; }
+  body:has(.data-import-tool) .import-operation-drawer { width:min(580px,calc(100vw - 80px))!important; height:100dvh!important; z-index:2001!important; overflow-y:auto!important; }
+
+  /* 三(续): 全页扫描残留浅色文字/标签/徽章统一加深 (V1.6.2 second pass) */
+  .work-content .history-dashboard .history-summary :is(b,strong,span) { color:#17324d!important; text-shadow:none!important; }
+  .work-content .history-dashboard .history-tags :is(.down,.stable,.up) { color:#52677d!important; text-shadow:none!important; }
+  .work-content .history-dashboard .history-tags .down { color:#b42318!important; }
+  .work-content .history-dashboard .history-tags :is(.stable,.up) { color:#1e7a45!important; }
+  .work-content .global-quarter-filter span { color:#52677d!important; }
+  .work-content .cockpit .cockpit-conclusion em { color:#172b43!important; font-weight:800!important; text-shadow:none!important; }
+  .work-content .cockpit .cockpit-conclusion strong { color:#b42318!important; text-shadow:none!important; }
+  .work-content .pd-page :is(.pd-stage-row em,.pd-stage-list em,.pd-legend-list em) { color:#1d4ed8!important; }
+  .work-content .pd-page .pd-advice-row i.cyan { color:#0e8a8c!important; }
+  .work-content .pd-page .pd-advice-row i.blue { color:#1458a6!important; }
+  .work-content .pd-page .pd-advice-row i.purple { color:#6a48c9!important; }
+  .work-content .pd-page .pd-advice-row i.orange { color:#b45309!important; }
+  .work-content .pd-page .pd-advice-row i.danger { color:#b42318!important; }
+  body:has(.data-import-tool) .data-import-tool .import-status-badge.success { color:#1a7a42!important; }
+  body:has(.data-import-tool) .data-import-tool .import-status-badge.failed { color:#b42318!important; }
+  .work-content .uf-page .uf-no-data { color:#52677d!important; }
+
+  /* 三(续3): 第三轮定位补漏 (历史标签浅底 / pd 阶段图标与总计 / import 分页 / 空金额占位) */
+  .work-content .history-dashboard .history-tags span { background:#f3f7fa!important; border-color:#dbe5ef!important; }
+  .work-content .pd-page .pd-stage-row.pd-stage-closed .pd-stage-name i { color:#5b5bd6!important; }
+  .work-content .pd-page .pd-stage-row.pd-stage-sales .pd-stage-name i { color:#0e8a5e!important; }
+  .work-content .pd-page .pd-stage-row.pd-stage-finance .pd-stage-name i { color:#b45309!important; }
+  .work-content .pd-page .pd-stage-row.pd-stage-checking .pd-stage-name i { color:#1458a6!important; }
+  .work-content .pd-page .pd-stage-total :is(b,em,span) { color:#17324d!important; }
+  .work-content .pd-page .pd-kpi.purple > i { color:#6a48c9!important; }
+  .work-content .pd-page .pd-kpi.cyan > i { color:#0d7a7c!important; }
+  body:has(.data-import-tool) .data-import-tool .import-pagination :is(b,strong,em,span) { color:#17324d!important; }
+  .reconciliation-page .local-table .difference-cell .cell-value.is-empty-money { color:#52677d!important; }
+  .work-content .cockpit .metric-icon { color:#1e4d77!important; }
+
+/* V1.6.3 block (appended to V1.6.2 inside the desktop media query) */
+  /* ================= V1.6.3: 全系统二级/三级穿透与抽屉白底商务风统一 ================= */
+
+  /* A. 对账看板 资料下钻 collection-drill (科技蓝残留: head 渐变/浅色标题/tabs) */
+  .work-content .collection-drill-mask { background:rgba(20,43,66,.32)!important; backdrop-filter:blur(2px)!important; }
+  .work-content .collection-drill-dialog.detail-table-tool { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 12px 40px rgba(15,35,65,.18)!important; color:#172b43!important; }
+  .work-content .collection-drill-head { border-bottom-color:#e2eaf3!important; background:#fff!important; background-image:none!important; box-shadow:none!important; }
+  .work-content .collection-drill-head :is(p,h2,span) { color:#172b43!important; text-shadow:none!important; }
+  .work-content .collection-drill-head p { color:#1458a6!important; }
+  .work-content .collection-drill-head button { border-color:#c9d8e5!important; background:#fff!important; color:#31536f!important; box-shadow:none!important; }
+  .work-content .collection-drill-head button:hover { border-color:#8aa9c3!important; background:#edf4f9!important; color:#204c73!important; box-shadow:none!important; }
+  .work-content .collection-drill-tabs { border-bottom-color:#e2eaf3!important; background:#fff!important; background-image:none!important; }
+  .work-content .collection-drill-tabs button { border-color:#c9d8e5!important; background:#fff!important; color:#52677d!important; box-shadow:none!important; }
+  .work-content .collection-drill-tabs button:hover { border-color:#8aa9c3!important; background:#edf4f9!important; color:#204c73!important; }
+  .work-content .collection-drill-tabs button.active { border-color:#285c91!important; background:#e8f1f9!important; color:#285c91!important; box-shadow:none!important; }
+  .work-content .collection-drill-dialog :is(.collection-drill-table.local-table,.collection-drill-summary,.spd-drilldown-table) :is(th) { background:#0b2b47!important; background-image:none!important; color:#fff!important; font-weight:800!important; }
+  .work-content .collection-drill-dialog :is(.collection-drill-table.local-table,.spd-drilldown-table) :is(td) { background:#fff!important; color:#1f2937!important; border-color:#e4ebf2!important; }
+  .work-content .collection-drill-dialog .collection-drill-status { color:#52677d!important; }
+
+  /* B. 本季度 差额明细填写抽屉 difference-detail-drawer + 销售填写 sales-modal 内部统一 */
+  .reconciliation-page .difference-detail-drawer header { border-bottom-color:#e2eaf3!important; background:#fff!important; background-image:none!important; }
+  .reconciliation-page .difference-detail-drawer header>button { border-color:#c9d8e5!important; background:#f3f6fa!important; color:#172b43!important; box-shadow:none!important; }
+  .reconciliation-page :is(.difference-detail-drawer header h2,.difference-detail-drawer h3,.sales-modal h2,.difference-summary-heading) { color:#172b43!important; text-shadow:none!important; }
+  .reconciliation-page .difference-detail-drawer header p { color:#1458a6!important; text-shadow:none!important; }
+  .reconciliation-page :is(.sales-account,.difference-detail-drawer header span,.drawer-ocr-status,.difference-attachment-control small,.voice-input-hint,.speech-record-hint,.difference-summary-heading small) { color:#52677d!important; text-shadow:none!important; }
+  .reconciliation-page :is(.sales-modal .field>span,.writeoff-adjustment-section .field>span,.voice-text-field .field>span,.difference-summary-row strong) { color:#294158!important; }
+  .reconciliation-page :is(.sales-modal input,.sales-modal textarea,.difference-detail-drawer input,.difference-detail-drawer textarea) { border-color:#cddce8!important; background:#fff!important; color:#172b43!important; caret-color:#1677ff!important; }
+  .reconciliation-page :is(.sales-modal input::placeholder,.sales-modal textarea::placeholder,.difference-detail-drawer input::placeholder,.difference-detail-drawer textarea::placeholder) { color:#52677d!important; opacity:1!important; }
+  .reconciliation-page :is(.sales-modal input:focus,.sales-modal textarea:focus,.difference-detail-drawer input:focus,.difference-detail-drawer textarea:focus) { border-color:#1677ff!important; box-shadow:0 0 0 3px rgba(22,119,255,.1)!important; outline:0!important; }
+  .reconciliation-page .amount-bar { border:1px solid #dbe5ef!important; background:#f5f8fb!important; background-image:none!important; color:#294158!important; }
+  .reconciliation-page .amount-bar strong { color:#172b43!important; text-shadow:none!important; }
+  .reconciliation-page .amount-bar .clear { border:1px solid #cde5d6!important; background:#effaf3!important; color:#1e7a45!important; text-shadow:none!important; }
+  .reconciliation-page .amount-bar .unclear { border:1px solid #f0cccc!important; background:#fff3f2!important; color:#b42318!important; text-shadow:none!important; }
+  .reconciliation-page .difference-summary-row { color:#1f2937!important; }
+  .reconciliation-page .difference-summary-row:hover,.reconciliation-page .difference-summary-row.active { border-color:#c6d8e7!important; background:#f1f6fa!important; box-shadow:none!important; }
+  .reconciliation-page .difference-summary-row i { border-color:#cddce8!important; background:#f5f8fb!important; color:#52677d!important; box-shadow:none!important; }
+  .reconciliation-page :is(.difference-summary-row>span:not(.summary-tag),.difference-summary-row em) { color:#52677d!important; }
+  .reconciliation-page .summary-tag { border-color:#f0dfb7!important; background:#fff8e9!important; color:#9b650d!important; }
+  .reconciliation-page :is(.difference-summary-row>button,.drawer-tools button,.drawer-attachment label,.drawer-row-actions button) { border-color:#c9d8e5!important; background:#fff!important; color:#31536f!important; }
+  .reconciliation-page .drawer-row-actions button:last-child { color:#b42318!important; }
+  .reconciliation-page .drawer-tools { border-bottom-color:#e2eaf3!important; background:#fff!important; }
+  .reconciliation-page .drawer-tools button:first-child { background:#1677ff!important; background-image:none!important; color:#fff!important; }
+  .reconciliation-page .difference-drawer-table { border-color:#dbe5ef!important; background:#fff!important; }
+  .reconciliation-page .modal-backdrop .difference-drawer-table th { background:#0b2b47!important; background-image:none!important; color:#fff!important; font-weight:800!important; }
+  .reconciliation-page .difference-drawer-table td { border-top-color:#e4ebf2!important; background:#fff!important; color:#1f2937!important; }
+  .reconciliation-page .difference-drawer-table tfoot td { background:#f4f8fc!important; color:#172b43!important; }
+  .reconciliation-page :is(.drawer-verification.correct,.drawer-verification.error,.drawer-verification.pending) { border:none!important; }
+  .reconciliation-page .drawer-verification.correct { background:#eaf8f1!important; color:#1e7a45!important; }
+  .reconciliation-page .drawer-verification.error { background:#fff1f0!important; color:#b42318!important; }
+  .reconciliation-page .drawer-verification.pending { background:#fff8e9!important; color:#9b650d!important; }
+  .reconciliation-page :is(.sales-modal .save-button,.top-save-button) { border:1px solid #1677ff!important; background:#1677ff!important; background-image:none!important; color:#fff!important; box-shadow:none!important; text-shadow:none!important; }
+  .reconciliation-page :is(.sales-modal .modal-close) { border-color:#c9d8e5!important; background:#f3f6fa!important; color:#172b43!important; }
+  .reconciliation-page .sales-modal-sticky { border-bottom-color:#e2eaf3!important; background:#fff!important; background-image:none!important; box-shadow:0 2px 10px rgba(28,55,91,.05)!important; }
+  .reconciliation-page .sales-modal-sticky .eyebrow { color:#1458a6!important; text-shadow:none!important; }
+  .reconciliation-page .sales-modal .field > span { color:#294158!important; }
+
+  /* C. 管理层驾驶舱 账龄下钻 aging-detail-dialog (科技规则覆盖的筛选器/说明) */
+  .work-content .cockpit .aging-drawer-filters :is(select,input) { border-color:#cddce8!important; background:#fff!important; color:#294158!important; box-shadow:none!important; }
+  .work-content .cockpit .aging-drawer-filters input::placeholder { color:#52677d!important; opacity:1!important; }
+  .work-content .cockpit .aging-drawer-summary { color:#52677d!important; }
+  .work-content .cockpit .cockpit-detail-table th { background:#0b2b47!important; color:#fff!important; }
+  .work-content .cockpit .aging-open-reconciliation { border-color:#bcd8ff!important; background:#fff!important; color:#1458a6!important; }
+
+  /* D. 问题解决看板 跟进抽屉 pfd-drawer 内部 (summary/body/tools/table/footer 仍为科技深色) */
+  .work-content .pfd-backdrop { background:rgba(15,23,42,.38)!important; backdrop-filter:blur(2px)!important; }
+  .work-content .pfd-drawer { border-left:1px solid #dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:-12px 0 32px rgba(30,52,85,.2)!important; color:#1f2937!important; }
+  .work-content .pfd-drawer :is(.pfd-header,.pfd-summary,.pfd-body,.pfd-tools,.pfd-footer) { border-color:#e2eaf3!important; background:#fff!important; background-image:none!important; color:#1f2937!important; }
+  .work-content .pfd-drawer :is(.pfd-header h2,.pfd-header span,.pfd-summary,.pfd-summary :is(b,strong,span),.pfd-amount,.pfd-state) { color:#172b43!important; text-shadow:none!important; }
+  .work-content .pfd-drawer .pfd-header p { color:#1458a6!important; }
+  .work-content .pfd-drawer :is(.pfd-icon-close,.pfd-tools button,.pfd-footer button) { border-color:#c9d8e5!important; background:#fff!important; color:#31536f!important; }
+  .work-content .pfd-drawer .pfd-primary { border-color:#1677ff!important; background:#1677ff!important; color:#fff!important; }
+  .work-content .pfd-drawer :is(input,select,textarea) { border-color:#cddce8!important; background:#fff!important; color:#172b43!important; }
+  .work-content .pfd-drawer :is(input::placeholder,textarea::placeholder) { color:#52677d!important; opacity:1!important; }
+  .work-content .pfd-drawer .pfd-table-wrap :is(th) { background:#0b2b47!important; color:#fff!important; font-weight:800!important; }
+  .work-content .pfd-drawer .pfd-table-wrap :is(td) { background:#fff!important; color:#1f2937!important; border-color:#e4ebf2!important; }
+  .work-content .pfd-drawer .pfd-pagination { color:#52677d!important; }
+  .work-content .pfd-drawer::before,.work-content .pfd-drawer::after { display:none!important; content:none!important; }
+
+  /* E. 数据导入 详情抽屉 import-detail-drawer 兜底统一 (轻块已白, 强化内部) */
+  body:has(.data-import-tool) .import-detail-drawer { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:-12px 0 32px rgba(30,52,85,.2)!important; color:#1f2937!important; }
+  body:has(.data-import-tool) .import-detail-drawer header { background:#fff!important; background-image:none!important; border-bottom-color:#e2eaf3!important; }
+  body:has(.data-import-tool) .import-detail-drawer :is(h2,h3,p,span,dt,dd) { color:#172b43!important; text-shadow:none!important; }
+  body:has(.data-import-tool) .import-detail-drawer header p { color:#1458a6!important; }
+  body:has(.data-import-tool) .import-detail-drawer :is(th) { background:#0b2b47!important; color:#fff!important; }
+  body:has(.data-import-tool) .import-detail-drawer :is(td) { background:#fff!important; color:#1f2937!important; border-color:#e4ebf2!important; }
+  body:has(.data-import-tool) .import-detail-drawer button { border-color:#c9d8e5!important; background:#fff!important; color:#31536f!important; }
+  body:has(.data-import-tool) .import-detail-drawer .modal-close { background:#f3f6fa!important; color:#172b43!important; }
+
+  /* F. 上季度差额转移 / 批量发票截图 抽屉 (基线已白, 强化防漏) */
+  .reconciliation-page .previous-transfer-drawer, .reconciliation-page .invoice-screenshot-drawer { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:-14px 0 34px rgba(14,43,77,.18)!important; color:#1f2937!important; }
+  .reconciliation-page :is(.previous-transfer-drawer,.invoice-screenshot-drawer) :is(header,footer,section) { border-color:#e2eaf3!important; background:#fff!important; background-image:none!important; }
+  .reconciliation-page :is(.previous-transfer-drawer,.invoice-screenshot-drawer) :is(th) { background:#0b2b47!important; color:#fff!important; font-weight:800!important; }
+  .reconciliation-page :is(.previous-transfer-drawer,.invoice-screenshot-drawer) :is(td) { background:#fff!important; color:#1f2937!important; border-color:#e4ebf2!important; }
+
+  /* G. 驾驶舱/跟进/uF 弹窗与详情兜底 (轻块已白, 强化) */
+  .work-content .cockpit-detail-dialog { border-color:#d7e4f2!important; background:#fff!important; background-image:none!important; box-shadow:0 24px 60px rgba(7,35,68,.32)!important; color:#172b43!important; }
+  .work-content .cockpit-modal > div { background:#fff!important; color:#172b43!important; }
+  .work-content .uf-modal { background:#fff!important; background-image:none!important; color:#172b43!important; }
+  .work-content .uf-modal-backdrop { background:rgba(10,39,68,.45)!important; }
+
+  /* V1.6.3 second pass: collection-drill summary/status + difference drawer subtotal texts */
+  .work-content .collection-drill-dialog .collection-drill-summary { border-bottom-color:#e5edf7!important; background:#f6faff!important; background-image:none!important; color:#52677d!important; }
+  .work-content .collection-drill-dialog .collection-drill-summary b { color:#172b43!important; text-shadow:none!important; }
+  .work-content .collection-drill-dialog .collection-drill-status { color:#52677d!important; text-shadow:none!important; }
+  .work-content .collection-drill-dialog .collection-drill-status.done { border-color:#cde5d6!important; background:#eaf8f1!important; color:#169b60!important; }
+  .work-content .collection-drill-dialog .collection-drill-status.pending { border-color:#f0dfb7!important; background:#fff5df!important; color:#b45309!important; }
+  .reconciliation-page .difference-detail-drawer header span b { color:#172b43!important; text-shadow:none!important; }
+  .reconciliation-page .difference-summary-row b { color:#172b43!important; text-shadow:none!important; }
+
+/* V1.6.4 block (appended to V1.6.3 inside the desktop media query) */
+  /* ================= V1.6.4: 驾驶舱 KPI/账龄/差额结构穿透弹层 + uf 弹窗 白底商务风彻底统一 ================= */
+
+  /* B1. 驾驶舱 KPI 指标明细弹层 (8 张卡共用 cockpit-detail-dialog; tech 1056 块: head 渐变/table-wrap 深底) */
+  .work-content .cockpit .cockpit-detail-head { border-bottom-color:#e2eaf3!important; background:#fff!important; background-image:none!important; box-shadow:none!important; }
+  .work-content .cockpit .cockpit-detail-head :is(p,h2,span,b,em) { color:#172b43!important; text-shadow:none!important; }
+  .work-content .cockpit .cockpit-detail-head p { color:#1458a6!important; }
+  .work-content .cockpit .cockpit-detail-head span { color:#52677d!important; }
+  .work-content .cockpit .cockpit-detail-head .modal-close { border-color:#c9d8e5!important; background:#f3f6fa!important; color:#172b43!important; }
+  .work-content .cockpit .cockpit-detail-head .modal-close:hover { border-color:#8aa9c3!important; background:#edf4f9!important; color:#204c73!important; }
+  .work-content .cockpit :is(.cockpit-detail-table-wrap,.aging-drawer-body) { background:#fff!important; background-image:none!important; }
+  .work-content .cockpit .cockpit-detail-table td { background:#fff!important; color:#1f2937!important; border-color:#e4ebf2!important; }
+  .work-content .cockpit .cockpit-detail-table tbody tr:hover td { background:#f1f6fa!important; }
+
+  /* B2. A. 差额账龄分析 下钻总表/列表 (aging-detail-dialog: 汇总条/列表/客户卡) */
+  .work-content .cockpit .aging-detail-dialog .aging-summary-strip { border-color:#e2eaf3!important; background:#fff!important; background-image:none!important; color:#172b43!important; }
+  .work-content .cockpit .aging-detail-dialog .aging-summary-strip :is(small,span,b,strong,em) { color:#52677d!important; }
+  .work-content .cockpit .aging-detail-dialog :is(.aging-summary-money,.aging-extra-summary) { background:#f5f8fb!important; border-color:#e2eaf3!important; color:#172b43!important; }
+  .work-content .cockpit .aging-detail-dialog :is(.aging-list,.aging-customer-list) { background:#fff!important; }
+  .work-content .cockpit .aging-detail-dialog .aging-customer-group { border-color:#dfe8f3!important; background:#fff!important; background-image:none!important; color:#1f2937!important; }
+  .work-content .cockpit .aging-detail-dialog .aging-customer-group :is(b,strong,span,small,em) { color:#294158!important; text-shadow:none!important; }
+  .work-content .cockpit .aging-detail-dialog .aging-customer-group .highRisk, .work-content .cockpit .aging-detail-dialog .aging-customer-group.highRisk :is(b,strong) { color:#b42318!important; }
+  .work-content .cockpit .aging-detail-dialog .aging-invoice-table th { background:#0b2b47!important; color:#fff!important; }
+  .work-content .cockpit .aging-detail-dialog .aging-invoice-table tbody td { background:#fff!important; color:#1f2937!important; border-color:#e4ebf2!important; }
+
+  /* B3. C. 差额结构分析 下钻 (同 cockpit-detail-dialog, 由 B1 覆盖; 差异金额语义色保留) */
+  .work-content .cockpit .cockpit-detail-table :is(.difference-money) { color:#b42318!important; }
+
+  /* A. 未解决客户跟进 跟进填写/查看详情弹窗 (科技皮肤残留: inputs 边框/h3 白字/概览卡蓝灰底) */
+  .work-content .uf-page .uf-modal { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 18px 50px rgba(7,47,89,.24)!important; color:#172b43!important; }
+  .work-content .uf-page .uf-modal :is(h2,h3,p,span,label,dt,dd,li,strong,b,small) { color:#172b43!important; text-shadow:none!important; }
+  .work-content .uf-page .uf-modal > p { color:#1458a6!important; }
+  .work-content .uf-page .uf-modal :is(input,textarea,select) { border-color:#cddce8!important; background:#fff!important; color:#172b43!important; }
+  .work-content .uf-page .uf-modal :is(input::placeholder,textarea::placeholder) { color:#52677d!important; opacity:1!important; }
+  .work-content .uf-page .uf-detail dl div { border:1px solid #dbe5ef!important; background:#fff!important; }
+  .work-content .uf-page .uf-detail :is(dt,dd) { color:#172b43!important; }
+  .work-content .uf-page .uf-detail dt { color:#52677d!important; }
+  .work-content .uf-page .uf-overdue-cards { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; color:#172b43!important; }
+  .work-content .uf-page .uf-overdue-cards :is(b,strong,span,small) { color:#172b43!important; }
+  .work-content .uf-page .uf-detail-status { color:#52677d!important; }
+  .work-content .uf-page .uf-modal-backdrop { background:rgba(10,39,68,.45)!important; backdrop-filter:blur(2px)!important; }
+
+  /* V1.6.5.1: desktop-only card-density and cockpit composition refinements. */
+  .work-content .dashboard-management-layer .collection-dashboard {
+    grid-template-columns:minmax(0,.95fr) minmax(0,.95fr) minmax(0,1.1fr)!important;
+  }
+  .work-content .dashboard-management-layer .special-legacy-panel { grid-column:auto!important; }
+  .work-content .dashboard-management-layer .special-legacy-panel .special-scroll-list table { table-layout:fixed!important; }
+  .work-content .dashboard-management-layer .special-legacy-panel .special-scroll-list th:nth-child(1) { width:16%!important; }
+  .work-content .dashboard-management-layer .special-legacy-panel .special-scroll-list th:nth-child(2) { width:31%!important; }
+  .work-content .dashboard-management-layer .special-legacy-panel .special-scroll-list th:nth-child(3) { width:53%!important; }
+  .work-content .dashboard-management-layer .special-legacy-panel .special-scroll-list :is(th,td) { overflow-wrap:anywhere!important; word-break:normal!important; }
+
+  .reconciliation-page .work-content .local-table tbody tr:hover > td { background:rgba(43,122,196,.12)!important; }
+  .reconciliation-page .work-content .local-table tbody tr:hover > :is(.sticky-index,.sticky-account,.sticky-customer,.sticky-action) { background:rgba(43,122,196,.18)!important; }
+
+  .work-content .uf-page .uf-charts .uf-distribution {
+    min-height:280px!important;
+    height:280px!important;
+    overflow-y:auto!important;
+    padding:10px 12px!important;
+    scrollbar-gutter:stable;
+  }
+  .work-content .uf-page .uf-distribution header {
+    position:sticky!important;
+    top:-10px!important;
+    z-index:1!important;
+    margin-bottom:5px!important;
+    padding-top:10px!important;
+    background:#fff!important;
+  }
+  .work-content .uf-page .uf-distribution h2 { font-size:14px!important; }
+  .work-content .uf-page .uf-distribution header span { font-size:10px!important; }
+  .work-content .uf-page .uf-distribution .uf-bar { min-height:16px!important; gap:6px!important; margin-bottom:3px!important; font-size:11px!important; }
+  .work-content .uf-page .uf-distribution .uf-bar i { height:5px!important; }
+  .work-content .uf-page .uf-distribution .uf-bar strong { font-size:11px!important; }
+  .work-content .uf-page .uf-distribution .uf-bar em { font-size:10px!important; }
+  .work-content .uf-page .uf-amount-distribution .uf-bar strong { font-size:10px!important; }
+
+  .work-content .cockpit .cockpit-three {
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    grid-template-areas:"aging donut" "region region"!important;
+    align-items:stretch!important;
+  }
+  .work-content .cockpit .difference-aging-panel { grid-area:aging!important; }
+  .work-content .cockpit .donut-panel { grid-area:donut!important; grid-column:auto!important; }
+  .work-content .cockpit .region-panel { grid-area:region!important; width:100%!important; }
+  .work-content .cockpit .donut-panel .donut-wrap {
+    display:grid!important;
+    grid-template-columns:minmax(190px,.9fr) minmax(0,1.1fr)!important;
+    align-items:center!important;
+    min-height:255px!important;
+    gap:16px!important;
+    padding:14px 16px!important;
+  }
+  .work-content .cockpit .donut-panel .difference-chart {
+    justify-self:center!important;
+    width:min(100%,220px)!important;
+    height:220px!important;
+    flex:none!important;
+  }
+  .work-content .cockpit .donut-panel .donut-wrap > div:last-child {
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    align-content:center!important;
+    column-gap:14px!important;
+    row-gap:2px!important;
+    min-width:0!important;
+  }
+  .work-content .cockpit .donut-panel .legend {
+    grid-template-columns:9px minmax(0,1fr) auto!important;
+    min-height:28px!important;
+    gap:6px!important;
+  }
+  .work-content .cockpit .donut-panel .legend small { grid-column:2 / -1!important; text-align:right!important; }
+
+  /* The unaccounted-customer list scrolls natively; do not reserve a second
+     desktop column for duplicate arrow controls. */
+  .work-content .q1-special .special-legacy-panel .special-scroll-shell {
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+  }
+  .work-content .q1-special .special-legacy-panel .special-scroll-list {
+    box-sizing:border-box!important;
+    width:100%!important;
+    min-width:0!important;
+  }
+  .work-content .q1-special .special-legacy-panel .special-scroll-list table {
+    width:100%!important;
+    table-layout:fixed!important;
+  }
+  .work-content .q1-special .special-legacy-panel .special-scroll-list .unaccounted-region-column { width:15%!important; }
+  .work-content .q1-special .special-legacy-panel .special-scroll-list .unaccounted-customer-column { width:40%!important; }
+  .work-content .q1-special .special-legacy-panel .special-scroll-list .unaccounted-reason-column { width:45%!important; }
+  .work-content .q1-special .special-legacy-panel .special-scroll-list .unaccounted-reason-cell { display:table-cell!important; width:auto!important; }
+  .work-content .q1-special .special-legacy-panel .special-scroll-list .unaccounted-reason-text { display:-webkit-box!important; max-width:none!important; overflow:hidden!important; -webkit-box-orient:vertical!important; -webkit-line-clamp:2!important; line-height:1.55!important; word-break:break-word!important; }
+
+  /* V1.6.5.7: limited desktop business-blue refinement.  Keep table behavior
+     and mobile presentation intact; only the two named table headers and the
+     six import-entry actions participate in this visual layer. */
+  .reconciliation-page .work-content .detail-table-tool .local-table th {
+    border-bottom:1px solid #D4E3F1!important;
+    background:#EAF2F9!important;
+    box-shadow:none!important;
+    color:#173B5C!important;
+    font-weight:700!important;
+  }
+  .reconciliation-page .work-content .detail-table-tool .local-table th .column-filter-icon {
+    border:1px solid #C7D9EB!important;
+    background:#fff!important;
+    color:#1769B0!important;
+  }
+  .reconciliation-page .work-content .detail-table-tool .local-table th .column-filter-icon:hover,
+  .reconciliation-page .work-content .detail-table-tool .local-table th .column-filter-icon.active {
+    border-color:#9FC3E1!important;
+    background:#DDECF8!important;
+    color:#145B98!important;
+  }
+  .reconciliation-page .work-content .detail-table-tool .local-table th .column-filter-icon:focus-visible {
+    outline:2px solid #79A9D0!important;
+    outline-offset:1px!important;
+  }
+  .reconciliation-page .work-content .detail-table-tool .local-table th .column-resize-handle:hover,
+  .reconciliation-page .work-content .detail-table-tool .local-table th .column-resize-handle:focus-visible {
+    background:#A9C9E2!important;
+  }
+
+  .work-content .uf-page .uf-table-wrap thead th,
+  .work-content .uf-page .uf-table-wrap thead th:nth-child(n),
+  .work-content .uf-page .uf-table-wrap th:last-child {
+    border-color:#D4E3F1!important;
+    background:#EAF2F9!important;
+    box-shadow:none!important;
+    color:#173B5C!important;
+    font-weight:700!important;
+  }
+  .work-content .uf-page .uf-table-wrap .uf-header-filter {
+    border:1px solid #C7D9EB!important;
+    background:#fff!important;
+    color:#1769B0!important;
+  }
+  .work-content .uf-page .uf-table-wrap .uf-header-filter:hover,
+  .work-content .uf-page .uf-table-wrap .uf-header-filter.active {
+    border-color:#9FC3E1!important;
+    background:#DDECF8!important;
+    color:#145B98!important;
+  }
+  .work-content .uf-page .uf-table-wrap .uf-header-filter:focus-visible {
+    outline:2px solid #79A9D0!important;
+    outline-offset:1px!important;
+  }
+
+  .work-content .data-import-tool .local-toolbar { align-items:center!important; }
+  .work-content .data-import-tool .local-toolbar > div:first-child { flex:0 1 340px!important; min-width:250px!important; }
+  .work-content .data-import-tool .upload-actions {
+    display:grid!important;
+    flex:1 1 600px!important;
+    min-width:0!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:8px!important;
+  }
+  .work-content .data-import-tool .upload-actions > label.file-button {
+    min-height:40px!important;
+    height:40px!important;
+    margin:0!important;
+    padding:0 12px!important;
+    border:1px solid #1769B0!important;
+    border-radius:8px!important;
+    background:#1769B0!important;
+    box-shadow:none!important;
+    color:#fff!important;
+    font-size:12px!important;
+    font-weight:700!important;
+    line-height:1!important;
+    text-shadow:none!important;
+    white-space:nowrap!important;
+  }
+  .work-content .data-import-tool .upload-actions > label.file-button:hover {
+    border-color:#145B98!important;
+    background:#145B98!important;
+    box-shadow:0 0 9px rgba(22,137,214,.22)!important;
+  }
+  .work-content .data-import-tool .upload-actions > button.import-action-button {
+    min-height:40px!important;
+    height:40px!important;
+    margin:0!important;
+    padding:0 12px!important;
+    border:1px solid #C7D9EB!important;
+    border-radius:8px!important;
+    background:#fff!important;
+    box-shadow:none!important;
+    color:#1769B0!important;
+    font-size:12px!important;
+    font-weight:700!important;
+    line-height:1!important;
+    text-shadow:none!important;
+    white-space:nowrap!important;
+  }
+  .work-content .data-import-tool .upload-actions > button.import-action-button:hover {
+    border-color:#9FC3E1!important;
+    background:#EEF6FC!important;
+    box-shadow:none!important;
+    color:#145B98!important;
+  }
+
+  /* V1.6.5.8: ProblemDashboard has one shared secondary-drill drawer.
+     Scope the business-blue table header to that drawer only, keeping every
+     existing table elsewhere and all <=760px drawer presentation untouched. */
+  .work-content .pfd-drawer .pfd-table-wrap th {
+    border-bottom:1px solid #D4E3F1!important;
+    background:#EAF2F9!important;
+    box-shadow:none!important;
+    color:#173B5C!important;
+    font-size:12px!important;
+    font-weight:600!important;
+  }
+  .work-content .pfd-drawer .pfd-table-wrap th button,
+  .work-content .pfd-drawer .pfd-table-wrap th button:hover {
+    min-height:0!important;
+    height:auto!important;
+    margin:0!important;
+    padding:0!important;
+    border:0!important;
+    border-radius:0!important;
+    background:transparent!important;
+    box-shadow:none!important;
+    color:inherit!important;
+    font:inherit!important;
+    font-weight:600!important;
+    text-shadow:none!important;
+  }
+  .work-content .pfd-drawer .pfd-table-wrap th button:focus-visible {
+    outline:2px solid #79A9D0!important;
+    outline-offset:2px!important;
+  }
+}

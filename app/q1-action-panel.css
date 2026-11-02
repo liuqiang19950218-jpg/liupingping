@@ -7,8 +7,8 @@
   .q1-actions p { color:#1769e0; }
   .q1-actions p:before { border-color:#b9d4fb; background:#eef5ff; color:#1769e0; box-shadow:none; }
   .q1-actions h2 { color:#17233d; text-shadow:none; }
-  .action-heading span { color:#415a7a; }
-  .export-button { width:100%; min-height:42px; border-color:#1769e0; background:#1769e0; color:#fff; }
+  .action-heading span,.export-button { display:none; }
+  .action-heading { padding-bottom:8px; border-bottom:0; }
   .action-table { max-height:none; margin-top:12px; overflow:visible; border:0; border-radius:0; }
   .action-table table,.action-table tbody,.action-table tr,.action-table td { display:block; min-width:0; width:100%; }
   .action-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
@@ -23,9 +23,9 @@
   .action-table td:nth-child(2) { font-weight:700; }.action-table td:nth-child(3) { color:#c85e2d; }
   .region-tag { border-color:#b9d4fb; background:#eef5ff; color:#1769e0; }
   .action-table { display:none; }
-  .mobile-action-list { display:grid; gap:0; margin-top:12px; border:1px solid #dce9f8; border-radius:9px; overflow:hidden; }
+  .mobile-action-list { display:grid; gap:0; margin-top:8px; border:1px solid #dce9f8; border-radius:9px; overflow:hidden; }
   .mobile-action-row { border-bottom:1px solid #e5edf7; }.mobile-action-row:last-child { border-bottom:0; }
-  .mobile-action-summary { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:7px 10px; padding:14px 12px; color:#17233d; font-size:14px; }.mobile-action-summary strong { min-width:0; overflow-wrap:anywhere; }.mobile-action-summary span { grid-column:1; grid-row:2; color:#3b5172; font-size:13px; }.mobile-action-summary b { grid-column:2; grid-row:1; color:#c62828; font-size:14px; text-align:right; white-space:nowrap; }.mobile-action-summary button { grid-column:2; grid-row:2; min-height:34px; padding:0; border:0; background:transparent; color:#075aca; font-weight:700; white-space:nowrap; cursor:pointer; }
-  .mobile-action-details { display:flex; flex-direction:column; gap:12px; padding:14px 12px; border-top:1px solid #e5edf7; background:#fff; }.mobile-action-detail-item { display:block; min-width:0; color:#263653; font-size:14px; line-height:1.65; }.mobile-action-detail-label { display:block; width:100%; margin:0 0 4px; color:#075aca; font-size:13px; }.mobile-action-detail-value { display:block; width:100%; color:#263653; overflow-wrap:anywhere; word-break:break-word; }.mobile-action-empty { margin:0; padding:14px; color:#526785; font-size:13px; }
+  .mobile-action-summary { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:4px 8px; padding:10px 11px; color:#17233d; font-size:13px; }.mobile-action-summary strong { min-width:0; overflow-wrap:anywhere; }.mobile-action-summary span { grid-column:1; grid-row:2; color:#3b5172; font-size:12px; }.mobile-action-summary b { grid-column:2; grid-row:1; color:#c62828; font-size:13px; text-align:right; white-space:nowrap; }.mobile-action-summary button { grid-column:2; grid-row:2; min-height:30px; padding:0 2px; border:0; border-radius:6px; background:transparent; color:#075aca; font-size:13px; font-weight:700; white-space:nowrap; cursor:pointer; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }.mobile-action-summary button:active { background:rgba(9,105,232,.08); transform:scale(.98); }.mobile-action-summary button:focus-visible { outline:2px solid #075aca; outline-offset:2px; }
+  .mobile-action-details { display:flex; flex-direction:column; gap:9px; padding:10px 11px 12px; border-top:1px solid #e5edf7; background:#fff; }.mobile-action-detail-item { display:block; min-width:0; color:#263653; font-size:13px; line-height:1.55; }.mobile-action-detail-label { display:block; width:100%; margin:0 0 3px; color:#075aca; font-size:12px; }.mobile-action-detail-value { display:block; width:100%; color:#263653; overflow-wrap:anywhere; word-break:break-word; }.mobile-action-empty { margin:0; padding:12px; color:#526785; font-size:13px; }
 }
 @media (min-width: 761px) { .mobile-action-list { display:none; } }

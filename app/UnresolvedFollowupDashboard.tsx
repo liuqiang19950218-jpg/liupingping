@@ -12,6 +12,7 @@ import { useDashboardData } from "./dashboard-postgres-data";
 import { VoiceInputButton } from "./VoiceInputButton";
 import "./unresolved-followup.css";
 import "./unresolved-followup-layout-overrides.css";
+import "./unresolved-followup-mobile.css";
 
 type FollowUp = { time: string; solution: string };
 const PROCESS_STAGES = [
@@ -250,7 +251,7 @@ function Badge({
 }: {
   type: string;
   children: string;
-  variant?: "finance";
+  variant?: "finance" | "mobile-risk";
 }) {
   return <span className={`uf-badge ${variant ?? ""} ${type}`}>{children}</span>;
 }
@@ -270,6 +271,7 @@ export function UnresolvedFollowupDashboard() {
   >({});
   const [filterColumns, setFilterColumns] = useState<TableFilterKey[]>([]);
   const [tab, setTab] = useState<"pending" | "resolved">("pending");
+  const [isPhoneViewport, setIsPhoneViewport] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [editing, setEditing] = useState<Item | null>(null);
@@ -320,6 +322,13 @@ export function UnresolvedFollowupDashboard() {
     };
   }, []);
   useEffect(() => {
+    const media = window.matchMedia("(max-width: 760px)");
+    const update = () => setIsPhoneViewport(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
     const timer = window.setTimeout(
       () => setSearch(query.trim().toLocaleLowerCase()),
       250,
@@ -328,7 +337,7 @@ export function UnresolvedFollowupDashboard() {
   }, [query]);
   useEffect(() => {
     setPage(1);
-  }, [region, search, risk, finance, processStage, tableFilters, tab, pageSize]);
+  }, [region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters, tab, pageSize]);
   const pending = useMemo(
     () => items.filter((item) => !item.resolved),
     [items],
@@ -337,6 +346,18 @@ export function UnresolvedFollowupDashboard() {
     () => items.filter((item) => item.resolved),
     [items],
   );
+  const activeFilterState = useMemo(
+    () => ({ region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters }),
+    [region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters],
+  );
+  const pendingCount = useMemo(
+    () => filterFollowupTrackerItemsByState(items, { ...activeFilterState, tab: "pending" }).length,
+    [items, activeFilterState],
+  );
+  const resolvedCount = useMemo(
+    () => filterFollowupTrackerItemsByState(items, { ...activeFilterState, tab: "resolved" }).length,
+    [items, activeFilterState],
+  );
   const visible = useMemo(
     () => filterFollowupTrackerItemsByState(items, { tab, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters }),
     [items, tab, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters],
@@ -344,8 +365,8 @@ export function UnresolvedFollowupDashboard() {
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const rows = visible.slice((page - 1) * pageSize, page * pageSize);
   const regions = useMemo(
-    () => [...new Set(pending.map((item) => item.region))],
-    [pending],
+    () => [...new Set((isPhoneViewport ? items : pending).map((item) => item.region))],
+    [isPhoneViewport, items, pending],
   );
   const overdue = useMemo(
     () =>
@@ -388,6 +409,7 @@ export function UnresolvedFollowupDashboard() {
       }),
     [regions, overdue],
   );
+  const averageOverdueDays = regionStats.find((item) => item.name === ALL)?.average ?? 0;
   const selectedOverdue = (
     region === ALL ? overdue : overdue.filter((item) => item.region === region)
   ).sort(
@@ -604,6 +626,29 @@ export function UnresolvedFollowupDashboard() {
             <small>当前季度真实数据</small>
           </article>
         ))}
+        <article className="uf-kpi uf-kpi-mobile-average" aria-label="平均超期天数">
+          <span>平均超期天数</span>
+          <strong>{averageOverdueDays} 天</strong>
+          <small>当前季度真实数据</small>
+        </article>
+      </section>
+      <section className="uf-mobile-controls" aria-label="未解决客户跟进筛选">
+        <header className="uf-mobile-heading">
+          <div>
+            <h2>未解决客户跟进</h2>
+            <p>全量台账 · 持续跟进 · 动态处理</p>
+          </div>
+          <button type="button" className="uf-secondary" onClick={exportCurrentList}>导出</button>
+        </header>
+        <div className="uf-mobile-regions" role="group" aria-label="按区域筛选">
+          <button type="button" className={region === ALL ? "active" : ""} onClick={() => setRegion(ALL)}>{ALL}</button>
+          {regions.map((name) => <button type="button" className={region === name ? "active" : ""} key={name} onClick={() => setRegion(name)}>{name}</button>)}
+        </div>
+        <div className="uf-mobile-search">
+          <span aria-hidden="true">⌕</span>
+          <input value={query} aria-label="搜索客户名称" placeholder="搜索客户名称" onChange={(event) => setQuery(event.target.value)} />
+          {query && <button type="button" aria-label="清除客户搜索" onClick={() => setQuery("")}>×</button>}
+        </div>
       </section>
       <section className="uf-card uf-table-card">
         <header className="uf-card-head">
@@ -681,7 +726,7 @@ export function UnresolvedFollowupDashboard() {
             className={tab === "pending" ? "active" : ""}
             onClick={() => setTab("pending")}
           >
-            待解决清单（{pending.length}）
+            待解决清单（{isPhoneViewport ? pendingCount : pending.length}）
           </button>
           <button
             role="tab"
@@ -689,7 +734,7 @@ export function UnresolvedFollowupDashboard() {
             className={tab === "resolved" ? "active" : ""}
             onClick={() => setTab("resolved")}
           >
-            已解决档案（{resolved.length}）
+            已解决档案（{isPhoneViewport ? resolvedCount : resolved.length}）
           </button>
         </div>
         {filterColumns.length > 0 && (
@@ -905,6 +950,32 @@ export function UnresolvedFollowupDashboard() {
             </tbody>
           </table>
         </div>
+        <div className="uf-mobile-list" aria-label="未解决客户跟进卡片列表">
+          {rows.length ? rows.map((item) => {
+            const days = dayDistance(latest(item));
+            return (
+              <article className="uf-mobile-item" key={item.id}>
+                <header>
+                  <span className="uf-mobile-region">{item.region}</span>
+                  <button type="button" className="uf-mobile-detail-link" aria-label={`查看${item.customer}详情`} onClick={() => setDetail(item)}>›</button>
+                </header>
+                <h3 title={item.customer}>{item.customer}</h3>
+                <dl className="uf-mobile-summary">
+                  <div><dt>负责人</dt><dd>{item.owner || "—"}</dd></div>
+                  <div><dt>对账差额</dt><dd className={item.amount < 0 ? "is-negative" : "is-positive"}>{money(item.amount)}</dd></div>
+                  <div><dt>超期天数</dt><dd className={days && days > OVERDUE_DAYS ? "is-overdue" : ""}>{days === null ? "暂无跟进" : `${days} 天`}</dd></div>
+                  <div className="uf-mobile-solution"><dt>首次解决方案</dt><dd title={item.firstSolution}>{item.firstSolution || "—"}</dd></div>
+                </dl>
+                <div className="uf-mobile-tags"><Badge type={riskOf(item)} variant="mobile-risk">{riskOf(item)}</Badge><Badge type={financeOf(item)} variant="finance">{financeLabel(financeOf(item))}</Badge><Badge type={followupStage(item)}>{followupStage(item)}</Badge></div>
+                <footer>
+                  <button type="button" className="uf-secondary" onClick={() => setDetail(item)}>查看详情</button>
+                  <button type="button" className="uf-primary" onClick={() => { setEditing(item); setFollowTime(""); setFollowSolution(""); }}>跟进填写</button>
+                  {tab === "pending" ? <button type="button" className="uf-resolve" disabled={savingIds.has(item.reconciliationId)} onClick={() => resolve(item)}>{savingIds.has(item.reconciliationId) ? "保存中…" : "已解决"}</button> : <button type="button" className="uf-secondary" disabled={savingIds.has(item.reconciliationId)} onClick={() => restore(item)}>{savingIds.has(item.reconciliationId) ? "保存中…" : "撤销"}</button>}
+                </footer>
+              </article>
+            );
+          }) : <p className="uf-mobile-empty">没有符合当前条件的数据。</p>}
+        </div>
         <footer className="uf-pagination">
           <span>共 {visible.length} 条记录</span>
           <div>
@@ -936,7 +1007,7 @@ export function UnresolvedFollowupDashboard() {
         </footer>
       </section>
       <section className="uf-grid uf-region-grid">
-        <article className="uf-card uf-region">
+        <article className="uf-card uf-region uf-mobile-region-tracker">
           <header>
             <div>
               <p>超期客户区域跟踪</p>
@@ -975,20 +1046,20 @@ export function UnresolvedFollowupDashboard() {
                     ),
                   )}
                 </b>
-                <b>
+                <b className="uf-mobile-region-metric-aux">
                   <small>平均超期天数</small>
                   {regionStats.find((stat) => stat.name === region)?.average ??
                     0}{" "}
                   天
                 </b>
-                <b>
+                <b className="uf-mobile-region-metric-aux">
                   <small>高风险客户数</small>
                   {
                     selectedOverdue.filter((item) => riskOf(item) === "高风险")
                       .length
                   }
                 </b>
-                <b>
+                <b className="uf-mobile-region-metric-aux">
                   <small>最近跟进时间</small>
                   {selectedOverdue
                     .map((item) => latest(item))
@@ -1186,11 +1257,14 @@ export function UnresolvedFollowupDashboard() {
               {detail.quarter} · {detail.region}
             </p>
             <h2>{detail.customer}</h2>
+            <div className="uf-detail-status"><Badge type={detail.resolved ? "已关闭" : "待处理"}>{detail.resolved ? "已解决" : "待解决"}</Badge></div>
             <dl>
+              <div><dt>负责人</dt><dd>{detail.owner || "—"}</dd></div>
               <div>
                 <dt>对账差额</dt>
                 <dd>{money(detail.amount)}</dd>
               </div>
+              <div><dt>超期天数</dt><dd>{dayDistance(latest(detail)) === null ? "暂无跟进" : `${dayDistance(latest(detail))} 天`}</dd></div>
               <div>
                 <dt>风险等级</dt>
                 <dd>
@@ -1205,6 +1279,7 @@ export function UnresolvedFollowupDashboard() {
                   </Badge>
                 </dd>
               </div>
+              <div><dt>问题处理阶段</dt><dd><Badge type={followupStage(detail)}>{followupStage(detail)}</Badge></dd></div>
             </dl>
             <h3>首次解决方案</h3>
             <p>{detail.firstSolution}</p>
@@ -1221,6 +1296,10 @@ export function UnresolvedFollowupDashboard() {
             ) : (
               <p>暂无继续跟进记录。</p>
             )}
+            <footer className="uf-detail-actions">
+              <button type="button" className="uf-secondary" onClick={() => setDetail(null)}>关闭</button>
+              <button type="button" className="uf-primary" onClick={() => { setEditing(detail); setFollowTime(""); setFollowSolution(""); setDetail(null); }}>跟进填写</button>
+            </footer>
           </section>
         </div>
       )}
