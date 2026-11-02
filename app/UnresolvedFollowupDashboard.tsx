@@ -342,6 +342,13 @@ export function UnresolvedFollowupDashboard() {
     () => items.filter((item) => !item.resolved),
     [items],
   );
+  // KPI cards use the same region state as the list, while intentionally
+  // retaining their established pending-record scope instead of inheriting
+  // search, tab, pagination, or other toolbar filters.
+  const regionalPending = useMemo(
+    () => (region === ALL ? pending : pending.filter((item) => item.region === region)),
+    [pending, region],
+  );
   const resolved = useMemo(
     () => items.filter((item) => item.resolved),
     [items],
@@ -373,12 +380,16 @@ export function UnresolvedFollowupDashboard() {
       pending.filter((item) => (dayDistance(latest(item)) ?? 0) > OVERDUE_DAYS),
     [pending],
   );
-  const overdueAmount = overdue.reduce(
+  const regionalOverdue = useMemo(
+    () => regionalPending.filter((item) => (dayDistance(latest(item)) ?? 0) > OVERDUE_DAYS),
+    [regionalPending],
+  );
+  const overdueAmount = regionalOverdue.reduce(
     (total, item) => total + Math.abs(item.amount),
     0,
   );
-  const financeItems = pending.filter((item) => financeOf(item) !== "无需关注");
-  const weekNew = pending.filter((item) => {
+  const regionalFinanceItems = regionalPending.filter((item) => financeOf(item) !== "无需关注");
+  const regionalWeekNew = regionalPending.filter((item) => {
     const days = dayDistance(item.firstTime);
     return days !== null && days <= 7;
   }).length;
@@ -409,10 +420,15 @@ export function UnresolvedFollowupDashboard() {
       }),
     [regions, overdue],
   );
-  const averageOverdueDays = regionStats.find((item) => item.name === ALL)?.average ?? 0;
-  const selectedOverdue = (
-    region === ALL ? overdue : overdue.filter((item) => item.region === region)
-  ).sort(
+  const averageOverdueDays = regionalOverdue.length
+    ? Math.round(
+        regionalOverdue.reduce(
+          (total, item) => total + (dayDistance(latest(item)) ?? 0),
+          0,
+        ) / regionalOverdue.length,
+      )
+    : 0;
+  const selectedOverdue = [...regionalOverdue].sort(
     (a, b) =>
       Math.abs(b.amount) - Math.abs(a.amount) ||
       (dayDistance(latest(b)) ?? 0) - (dayDistance(latest(a)) ?? 0),
@@ -595,13 +611,13 @@ export function UnresolvedFollowupDashboard() {
         {[
           {
             label: "未解决客户总数",
-            value: pending.length,
+            value: regionalPending.length,
             tone: "blue",
             icon: "◉",
           },
           {
             label: "超期客户数",
-            value: overdue.length,
+            value: regionalOverdue.length,
             tone: "orange",
             icon: "◷",
           },
@@ -613,11 +629,11 @@ export function UnresolvedFollowupDashboard() {
           },
           {
             label: "财务关注事项数",
-            value: financeItems.length,
+            value: regionalFinanceItems.length,
             tone: "purple",
             icon: "◆",
           },
-          { label: "本周新增问题数", value: weekNew, tone: "green", icon: "↗" },
+          { label: "本周新增问题数", value: regionalWeekNew, tone: "green", icon: "↗" },
         ].map((card) => (
           <article className={`uf-kpi ${card.tone}`} key={card.label}>
             <i aria-hidden="true">{card.icon}</i>

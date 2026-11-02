@@ -60,6 +60,14 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
     return { id: item.id, quarter: item.quarter, accountSet: item.accountSet, region: item.region, customer: item.customer, owner: item.owner, difference: item.amount, solution: item.firstSolution, cause: item.firstSolution, expectedDate: item.expectedDate, latestFollowUpAt: item.followUps.at(-1)?.time ?? item.firstTime, updatedAt: followup?.updatedAt ?? "", followStatus: followup?.followStatus ?? "pending", processStage: item.processStage ?? "", financeAttention: item.financeAttention, riskLevel, stage: followupStage(item), overdueDays: getOverdueDays(item.expectedDate) } as unknown as DashboardIssue;
     });
   }, [currentOpenTrackerProblems, followups]);
+  // The KPI strip intentionally keeps its existing current-open scope, but it
+  // must follow the same region state as the analysis and detail list.
+  const regionalOpenTrackerProblems = useMemo(
+    () => filters.region === "全部"
+      ? currentOpenTrackerProblems
+      : currentOpenTrackerProblems.filter((item) => item.region === filters.region),
+    [currentOpenTrackerProblems, filters.region],
+  );
   const closedReconciliations = useMemo(
     () => [...reconciliationById.values()].filter((item) => Boolean(item.customer?.trim()) && isResolvedArchiveReconciliation(item)),
     [reconciliationById],
@@ -75,15 +83,15 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
   }, [closedReconciliations, filters]);
   const dashboard = useMemo(() => buildProblemDashboard(items, closedCount), [items, closedCount]);
   const stageCounts = useMemo(() => ({
-    all: countProblemDashboardStage(currentOpenTrackerProblems, "all"),
-    overdue: countProblemDashboardStage(currentOpenTrackerProblems, "overdue"),
-    untouched: countProblemDashboardStage(currentOpenTrackerProblems, "untouched"),
-    customer: countProblemDashboardStage(currentOpenTrackerProblems, "waiting_sales"),
-    internal: countProblemDashboardStage(currentOpenTrackerProblems, "finance_adjustment"),
-    financeReview: countProblemDashboardStage(currentOpenTrackerProblems, "finance_review"),
-    leaderReview: countProblemDashboardStage(currentOpenTrackerProblems, "leader_review"),
-    week: countProblemDashboardStage(currentOpenTrackerProblems, "week"),
-  }), [currentOpenTrackerProblems]);
+    all: countProblemDashboardStage(regionalOpenTrackerProblems, "all"),
+    overdue: countProblemDashboardStage(regionalOpenTrackerProblems, "overdue"),
+    untouched: countProblemDashboardStage(regionalOpenTrackerProblems, "untouched"),
+    customer: countProblemDashboardStage(regionalOpenTrackerProblems, "waiting_sales"),
+    internal: countProblemDashboardStage(regionalOpenTrackerProblems, "finance_adjustment"),
+    financeReview: countProblemDashboardStage(regionalOpenTrackerProblems, "finance_review"),
+    leaderReview: countProblemDashboardStage(regionalOpenTrackerProblems, "leader_review"),
+    week: countProblemDashboardStage(regionalOpenTrackerProblems, "week"),
+  }), [regionalOpenTrackerProblems]);
   const regions = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.region))], [currentOpenProblems]);
   const owners = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.owner).filter(Boolean))], [currentOpenProblems]);
   const causes = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.cause).filter(Boolean))], [currentOpenProblems]);

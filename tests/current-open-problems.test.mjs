@@ -31,7 +31,8 @@ test("dashboard and stage drawer share the current open source set", async () =>
   ]);
   assert.match(dashboard, /const currentOpenProblems = useMemo/);
   assert.match(dashboard, /currentOpenTrackerItems\(toItems/);
-  assert.match(dashboard, /countProblemDashboardStage\(currentOpenTrackerProblems/);
+  assert.match(dashboard, /const regionalOpenTrackerProblems = useMemo/);
+  assert.match(dashboard, /countProblemDashboardStage\(regionalOpenTrackerProblems/);
   assert.match(dashboard, /filterProblemItemList\(currentOpenProblems/);
   assert.match(dashboard, /currentOpenProblems\.map\(\(item\) => item\.owner\)/);
   assert.match(stages, /target: "等待销售处理"/);

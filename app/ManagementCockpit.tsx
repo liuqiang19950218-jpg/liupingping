@@ -231,10 +231,16 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       ),
     [f, dashboardRows],
   );
-  // 应对账总额固定取本季度对账明细：只排除未对账客户，不继承驾驶舱其余筛选条件。
+  // 应对账总额固定取本季度对账明细：只排除未对账客户，并与区域筛选保持一致；
+  // 不继承驾驶舱其余筛选条件。
   const reconciliationTotalRows = useMemo(() => {
-    return dashboardRows.filter((row) => row.quarter === f.quarter && row.filled);
-  }, [f.quarter, dashboardRows]);
+    return dashboardRows.filter(
+      (row) =>
+        row.quarter === f.quarter &&
+        row.filled &&
+        (f.region === "全部" || row.region === f.region),
+    );
+  }, [f.quarter, f.region, dashboardRows]);
   const pendingFollowUpRows = useMemo(
     () =>
       dashboardRows.filter(isPendingFollowUp).filter(
