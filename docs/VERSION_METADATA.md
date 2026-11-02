@@ -16,6 +16,7 @@
 1. 提交全部源码，确认干净工作树。运行 `node scripts/prepare-release.mjs --environment staging --archive <仓库外的归档路径>`（正式构建使用 formal；可选 `--release-id`）。命令不部署、不连接服务、不写数据库。
 2. 生成器直接读取 Git 对象并使用 git archive，生成 `.release/source-manifest.json`（提交、环境、发布编号、兼容 BUILD_SHA、全部 Git 文件 SHA-256）。不能使用旧镜像 marker 或手填 SHA 生成此文件。
 3. 在新目录提取归档后安装依赖并 npm run build；Docker 三种入口均要求该 manifest。构建校验文件哈希、额外继承文件、环境、源码 SHA 和发布编号；任何不符立即失败。旧离线镜像若残留额外源码会阻止构建，需要以后在独立发布目录处理，不在本次自动清理。
+3a. 基础镜像必须干净：除 `node_modules` 外不得继承业务源码或旧版本元数据（旧 SOURCE_GIT_SHA/BUILD_SHA、runtime.env/.env*/secrets）；已验证的干净基础镜像派生方法见 [GIT_RELEASE_POLICY.md](GIT_RELEASE_POLICY.md) §3.1。构建产物（`lib/build-version.generated.mjs`）必须对应被构建的 Commit：sourceGitSha/environment/releaseId 由归档 manifest 决定，运行环境不可改写；不一致即阻止发布。
 4. 生成的 `lib/build-version.generated.mjs` 被打包进版本路由，运行环境不能改变已编译的源码 SHA、构建时间、环境或发布编号。生成文件及归档 manifest 不入 Git；每次 build 重新生成。本地 npm run dev 明确为未发布。
 5. staging 脚本只生成和构建独立候选；正式 PowerShell 发布入口使用同一归档生成器。本次仅修改并离线验证这些入口，未执行部署。
 

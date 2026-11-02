@@ -50,6 +50,25 @@
 
 运行配置在仓库外管理。runtime.env、secrets、连接凭据不得进入源码归档或 Git；环境文件路径及挂载信息在受控运维记录中保管。复用基础镜像不能继承错误 SOURCE_GIT_SHA 或残余业务源码。
 
+## 3.1 已验证的干净基础镜像构建（2026-11-02 实测）
+
+历史镜像（含当时正式运行镜像）在 `/app` 根残留平铺旧源码副本，并带旧 `ENV SOURCE_GIT_SHA=…`/`ENVIRONMENT=staging` 与空 runtime.env；版本校验会如实拦截（`SOURCE_GIT_SHA differs` / `Untracked/inherited file`）。已验证处置（integration d0323285 → 镜像 da0921f2，构建、运行与浏览器验收均通过）：
+
+1. 从当前发布镜像派生一次性干净基础镜像：`FROM <当前发布镜像>`；保留 `/app/node_modules`，删除 `/app` 下其余全部条目（含旧源码、runtime.env、dist、.release）；设置 `ENV SOURCE_GIT_SHA=<目标 Commit 完整 40 位>`（仅作一致性断言，必须等于归档 manifest 的 sourceGitSha）与 `ENV ENVIRONMENT=<staging|formal>`。
+2. 以该镜像为 BASE_IMAGE 执行候选 `Dockerfile.offline`（要求 `.release/source-manifest.json`）；构建时 `prepareBuild` 从归档 manifest 读取 sourceGitSha/environment/releaseId，并逐文件校验源码树。
+3. 构建后核验镜像内 `lib/build-version.generated.mjs`：sourceGitSha == 目标 40 位、environment 正确、releaseId 独立、buildTime 为实际构建时刻。
+
+禁止基础镜像根目录保留任何旧业务源码、旧版本元数据（旧 SOURCE_GIT_SHA/BUILD_SHA 值）或 runtime.env/.env*/secrets；发现即停止并重建干净基础镜像，禁止放宽校验或删除历史镜像。构建必须从实际 Git HEAD（或经该提交生成且逐文件 SHA-256 校验通过的归档）取得完整 40 位 SHA；构建产物必须对应指定 Commit，不一致即阻止发布。
+
+## 3.2 正式发布前强制检查清单
+
+- [ ] 本地 main == 远程 main == 已验收 Commit；候选基于当前 main 且已独立验收。
+- [ ] Git 归档 manifest 文件数与逐文件 SHA-256 校验通过。
+- [ ] 基础镜像干净：node_modules 之外无继承源码、无旧版本 ENV、无 runtime/env/secrets 文件。
+- [ ] 镜像内 sourceGitSha == 目标 Commit 完整 40 位；environment 正确；releaseId 独立；buildTime 为实际 UTC 构建时刻。
+- [ ] 部署后 /api/version 连续三次一致；首页 HTTP 200；六页 + 手机四视口 + 桌面三视口验收 PASS。
+- [ ] 数据库只读计数与基线一致（零写入）；回退镜像/容器/runtime.env/Deployment yaml 就位。
+
 ## 4. 版本接口治理
 
 - SOURCE_GIT_SHA 自动来自实际构建提交或该提交的受信任 Git 归档；必须为完整 40 位十六进制 SHA。缺失实际 Git/归档证明、非法值或与源码不一致，均阻止 staging/formal 发布。
