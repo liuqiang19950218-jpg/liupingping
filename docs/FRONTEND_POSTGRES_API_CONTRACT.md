@@ -97,7 +97,8 @@ materialType 使用现有语义（如：对账函 / 对账确认函 / SPD确认�
 
 ## 5. 版本 / 健康
 
-`GET /api/version` → `{ buildSha, buildTime, environment }`（buildSha 必须等于部署 commit）。
+`GET /api/version` → `{ sourceGitSha, buildTime, environment, releaseId, buildSha, releaseStatus }`。
+`sourceGitSha` 是构建源码的完整 Git SHA；`releaseId` 是独立发布编号；`buildSha` 保留旧 `BUILD_SHA` 兼容字段，不再用于推断源码版本。详细契约见 [VERSION_METADATA.md](VERSION_METADATA.md)。
 
 ---
 本契约不包含任何数据库密码 / DATABASE_URL / 服务器敏感信息。PostgreSQL 为唯一业务真相；

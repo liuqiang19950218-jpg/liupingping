@@ -50,3 +50,14 @@ next-env.d.ts
 /*.tgz
 /tsconfig.tsbuildinfo
 /project-output/
+
+# Build provenance and private release inputs are never source files.
+/lib/build-version.generated.mjs
+/.release/
+runtime.env
+secrets/
+*.private.*
+quarterly-recon-browser-audit-*.json
+quarterly-recon-browser-manifest-*.json
+quarterly-recon-localstorage-*.json
+quarterly-recon-indexeddb-*.json

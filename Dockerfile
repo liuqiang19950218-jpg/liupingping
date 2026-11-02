@@ -8,7 +8,7 @@ RUN npm ci
 
 # Copy project and build
 COPY . .
-RUN npm run build
+RUN test -f .release/source-manifest.json && npm run build
 
 ENV NODE_ENV=production
 ENV WRANGLER_LOG_PATH=.wrangler/wrangler.log

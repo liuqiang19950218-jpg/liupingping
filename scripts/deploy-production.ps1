@@ -33,20 +33,11 @@ function Invoke-Preflight {
   Invoke-Ssh "set -eu; command -v docker; command -v k3s; test -d /var/lib/quarterly-recon/database/wrangler; df -h /; free -h; sudo k3s kubectl -n $Namespace get deployment quarterly-recon"
 }
 
-function New-ApplicationArchive([string]$ArchivePath) {
+function New-ApplicationArchive([string]$ArchivePath, [string]$ReleaseId) {
   Push-Location $ProjectRoot
   try {
-    & git rev-parse --verify HEAD *> $null
-    if ($LASTEXITCODE -ne 0) { throw '当前目录不是可发布的 Git 仓库。' }
-
-    & git diff --quiet --exit-code
-    if ($LASTEXITCODE -ne 0) { throw '存在未提交的已跟踪文件，请先提交 Git 后再发布。' }
-
-    & git diff --cached --quiet --exit-code
-    if ($LASTEXITCODE -ne 0) { throw '存在已暂存但未提交的文件，请先完成 Git 提交。' }
-
-    & git archive --format=tar.gz --output=$ArchivePath HEAD
-    if ($LASTEXITCODE -ne 0) { throw '从当前 Git 提交创建应用发布包失败。' }
+    & node scripts/prepare-release.mjs --environment formal --release-id $ReleaseId --archive $ArchivePath
+    if ($LASTEXITCODE -ne 0) { throw '源码提交、发布元数据或归档校验失败；禁止发布。' }
   }
   finally { Pop-Location }
 }
@@ -72,7 +63,7 @@ function Invoke-ApplicationDeploy {
   $ReleasePath = "$RemotePath/releases/$ReleaseId"
   try {
     Write-Host "打包生产版本 $ReleaseId..."
-    New-ApplicationArchive $Bundle
+    New-ApplicationArchive $Bundle $ReleaseId
     Invoke-Ssh "set -eu; mkdir -p '$ReleasePath' '$RemotePath/backups'; if [ -d /var/lib/quarterly-recon/database/wrangler ]; then sudo tar -czf '$RemotePath/backups/wrangler-$ReleaseId.tgz' -C /var/lib/quarterly-recon/database wrangler; sudo chown `$(id -u):`$(id -g) '$RemotePath/backups/wrangler-$ReleaseId.tgz'; fi"
     & scp -P $SshPort $Bundle ($Remote + ':' + $ReleasePath + '/application.tgz')
     if ($LASTEXITCODE -ne 0) { throw '上传应用发布包失败。' }

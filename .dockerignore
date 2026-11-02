@@ -13,3 +13,9 @@ TASK_BOARD.md
 *.log
 npm-debug.log*
 .DS_Store
+.env*
+runtime.env
+secrets
+*.private.*
+deploy.production.config.psd1
+lib/build-version.generated.mjs
