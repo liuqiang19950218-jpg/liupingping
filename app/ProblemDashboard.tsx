@@ -125,7 +125,7 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
     ["需财务复核", stageCounts.financeReview, "♟", "purple", "finance_review"],
     ["需领导介入", stageCounts.leaderReview, "♟", "purple", "leader_review"],
   ] as const;
-  const handleMetric = (key: string) => key === "closed" ? selectStage("已关闭") : drill({ filter: key });
+  const handleMetric = (key: string) => drill({ filter: key });
   const selectStage = (stage: string) => drill({
     stage,
     ...(filters.region === "全部" ? {} : { region: filters.region }),
@@ -147,7 +147,7 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
     </section>
     <p className="pd-alert">⚠ 当前未关闭问题 <b>{stageCounts.all}</b> 个，其中超期 <strong>{stageCounts.overdue}</strong> 个，7 天未跟进 <em>{stageCounts.untouched}</em> 个，待销售处理 <b>{stageCounts.customer}</b> 个，请及时推进问题闭环。</p>
     <section className="pd-kpis">
-      {metrics.map(([name, count, icon, tone, key]) => <button className={`pd-kpi ${tone}${key === "leader_review" ? " pd-kpi-leader-review" : ""}`} key={name} onClick={() => handleMetric(key)}><i>{icon}</i><span>{name}</span><strong>{count}</strong><small>{key === "closed" ? "已解决档案" : "当前筛选范围"}</small></button>)}
+      {metrics.map(([name, count, icon, tone, key]) => <button className={`pd-kpi ${tone}${key === "leader_review" ? " pd-kpi-leader-review" : ""}`} key={name} onClick={() => handleMetric(key)}><i>{icon}</i><span>{name}</span><strong>{count}</strong><small>当前筛选范围</small></button>)}
     </section>
     <section className="pd-analysis-grid">
       <ProblemStageDistribution data={dashboard.stages} onSelect={selectStage} />

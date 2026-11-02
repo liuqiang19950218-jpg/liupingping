@@ -155,7 +155,7 @@
   .work-content .q1-special { border-color:#dbe5ef!important; background:#fff!important; background-image:none!important; box-shadow:0 4px 14px rgba(29,61,91,.06)!important; color:#294158!important; }
   .work-content .q1-special .special-head h2 { color:#172b43!important; text-shadow:none!important; }
   .work-content .q1-special .special-head p { color:#1458a6!important; text-shadow:none!important; }
-  .work-content .q1-special :is(.collection-card-head h3,.collection-info,.collection-material-name,.collection-numeric,.collection-follow,.special-scroll-list th,.special-scroll-list td,.reply-rate-row strong,.reply-count,.reply-rate-row b,.special-scroll-actions button) { color:#294158!important; text-shadow:none!important; }
+  .work-content .q1-special :is(.collection-card-head h3,.collection-info,.collection-material-name,.collection-numeric,.collection-follow,.special-scroll-list th,.special-scroll-list td,.reply-rate-row strong,.reply-count,.reply-rate-row b) { color:#294158!important; text-shadow:none!important; }
   .work-content .q1-special .collection-info { color:#52677d!important; }
   .work-content .q1-special .collection-rate { color:#168a52!important; }
   .work-content .q1-special .collection-rate.low { color:#c85e2d!important; }
