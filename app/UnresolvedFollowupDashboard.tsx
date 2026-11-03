@@ -7,6 +7,7 @@ import {
 } from "../lib/closed-reconciliation-qualification.mjs";
 import { isCurrentOpenProblem } from "../lib/current-open-problems.mjs";
 import { businessDayDistance, normalizeDateOnly } from "../lib/date-only.mjs";
+import { resolveSelectedFollowupDetail } from "../lib/followup-detail-selection.mjs";
 import { matchesProblemDashboardStage, resolveProblemStage } from "../lib/problem-dashboard-stage.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
 import { filterProblemItemList, type ProblemFilters } from "./problem-dashboard-data";
@@ -313,7 +314,7 @@ export function UnresolvedFollowupDashboard() {
   const [editing, setEditing] = useState<Item | null>(null);
   const [followTime, setFollowTime] = useState("");
   const [followSolution, setFollowSolution] = useState("");
-  const [detail, setDetail] = useState<Item | null>(null);
+  const [detailReconciliationId, setDetailReconciliationId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const overdueCardsRef = useRef<HTMLDivElement>(null);
   const scrollOverdueCards = (direction: number) => overdueCardsRef.current?.scrollBy({ left: direction * Math.max(260, overdueCardsRef.current.clientWidth * 0.72), behavior: "smooth" });
@@ -407,6 +408,17 @@ export function UnresolvedFollowupDashboard() {
   );
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const rows = visible.slice((page - 1) * pageSize, page * pageSize);
+  // Store only the stable business id. The dialog is always resolved from the
+  // same fully-filtered collection that feeds the list, rather than a stale
+  // object captured at click time.
+  const detail = useMemo(
+    () => resolveSelectedFollowupDetail(visible, detailReconciliationId),
+    [visible, detailReconciliationId],
+  );
+  useEffect(() => {
+    if (detailReconciliationId && !detail) setDetailReconciliationId(null);
+  }, [detail, detailReconciliationId]);
+  const openDetail = (item: Item) => setDetailReconciliationId(item.reconciliationId);
   const regions = useMemo(
     () => [...new Set((isPhoneViewport ? items : pending).map((item) => item.region))],
     [isPhoneViewport, items, pending],
@@ -957,7 +969,7 @@ export function UnresolvedFollowupDashboard() {
                         <button
                           type="button"
                           className="uf-secondary"
-                          onClick={() => setDetail(item)}
+                          onClick={() => openDetail(item)}
                         >
                           查看详情
                         </button>
@@ -1004,7 +1016,7 @@ export function UnresolvedFollowupDashboard() {
               <article className="uf-mobile-item" key={item.id}>
                 <header>
                   <span className="uf-mobile-region">{item.region}</span>
-                  <button type="button" className="uf-mobile-detail-link" aria-label={`查看${item.customer}详情`} onClick={() => setDetail(item)}>›</button>
+                  <button type="button" className="uf-mobile-detail-link" aria-label={`查看${item.customer}详情`} onClick={() => openDetail(item)}>›</button>
                 </header>
                 <h3 title={item.customer}>{item.customer}</h3>
                 <dl className="uf-mobile-summary">
@@ -1015,7 +1027,7 @@ export function UnresolvedFollowupDashboard() {
                 </dl>
                 <div className="uf-mobile-tags"><Badge type={riskOf(item)} variant="mobile-risk">{riskOf(item)}</Badge><Badge type={financeOf(item)} variant="finance">{financeLabel(financeOf(item))}</Badge><Badge type={followupStage(item)}>{followupStage(item)}</Badge></div>
                 <footer>
-                  <button type="button" className="uf-secondary" onClick={() => setDetail(item)}>查看详情</button>
+                  <button type="button" className="uf-secondary" onClick={() => openDetail(item)}>查看详情</button>
                   <button type="button" className="uf-primary" onClick={() => { setEditing(item); setFollowTime(""); setFollowSolution(""); }}>跟进填写</button>
                   {tab === "pending" ? <button type="button" className="uf-resolve" disabled={savingIds.has(item.reconciliationId)} onClick={() => resolve(item)}>{savingIds.has(item.reconciliationId) ? "保存中…" : "已解决"}</button> : <button type="button" className="uf-secondary" disabled={savingIds.has(item.reconciliationId)} onClick={() => restore(item)}>{savingIds.has(item.reconciliationId) ? "保存中…" : "撤销"}</button>}
                 </footer>
@@ -1123,7 +1135,7 @@ export function UnresolvedFollowupDashboard() {
                     <button
                       className="uf-customer-card"
                       key={item.id}
-                      onClick={() => setDetail(item)}
+                      onClick={() => { setTab("pending"); openDetail(item); }}
                     >
                       <strong title={item.customer}>{item.customer}</strong>
                       <span>区域：<b>{item.region}</b></span>
@@ -1284,7 +1296,7 @@ export function UnresolvedFollowupDashboard() {
         <div
           className="uf-modal-backdrop"
           role="presentation"
-          onMouseDown={() => setDetail(null)}
+          onMouseDown={() => setDetailReconciliationId(null)}
         >
           <section
             className="uf-modal uf-detail"
@@ -1296,7 +1308,7 @@ export function UnresolvedFollowupDashboard() {
             <button
               className="uf-close"
               aria-label="关闭"
-              onClick={() => setDetail(null)}
+              onClick={() => setDetailReconciliationId(null)}
             >
               ×
             </button>
@@ -1344,8 +1356,8 @@ export function UnresolvedFollowupDashboard() {
               <p>暂无继续跟进记录。</p>
             )}
             <footer className="uf-detail-actions">
-              <button type="button" className="uf-secondary" onClick={() => setDetail(null)}>关闭</button>
-              <button type="button" className="uf-primary" onClick={() => { setEditing(detail); setFollowTime(""); setFollowSolution(""); setDetail(null); }}>跟进填写</button>
+              <button type="button" className="uf-secondary" onClick={() => setDetailReconciliationId(null)}>关闭</button>
+              <button type="button" className="uf-primary" onClick={() => { setEditing(detail); setFollowTime(""); setFollowSolution(""); setDetailReconciliationId(null); }}>跟进填写</button>
             </footer>
           </section>
         </div>
