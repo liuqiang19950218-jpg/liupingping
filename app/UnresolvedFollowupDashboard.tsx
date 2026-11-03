@@ -9,6 +9,7 @@ import { isCurrentOpenProblem } from "../lib/current-open-problems.mjs";
 import { businessDayDistance, normalizeDateOnly } from "../lib/date-only.mjs";
 import { matchesProblemDashboardStage, resolveProblemStage } from "../lib/problem-dashboard-stage.mjs";
 import { useDashboardData } from "./dashboard-postgres-data";
+import { filterProblemItemList, type ProblemFilters } from "./problem-dashboard-data";
 import { VoiceInputButton } from "./VoiceInputButton";
 import "./unresolved-followup.css";
 import "./unresolved-followup-layout-overrides.css";
@@ -71,6 +72,7 @@ export type FollowupTrackerItem = {
   resolved: boolean;
   financeAttention: Finance;
   processStage: Exclude<ProcessStage, "已关闭"> | null;
+  problemRiskLevel: string;
 };
 type Item = FollowupTrackerItem;
 
@@ -190,6 +192,7 @@ export function toItems(quarter: string, rows: Map<string, Reconciliation>, foll
       followUps: followup?.events.map((event) => ({ time: event.occurredAt, solution: event.content ?? "" })) ?? [],
       financeAttention: row.financeAttention ?? "none",
       processStage: followup?.processStage && followup.processStage !== "已关闭" ? followup.processStage as Exclude<ProcessStage, "已关闭"> : null,
+      problemRiskLevel: followup?.riskLevel ?? "low",
       resolved: isResolvedArchiveReconciliation(row),
     }];
   }).filter((item) => item.customer);
@@ -203,18 +206,51 @@ export function toItems(quarter: string, rows: Map<string, Reconciliation>, foll
 export function filterFollowupTrackerItems(items: Item[], filters: Record<string, string> = {}) {
   const filter = (filters.filter ?? "") as DashboardMetricFilter;
   const stage = filters.stage ?? "";
-  const query = (filters.owner || filters.customer || "").trim().toLocaleLowerCase();
   const salesGroup = stage === "等待销售处理";
+  const baseStage = filters.baseStage ?? "";
+  const problemFilters: ProblemFilters = {
+    quarter: filters.quarter ?? "",
+    region: filters.region ?? "全部",
+    owner: filters.baseOwner ?? "全部",
+    risk: filters.problemRisk ?? "全部",
+    cause: filters.problemCause ?? "全部",
+    stage: baseStage || "全部",
+    aging: filters.problemAging ?? "全部",
+    follow: filters.problemFollow ?? "全部",
+  };
+  const hasProblemFilter = Object.values(problemFilters).some((value, index) => index > 0 && value !== "全部");
+  const matchesCurrentProblemFilters = (item: Item) =>
+    !hasProblemFilter || filterProblemItemList([{
+      id: item.id,
+      quarter: item.quarter,
+      region: item.region,
+      owner: item.owner,
+      difference: item.amount,
+      cause: item.firstSolution,
+      solution: item.firstSolution,
+      expectedDate: item.expectedDate,
+      followStatus: item.resolved ? "closed" : "pending",
+      stage: item.resolved ? "已关闭" : followupStage(item),
+      riskLevel: item.problemRiskLevel === "high" ? "高风险" : item.problemRiskLevel === "medium" ? "中风险" : item.problemRiskLevel === "low" ? "低风险" : item.problemRiskLevel,
+      overdueDays: Math.max(0, Math.floor((Date.now() - new Date(item.expectedDate).getTime()) / 86_400_000)),
+      financeAttention: item.financeAttention,
+      resolved: item.resolved,
+    }], problemFilters).length > 0;
   return filterFollowupTrackerItemsByState(items, {
-    tab: stage === "已关闭" ? "resolved" : "pending",
+    tab: stage === "已关闭" || baseStage === "已关闭" ? "resolved" : "pending",
     region: filters.region ?? ALL,
-    search: query,
+    search: "",
     risk: "全部",
     finance: "全部",
     processStage: salesGroup ? "全部" : stage || "全部",
     dashboardMetricFilter: filter,
     tableFilters: {},
-  }).filter((item) => !salesGroup || followupStage(item) === "待销售走申请" || followupStage(item) === "待销售去医院处理");
+  }).filter((item) =>
+    matchesCurrentProblemFilters(item) &&
+    (!filters.owner || item.owner === filters.owner) &&
+    (!filters.customer || item.customer === filters.customer) &&
+    (!salesGroup || followupStage(item) === "待销售走申请" || followupStage(item) === "待销售去医院处理"),
+  );
 }
 
 export type FollowupTrackerFilterState = {
@@ -236,7 +272,7 @@ export function filterFollowupTrackerItemsByState(items: Item[], state: Followup
     (!state.search || [item.customer, item.owner, item.region, item.accountSet].join(" ").toLocaleLowerCase().includes(state.search)) &&
     (state.risk === "全部" || riskOf(item) === state.risk) &&
     (state.finance === "全部" || financeOf(item) === state.finance) &&
-    (state.processStage === "全部" || state.processStage === "已关闭" || followupStage(item) === state.processStage) &&
+    (state.processStage === "全部" || (state.processStage === "已关闭" ? item.resolved : followupStage(item) === state.processStage)) &&
     matchesFollowupDashboardMetric(item, state.dashboardMetricFilter) &&
     Object.entries(state.tableFilters).every(([key, value]) =>
       !value || tableFilterValue(item, key as TableFilterKey).toLocaleLowerCase().includes(value.trim().toLocaleLowerCase()),
@@ -342,13 +378,6 @@ export function UnresolvedFollowupDashboard() {
     () => items.filter((item) => !item.resolved),
     [items],
   );
-  // KPI cards use the same region state as the list, while intentionally
-  // retaining their established pending-record scope instead of inheriting
-  // search, tab, pagination, or other toolbar filters.
-  const regionalPending = useMemo(
-    () => (region === ALL ? pending : pending.filter((item) => item.region === region)),
-    [pending, region],
-  );
   const resolved = useMemo(
     () => items.filter((item) => item.resolved),
     [items],
@@ -369,6 +398,13 @@ export function UnresolvedFollowupDashboard() {
     () => filterFollowupTrackerItemsByState(items, { tab, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters }),
     [items, tab, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters],
   );
+  // KPI cards, regional summaries, and the list all begin with this same
+  // complete pending-record filter. Pagination is intentionally applied only
+  // after the shared aggregate collection has been calculated.
+  const filteredPending = useMemo(
+    () => filterFollowupTrackerItemsByState(items, { ...activeFilterState, tab: "pending" }),
+    [items, activeFilterState],
+  );
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const rows = visible.slice((page - 1) * pageSize, page * pageSize);
   const regions = useMemo(
@@ -376,26 +412,21 @@ export function UnresolvedFollowupDashboard() {
     [isPhoneViewport, items, pending],
   );
   const overdue = useMemo(
-    () =>
-      pending.filter((item) => (dayDistance(latest(item)) ?? 0) > OVERDUE_DAYS),
-    [pending],
+    () => filteredPending.filter((item) => (dayDistance(latest(item)) ?? 0) > OVERDUE_DAYS),
+    [filteredPending],
   );
-  const regionalOverdue = useMemo(
-    () => regionalPending.filter((item) => (dayDistance(latest(item)) ?? 0) > OVERDUE_DAYS),
-    [regionalPending],
-  );
-  const overdueAmount = regionalOverdue.reduce(
+  const overdueAmount = overdue.reduce(
     (total, item) => total + Math.abs(item.amount),
     0,
   );
-  const regionalFinanceItems = regionalPending.filter((item) => financeOf(item) !== "无需关注");
-  const regionalWeekNew = regionalPending.filter((item) => {
+  const filteredFinanceItems = filteredPending.filter((item) => financeOf(item) !== "无需关注");
+  const filteredWeekNew = filteredPending.filter((item) => {
     const days = dayDistance(item.firstTime);
     return days !== null && days <= 7;
   }).length;
   const regionStats = useMemo(
     () =>
-      [ALL, ...regions].map((name) => {
+      [ALL, ...(region === ALL ? regions : [region])].map((name) => {
         const list =
           name === ALL
             ? overdue
@@ -418,17 +449,17 @@ export function UnresolvedFollowupDashboard() {
             : 0,
         };
       }),
-    [regions, overdue],
+    [region, regions, overdue],
   );
-  const averageOverdueDays = regionalOverdue.length
+  const averageOverdueDays = overdue.length
     ? Math.round(
-        regionalOverdue.reduce(
+        overdue.reduce(
           (total, item) => total + (dayDistance(latest(item)) ?? 0),
           0,
-        ) / regionalOverdue.length,
+        ) / overdue.length,
       )
     : 0;
-  const selectedOverdue = [...regionalOverdue].sort(
+  const selectedOverdue = [...overdue].sort(
     (a, b) =>
       Math.abs(b.amount) - Math.abs(a.amount) ||
       (dayDistance(latest(b)) ?? 0) - (dayDistance(latest(a)) ?? 0),
@@ -611,13 +642,13 @@ export function UnresolvedFollowupDashboard() {
         {[
           {
             label: "未解决客户总数",
-            value: regionalPending.length,
+            value: filteredPending.length,
             tone: "blue",
             icon: "◉",
           },
           {
             label: "超期客户数",
-            value: regionalOverdue.length,
+            value: overdue.length,
             tone: "orange",
             icon: "◷",
           },
@@ -629,11 +660,11 @@ export function UnresolvedFollowupDashboard() {
           },
           {
             label: "财务关注事项数",
-            value: regionalFinanceItems.length,
+            value: filteredFinanceItems.length,
             tone: "purple",
             icon: "◆",
           },
-          { label: "本周新增问题数", value: regionalWeekNew, tone: "green", icon: "↗" },
+          { label: "本周新增问题数", value: filteredWeekNew, tone: "green", icon: "↗" },
         ].map((card) => (
           <article className={`uf-kpi ${card.tone}`} key={card.label}>
             <i aria-hidden="true">{card.icon}</i>
@@ -742,7 +773,7 @@ export function UnresolvedFollowupDashboard() {
             className={tab === "pending" ? "active" : ""}
             onClick={() => setTab("pending")}
           >
-            待解决清单（{isPhoneViewport ? pendingCount : pending.length}）
+            待解决清单（{pendingCount}）
           </button>
           <button
             role="tab"
@@ -750,7 +781,7 @@ export function UnresolvedFollowupDashboard() {
             className={tab === "resolved" ? "active" : ""}
             onClick={() => setTab("resolved")}
           >
-            已解决档案（{isPhoneViewport ? resolvedCount : resolved.length}）
+            已解决档案（{resolvedCount}）
           </button>
         </div>
         {filterColumns.length > 0 && (

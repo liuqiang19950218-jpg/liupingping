@@ -231,20 +231,15 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       ),
     [f, dashboardRows],
   );
-  // 应对账总额固定取本季度对账明细：只排除未对账客户，并与区域筛选保持一致；
-  // 不继承驾驶舱其余筛选条件。
-  const reconciliationTotalRows = useMemo(() => {
-    return dashboardRows.filter(
-      (row) =>
-        row.quarter === f.quarter &&
-        row.filled &&
-        (f.region === "全部" || row.region === f.region),
-    );
-  }, [f.quarter, f.region, dashboardRows]);
+  // 应对账总额与其余 KPI 共用完整的有效筛选结果，避免账套、负责人、客户、
+  // 对清状态或跟进状态变化后仍展示跨范围金额。
+  const reconciliationTotalRows = rows;
   const pendingFollowUpRows = useMemo(
     () =>
       dashboardRows.filter(isPendingFollowUp).filter(
         (row) =>
+          row.quarter === f.quarter &&
+          row.filled &&
           (f.region === "全部" || row.region === f.region) &&
           (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
           (f.owner === "全部" || row.owner === f.owner) &&
@@ -349,6 +344,11 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
   const change = (key: keyof Filters, value: string) => {
+      // Detail rows are snapshots of the current filter range. A filter
+      // interaction closes them before the range changes, rather than leaving
+      // a stale drill-down visible under the new conditions.
+      setModal(null);
+      setAgingBucket(null);
       if (key === "quarter") {
         dashboard.selectQuarter(value);
         setF((current) => ({
@@ -361,6 +361,19 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
         return;
       }
       setF((current) => ({ ...current, [key]: value }));
+    },
+    resetFilters = () => {
+      setModal(null);
+      setAgingBucket(null);
+      setF({
+        quarter: dashboard.quarter?.code || f.quarter,
+        region: "全部",
+        accountSet: "全部",
+        owner: "全部",
+        customer: "",
+        cleared: "全部",
+        follow: "全部",
+      });
     },
     refreshData = () => {
       dashboard.refresh();
@@ -512,19 +525,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
           </select>
         </label>
         <div className="filter-actions">
-          <button
-            onClick={() =>
-              setF({
-                quarter: dashboard.quarter?.code || f.quarter,
-                region: "全部",
-                accountSet: "全部",
-                owner: "全部",
-                customer: "",
-                cleared: "全部",
-                follow: "全部",
-              })
-            }
-          >
+          <button onClick={resetFilters}>
             重置筛选
           </button>
           <button onClick={download}>导出看板</button>

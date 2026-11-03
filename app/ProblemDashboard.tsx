@@ -17,6 +17,7 @@ import { isResolvedArchiveReconciliation } from "../lib/closed-reconciliation-qu
 import { currentOpenTrackerItems } from "../lib/current-open-problems.mjs";
 import { countProblemDashboardStage } from "../lib/problem-dashboard-stage.mjs";
 import { normalizeDateOnly } from "../lib/date-only.mjs";
+import type { QuarterFollowupItem } from "../lib/api/reconciliation-api";
 import "./problem-dashboard.css";
 import "./problem-dashboard-layout.css";
 
@@ -25,6 +26,7 @@ const getOverdueDays = (date: string) => {
   return Number.isFinite(timestamp) ? Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000)) : 0;
 };
 type DashboardIssue = Parameters<typeof buildProblemDashboard>[0][number];
+type TrackerItem = ReturnType<typeof toItems>[number];
 
 type Props = { onOpenFollowup: (filters?: Record<string, string>) => void };
 
@@ -36,6 +38,29 @@ const riskClass = (risk: string) => risk === "高风险" ? "high" : risk === "�
 const overdueClass = (days: number) => days > 45 ? "danger" : days > 30 ? "warning" : "";
 const avatar = (name: string) => name.trim().slice(0, 1) || "未";
 const formatPreviewDate = (value: unknown) => normalizeDateOnly(value) || "--";
+const normalizeRisk = (value: string | undefined) =>
+  value === "high" ? "高风险" : value === "medium" ? "中风险" : value === "low" ? "低风险" : value ?? "低风险";
+const toDashboardIssue = (item: TrackerItem, followup?: QuarterFollowupItem): DashboardIssue => ({
+  id: item.id,
+  quarter: item.quarter,
+  accountSet: item.accountSet,
+  region: item.region,
+  customer: item.customer,
+  owner: item.owner,
+  difference: item.amount,
+  solution: item.firstSolution,
+  cause: item.firstSolution,
+  expectedDate: item.expectedDate,
+  latestFollowUpAt: item.followUps.at(-1)?.time ?? item.firstTime,
+  updatedAt: followup?.updatedAt ?? "",
+  followStatus: followup?.followStatus ?? "pending",
+  processStage: item.processStage ?? "",
+  financeAttention: item.financeAttention,
+  riskLevel: normalizeRisk(followup?.riskLevel),
+  stage: followupStage(item),
+  overdueDays: getOverdueDays(item.expectedDate),
+  resolved: item.resolved,
+} as DashboardIssue);
 
 export function ProblemDashboard({ onOpenFollowup }: Props) {
   const { quarter, reconciliationById, followups, loading, error } = useDashboardData();
@@ -47,62 +72,72 @@ export function ProblemDashboard({ onOpenFollowup }: Props) {
   // This is the one live workload set for the process dashboard. `toItems`
   // already applies the canonical closed qualification; resolved rows are
   // deliberately excluded from all current-problem metrics and Top5 counts.
-  const currentOpenTrackerProblems = useMemo(
-    () => currentOpenTrackerItems(toItems(quarter?.label ?? "", reconciliationById, followups), reconciliationById.values()),
+  const trackerItems = useMemo(
+    () => toItems(quarter?.label ?? "", reconciliationById, followups),
     [followups, reconciliationById, quarter],
+  );
+  const currentOpenTrackerProblems = useMemo(
+    () => currentOpenTrackerItems(trackerItems, reconciliationById.values()),
+    [trackerItems, reconciliationById],
   );
   const currentOpenProblems = useMemo(() => {
     const followupByReconciliation = new Map(followups.map((item) => [item.reconciliationId, item]));
-    return currentOpenTrackerProblems.map((item) => {
-    const followup = followupByReconciliation.get(item.reconciliationId);
-    const rawRisk = followup?.riskLevel;
-    const riskLevel = rawRisk === "high" ? "高风险" : rawRisk === "medium" ? "中风险" : rawRisk === "low" ? "低风险" : rawRisk as "高风险" | "中风险" | "低风险";
-    return { id: item.id, quarter: item.quarter, accountSet: item.accountSet, region: item.region, customer: item.customer, owner: item.owner, difference: item.amount, solution: item.firstSolution, cause: item.firstSolution, expectedDate: item.expectedDate, latestFollowUpAt: item.followUps.at(-1)?.time ?? item.firstTime, updatedAt: followup?.updatedAt ?? "", followStatus: followup?.followStatus ?? "pending", processStage: item.processStage ?? "", financeAttention: item.financeAttention, riskLevel, stage: followupStage(item), overdueDays: getOverdueDays(item.expectedDate) } as unknown as DashboardIssue;
-    });
+    return currentOpenTrackerProblems.map((item) => toDashboardIssue(item, followupByReconciliation.get(item.reconciliationId)));
   }, [currentOpenTrackerProblems, followups]);
-  // The KPI strip intentionally keeps its existing current-open scope, but it
-  // must follow the same region state as the analysis and detail list.
-  const regionalOpenTrackerProblems = useMemo(
-    () => filters.region === "全部"
-      ? currentOpenTrackerProblems
-      : currentOpenTrackerProblems.filter((item) => item.region === filters.region),
-    [currentOpenTrackerProblems, filters.region],
+  const closedProblems = useMemo(() => {
+    const followupByReconciliation = new Map(followups.map((item) => [item.reconciliationId, item]));
+    return trackerItems
+      .filter((item) => Boolean(item.customer?.trim()) && isResolvedArchiveReconciliation(reconciliationById.get(item.reconciliationId)))
+      .map((item) => toDashboardIssue(item, followupByReconciliation.get(item.reconciliationId)));
+  }, [followups, reconciliationById, trackerItems]);
+  const currentFilters = useMemo(
+    () => ({ ...filters, quarter: quarter?.label ?? "" }),
+    [filters, quarter?.label],
   );
-  const closedReconciliations = useMemo(
-    () => [...reconciliationById.values()].filter((item) => Boolean(item.customer?.trim()) && isResolvedArchiveReconciliation(item)),
-    [reconciliationById],
+  const items = useMemo(
+    () => filterProblemItemList(currentOpenProblems, currentFilters),
+    [currentOpenProblems, currentFilters],
   );
-  const currentFilters = { ...filters, quarter: quarter?.label ?? "" };
-  const items = useMemo(() => filterProblemItemList(currentOpenProblems, currentFilters), [currentOpenProblems, currentFilters]);
-  const closedCount = useMemo(() => {
-    if (filters.stage !== "全部" && filters.stage !== "已关闭") return 0;
-    return closedReconciliations.filter((item) =>
-      (filters.region === "全部" || (item.region ?? "未填写区域") === filters.region) &&
-      (filters.owner === "全部" || item.ownerName === filters.owner),
-    ).length;
-  }, [closedReconciliations, filters]);
+  const closedCount = useMemo(
+    () => filterProblemItemList(closedProblems, currentFilters).length,
+    [closedProblems, currentFilters],
+  );
+  const selectedProblemIds = useMemo(() => new Set(items.map((item) => item.id)), [items]);
+  const filteredOpenTrackerProblems = useMemo(
+    () => currentOpenTrackerProblems.filter((item) => selectedProblemIds.has(item.id)),
+    [currentOpenTrackerProblems, selectedProblemIds],
+  );
   const dashboard = useMemo(() => buildProblemDashboard(items, closedCount), [items, closedCount]);
   const stageCounts = useMemo(() => ({
-    all: countProblemDashboardStage(regionalOpenTrackerProblems, "all"),
-    overdue: countProblemDashboardStage(regionalOpenTrackerProblems, "overdue"),
-    untouched: countProblemDashboardStage(regionalOpenTrackerProblems, "untouched"),
-    customer: countProblemDashboardStage(regionalOpenTrackerProblems, "waiting_sales"),
-    internal: countProblemDashboardStage(regionalOpenTrackerProblems, "finance_adjustment"),
-    financeReview: countProblemDashboardStage(regionalOpenTrackerProblems, "finance_review"),
-    leaderReview: countProblemDashboardStage(regionalOpenTrackerProblems, "leader_review"),
-    week: countProblemDashboardStage(regionalOpenTrackerProblems, "week"),
-  }), [regionalOpenTrackerProblems]);
+    all: countProblemDashboardStage(filteredOpenTrackerProblems, "all"),
+    overdue: countProblemDashboardStage(filteredOpenTrackerProblems, "overdue"),
+    untouched: countProblemDashboardStage(filteredOpenTrackerProblems, "untouched"),
+    customer: countProblemDashboardStage(filteredOpenTrackerProblems, "waiting_sales"),
+    internal: countProblemDashboardStage(filteredOpenTrackerProblems, "finance_adjustment"),
+    financeReview: countProblemDashboardStage(filteredOpenTrackerProblems, "finance_review"),
+    leaderReview: countProblemDashboardStage(filteredOpenTrackerProblems, "leader_review"),
+    week: countProblemDashboardStage(filteredOpenTrackerProblems, "week"),
+  }), [filteredOpenTrackerProblems]);
   const regions = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.region))], [currentOpenProblems]);
   const owners = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.owner).filter(Boolean))], [currentOpenProblems]);
   const causes = useMemo(() => [...new Set(currentOpenProblems.map((item) => item.cause).filter(Boolean))], [currentOpenProblems]);
   const change = (key: keyof ProblemFilters, value: string) => setFilters((current) => ({ ...current, [key]: value }));
-  // Every drill-through uses this one current context. Keeping the selected
-  // region outside the stored category filter makes an already open drawer
-  // refresh when the user changes regions instead of retaining stale rows.
+  const selectedFilterContext = useMemo(() => ({
+    ...(filters.region === "全部" ? {} : { region: filters.region }),
+    ...(filters.owner === "全部" ? {} : { baseOwner: filters.owner }),
+    ...(filters.risk === "全部" ? {} : { problemRisk: filters.risk }),
+    ...(filters.cause === "全部" ? {} : { problemCause: filters.cause }),
+    ...(filters.stage === "全部" ? {} : { baseStage: filters.stage }),
+    ...(filters.aging === "全部" ? {} : { problemAging: filters.aging }),
+    ...(filters.follow === "全部" ? {} : { problemFollow: filters.follow }),
+  }), [filters]);
+  // Every drill-through starts from the complete current filter context, then
+  // adds its category condition. The key remount clears drawer search and
+  // pagination whenever any upstream condition changes.
   const activeDrawerFilterContext = drawerFilterContext && {
     quarter: quarter?.code ?? "",
+    ...selectedFilterContext,
     ...drawerFilterContext,
-    ...(filters.region === "全部" ? {} : { region: filters.region }),
   };
   // Preserve the exact legacy navigation context; navigation now happens only
   // after the user explicitly chooses it in the secondary drawer.

@@ -12,7 +12,7 @@ type SortKey = "customer" | "accountSet" | "region" | "owner" | "amount" | "reas
 const PAGE_SIZE = 10;
 const money = (amount: number) => amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
 const text = (value: unknown) => String(value ?? "").trim();
-const LABELS: Record<string, string> = { region: "区域", owner: "责任人", stage: "处理阶段", customer: "客户", filter: "看板筛选", quarter: "季度" };
+const LABELS: Record<string, string> = { region: "区域", owner: "责任人", baseOwner: "责任人", stage: "处理阶段", baseStage: "处理阶段", problemRisk: "风险等级", problemCause: "问题类型", problemAging: "超期天数", problemFollow: "最近跟进时间", customer: "客户", filter: "看板筛选", quarter: "季度" };
 const FILTER_LABELS: Record<string, string> = { all: "未关闭问题", overdue: "超期未关闭", untouched: "7天未跟进", customer: "待销售处理", internal: "待内部处理", finance_review: "需财务复核", leader_review: "需领导介入", leader: "需领导介入", week: "本周待办" };
 
 export function ProblemFollowupDrawer({ filterContext, onClose, onEnterFollowup }: Props) {
@@ -20,7 +20,7 @@ export function ProblemFollowupDrawer({ filterContext, onClose, onEnterFollowup 
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({ key: "customer", direction: "asc" });
   const [page, setPage] = useState(1);
-  const archive = filterContext.stage === "已关闭";
+  const archive = filterContext.stage === "已关闭" || filterContext.baseStage === "已关闭";
   const contextLabels = Object.entries(filterContext).filter(([, value]) => Boolean(value)).map(([key, value]) => `${LABELS[key] ?? key}：${key === "filter" ? FILTER_LABELS[value] ?? value : value}`);
   const items = useMemo(() => {
     const trackerItems = toItems(quarter?.label ?? "", reconciliationById, followups);

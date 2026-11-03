@@ -4,24 +4,28 @@ import test from "node:test";
 
 const read = (file) => readFile(new URL(`../${file}`, import.meta.url), "utf8");
 
-test("regional KPI sources use the existing selected-region state", async () => {
+test("dashboard KPI sources derive from their complete active filter collection", async () => {
   const [cockpit, followup, problem] = await Promise.all([
     read("app/ManagementCockpit.tsx"),
     read("app/UnresolvedFollowupDashboard.tsx"),
     read("app/ProblemDashboard.tsx"),
   ]);
 
+  assert.match(cockpit, /const reconciliationTotalRows = rows;/);
   assert.match(cockpit, /row\.quarter === f\.quarter[\s\S]*?row\.filled[\s\S]*?f\.region === "全部" \|\| row\.region === f\.region/);
-  assert.match(cockpit, /\[f\.quarter, f\.region, dashboardRows\]/);
+  assert.match(cockpit, /f\.accountSet === "全部" \|\| row\.accountSet === f\.accountSet/);
+  assert.match(cockpit, /f\.owner === "全部" \|\| row\.owner === f\.owner/);
+  assert.match(cockpit, /!f\.customer \|\| row\.customer\.includes\(f\.customer\)/);
+  assert.match(cockpit, /row\.quarter === f\.quarter[\s\S]*?row\.filled[\s\S]*?matchesSettlementFilter\(row, f\.cleared\)/);
 
-  assert.match(followup, /const regionalPending = useMemo/);
-  assert.match(followup, /region === ALL \? pending : pending\.filter\(\(item\) => item\.region === region\)/);
-  for (const source of ["regionalPending.length", "regionalOverdue.length", "regionalFinanceItems.length", "regionalWeekNew"]) {
+  assert.match(followup, /const filteredPending = useMemo/);
+  assert.match(followup, /filterFollowupTrackerItemsByState\(items, \{ \.\.\.activeFilterState, tab: "pending" \}\)/);
+  for (const source of ["filteredPending.length", "overdue.length", "filteredFinanceItems.length", "filteredWeekNew"]) {
     assert.match(followup, new RegExp(source.replaceAll(".", "\\.")));
   }
 
-  assert.match(problem, /const regionalOpenTrackerProblems = useMemo/);
-  assert.match(problem, /item\.region === filters\.region/);
+  assert.match(problem, /const filteredOpenTrackerProblems = useMemo/);
+  assert.match(problem, /selectedProblemIds\.has\(item\.id\)/);
   assert.doesNotMatch(problem, /countProblemDashboardStage\(currentOpenTrackerProblems/);
-  assert.match(problem, /countProblemDashboardStage\(regionalOpenTrackerProblems, "leader_review"\)/);
+  assert.match(problem, /countProblemDashboardStage\(filteredOpenTrackerProblems, "leader_review"\)/);
 });

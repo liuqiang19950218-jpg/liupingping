@@ -30,9 +30,10 @@ test("dashboard and stage drawer share the current open source set", async () =>
     readFile(new URL("../app/UnresolvedFollowupDashboard.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(dashboard, /const currentOpenProblems = useMemo/);
-  assert.match(dashboard, /currentOpenTrackerItems\(toItems/);
-  assert.match(dashboard, /const regionalOpenTrackerProblems = useMemo/);
-  assert.match(dashboard, /countProblemDashboardStage\(regionalOpenTrackerProblems/);
+  assert.match(dashboard, /const trackerItems = useMemo/);
+  assert.match(dashboard, /currentOpenTrackerItems\(trackerItems, reconciliationById\.values\(\)\)/);
+  assert.match(dashboard, /const filteredOpenTrackerProblems = useMemo/);
+  assert.match(dashboard, /countProblemDashboardStage\(filteredOpenTrackerProblems/);
   assert.match(dashboard, /filterProblemItemList\(currentOpenProblems/);
   assert.match(dashboard, /currentOpenProblems\.map\(\(item\) => item\.owner\)/);
   assert.match(stages, /target: "等待销售处理"/);
