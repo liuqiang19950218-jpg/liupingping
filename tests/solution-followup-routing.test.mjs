@@ -50,7 +50,7 @@ test("legacy tracker uses persisted manual status and keeps later events separat
   ]);
   assert.match(page, /isCurrentOpenProblem\(row\)/);
   assert.match(page, /isResolvedArchiveReconciliation\(row\)/);
-  assert.match(qualification, /legacyTrackerTab\(row\?\.manualResolutionStatus\)/);
+  assert.match(qualification, /row\?\.manualResolutionStatus === "resolved"/);
   assert.doesNotMatch(page, /solutionFollowupBucket\(/);
   assert.match(page, /followUps: followup\?\.events/);
   assert.match(page, /else await reconciliationApi\.createFollowup/);

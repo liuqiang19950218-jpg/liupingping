@@ -15,13 +15,21 @@ import {
 
 const ids = (rows) => [...closedReconciliationIds(rows)].sort();
 
-test("manual-resolved records close only when their solution date exists", () => {
-  const row = { id: "legacy", solution: "", solutionDate: "2026-09-01", manualResolutionStatus: "resolved" };
-  assert.equal(hasManualResolvedQualification(row), true);
-  assert.equal(isClosedReconciliation(row), true);
-  assert.equal(isResolvedArchiveReconciliation(row), true);
-  assert.equal(isUnresolvedFollowupReconciliation(row), false);
-  assert.equal(isFollowupTrackerReconciliation(row), true);
+test("manual-resolved records always enter the archive regardless of solution/date completeness", () => {
+  const cases = [
+    { id: "manual-empty", solution: "", solutionDate: "" },
+    { id: "manual-solution-only", solution: "已完成", solutionDate: "" },
+    { id: "manual-date-only", solution: "", solutionDate: "2026-09-01" },
+    { id: "manual-complete", solution: "已完成", solutionDate: "2026-09-01" },
+  ];
+  for (const row of cases) {
+    const resolved = { ...row, manualResolutionStatus: "resolved" };
+    assert.equal(hasManualResolvedQualification(resolved), true, resolved.id);
+    assert.equal(isClosedReconciliation(resolved), true, resolved.id);
+    assert.equal(isResolvedArchiveReconciliation(resolved), true, resolved.id);
+    assert.equal(isUnresolvedFollowupReconciliation(resolved), false, resolved.id);
+    assert.equal(isFollowupTrackerReconciliation(resolved), true, resolved.id);
+  }
 });
 
 test("a nonblank solution without a date closes and does not generate one", () => {
@@ -58,6 +66,17 @@ test("closed identity is reconciliation id, deduplicates followups, and stays qu
   assert.deepEqual(ids(q1), ["q1-same-customer"]);
   assert.deepEqual(ids(q2), []);
   assert.deepEqual(ids([...q1, ...q1]), ["q1-same-customer"]);
+});
+
+test("a manual-resolved reconciliation remains one archive record and does not close its sibling", () => {
+  const rows = [
+    { id: "same-customer-a", customer: "常州市第二人民医院", solution: "", solutionDate: "", manualResolutionStatus: "resolved" },
+    { id: "same-customer-b", customer: "常州市第二人民医院", solution: "", solutionDate: "2026-09-01", manualResolutionStatus: "reopened" },
+    { id: "same-customer-a", customer: "常州市第二人民医院", solution: "", solutionDate: "", manualResolutionStatus: "resolved" },
+  ];
+  assert.deepEqual(ids(rows), ["same-customer-a"]);
+  assert.equal(isResolvedArchiveReconciliation(rows[0]), true);
+  assert.equal(isUnresolvedFollowupReconciliation(rows[1]), true);
 });
 
 test("dashboard KPI, drill-down, and archive use the shared qualification", async () => {
