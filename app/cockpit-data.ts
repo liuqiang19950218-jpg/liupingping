@@ -27,6 +27,9 @@ export type CockpitRow = {
   cause: string;
   followStatus: string;
   solution: string;
+  /** Raw reconciliation fields used by the shared pending-follow-up rule. */
+  solutionDate?: string | null;
+  manualResolutionStatus?: "resolved" | "reopened" | null;
   expectedDate: string;
   actualDate?: string;
   updatedAt: string;

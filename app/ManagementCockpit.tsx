@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { type CockpitRow } from "./cockpit-data";
 import { moneyToCents, useDashboardData } from "./dashboard-postgres-data";
 import { isSettled, isUnreconciled, isUnsettled, settlementRate } from "../lib/reconciliation-settlement-status.mjs";
+import { isCurrentOpenProblem } from "../lib/current-open-problems.mjs";
 import {
   formatDifferenceCategoryLabel,
   formatFollowupStatusLabel,
@@ -67,11 +68,11 @@ const historicalInvoiceAmount = (row: CockpitRow) => {
     row.transit + row.returned + (row.lost ?? 0) + (row.instrument ?? 0) + row.otherInvoice,
   );
 };
-// Keep the cockpit aligned with the execution page: a reconciliation only
-// becomes an unresolved item after a first solution has been recorded, and it
-// leaves the pending list once it is resolved.
-const isPendingFollowUp = (r: CockpitRow) =>
-  Boolean(r.solution.trim()) && r.followStatus !== "已解决";
+// The cockpit and the pending follow-up list must classify the very same
+// persisted reconciliation record.  In particular, followup_items status is
+// not the manual resolution state; manualResolutionStatus lives on the
+// reconciliation and is refreshed after the user marks a record resolved.
+const isPendingFollowUp = (r: CockpitRow) => isCurrentOpenProblem(r);
 const matchesSettlementFilter = (row: CockpitRow, value: string) =>
   value === "全部" || (value === "已对清" ? isSettled(row) : isUnsettled(row));
 const invoiceExceptionReason = (r: CockpitRow) =>
@@ -132,7 +133,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       id: row.id, quarter: row.quarterCode, region: row.region ?? "未填写", accountSet: row.accountSet ?? "未填写账套", owner: row.ownerName ?? "未填写", customer: row.customer ?? "未填写客户名称",
       companyReceivable: Number(moneyToCents(row.companyReceivable) ?? 0n) / 100, customerBook: Number(moneyToCents(row.customerBookAmount) ?? 0n) / 100, difference: Number(moneyToCents(row.reconciliationDifference) ?? 0n) / 100,
       transit: amount("transit"), returned: amount("returned") + amount("returned_invoice"), lost: amount("lost") + amount("lost_invoice"), instrument: amount("instrument") + amount("equipment"), otherInvoice: amount("otherInvoice") + amount("other_with_invoice"), otherNoInvoice: amount("other") + amount("other_without_invoice"),
-      badDebt: Number(moneyToCents(row.badDebtAmount) ?? 0n) / 100, adjustment: Number(moneyToCents(row.adjustmentAmount) ?? 0n) / 100, badDebtReason: row.badDebtReason ?? "", adjustmentReason: row.adjustmentReason ?? "", reconciliationStatus: row.reconciliationStatus ?? "未对账", filled: isSettled(row) || isUnsettled(row), cleared: isSettled(row), cause: row.solution ?? "", followStatus: followup?.followStatus ?? "", solution: row.solution ?? "", expectedDate: followup?.expectedCompleteAt ?? "—", actualDate: followup?.closedAt ?? undefined, updatedAt: followup?.updatedAt ?? "—", latestFollowUpAt: followup?.latestEvent?.occurredAt ?? followup?.latestFollowUpAt ?? undefined, processStage: followup?.processStage ?? undefined,
+      badDebt: Number(moneyToCents(row.badDebtAmount) ?? 0n) / 100, adjustment: Number(moneyToCents(row.adjustmentAmount) ?? 0n) / 100, badDebtReason: row.badDebtReason ?? "", adjustmentReason: row.adjustmentReason ?? "", reconciliationStatus: row.reconciliationStatus ?? "未对账", filled: isSettled(row) || isUnsettled(row), cleared: isSettled(row), cause: row.solution ?? "", followStatus: followup?.followStatus ?? "", solution: row.solution ?? "", solutionDate: row.solutionDate ?? "", manualResolutionStatus: row.manualResolutionStatus, expectedDate: followup?.expectedCompleteAt ?? "—", actualDate: followup?.closedAt ?? undefined, updatedAt: followup?.updatedAt ?? "—", latestFollowUpAt: followup?.latestEvent?.occurredAt ?? followup?.latestFollowUpAt ?? undefined, processStage: followup?.processStage ?? undefined,
       differenceInvoices: differences.map((item) => ({ category: item.category, invoice: item.invoiceNo ?? "", date: item.invoiceDate ?? "", amount: Number(moneyToCents(item.differenceAmount) ?? 0n) / 100, note: item.differenceDescription ?? undefined })),
     };
   }), [dashboard.rows, dashboard.differencesByReconciliation, dashboard.followupsByReconciliation]);
@@ -239,7 +240,6 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
       dashboardRows.filter(isPendingFollowUp).filter(
         (row) =>
           row.quarter === f.quarter &&
-          row.filled &&
           (f.region === "全部" || row.region === f.region) &&
           (f.accountSet === "全部" || row.accountSet === f.accountSet) &&
           (f.owner === "全部" || row.owner === f.owner) &&
@@ -645,7 +645,7 @@ export function ManagementCockpit({ activeTab, onTabChange }: Props) {
             <DifferenceStructureChart
               data={cats}
               total={categorizedDifference}
-              onClick={() => open("未解决差额客户", rows.filter(isPendingFollowUp))}
+              onClick={() => open(PENDING_LIST_DETAIL_TITLE, pendingFollowUpRows)}
             />
             <div>
               {cats.map((x) => (
