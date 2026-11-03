@@ -11,6 +11,8 @@ export type CockpitRow = {
   companyReceivable: number;
   customerBook: number;
   difference: number;
+  /** Unconverted source amount retained for pending-balance eligibility. */
+  reconciliationDifference?: string | null;
   transit: number;
   returned: number;
   lost: number;

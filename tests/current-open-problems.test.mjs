@@ -16,7 +16,7 @@ test("Top5 derives from current open problems, not the owner's historical total"
     { id: "resolved-date", customer: "客户1", owner: "刘丽婷", solution: "已完成", solutionDate: "2026-09-01", manualResolutionStatus: "resolved" },
     { id: "resolved-solution-only-1", customer: "客户2", owner: "刘丽婷", solution: "已完成", solutionDate: "", manualResolutionStatus: null },
     { id: "resolved-solution-only-2", customer: "客户3", owner: "刘丽婷", solution: "已完成", solutionDate: null, manualResolutionStatus: null },
-    { id: "open", customer: "客户4", owner: "刘丽婷", solution: "预计处理", solutionDate: "2026-09-30", manualResolutionStatus: null },
+    { id: "open", customer: "客户4", owner: "刘丽婷", reconciliationDifference: "1", solution: "预计处理", solutionDate: "2026-09-30", manualResolutionStatus: null },
   ];
   assert.equal(history.filter(isResolvedArchiveReconciliation).length, 3);
   assert.deepEqual([...ownerCounts(history)], [["刘丽婷", 1]]);
