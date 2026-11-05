@@ -11,6 +11,7 @@
     "start": "node scripts/run-vinext.mjs start",
     "attachment-service": "node services/attachment-service/server.mjs",
     "test": "npm run build && node --test tests/rendered-html.test.mjs tests/spd-dashboard.test.mjs",
+    "test:mobile-browser": "npm run build && node --test tests/mobile-global-filter-linkage.test.mjs",
     "lint": "eslint app scripts tests eslint.config.mjs",
     "db:generate": "drizzle-kit generate"
   },
