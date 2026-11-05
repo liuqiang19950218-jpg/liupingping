@@ -240,6 +240,7 @@ export function filterFollowupTrackerItems(items: Item[], filters: Record<string
   return filterFollowupTrackerItemsByState(items, {
     tab: stage === "已关闭" || baseStage === "已关闭" ? "resolved" : "pending",
     region: filters.region ?? ALL,
+    owner: filters.owner ?? filters.baseOwner ?? "全部",
     search: "",
     risk: "全部",
     finance: "全部",
@@ -257,6 +258,7 @@ export function filterFollowupTrackerItems(items: Item[], filters: Record<string
 export type FollowupTrackerFilterState = {
   tab: "pending" | "resolved";
   region: string;
+  owner: string;
   search: string;
   risk: string;
   finance: string;
@@ -270,6 +272,7 @@ export function filterFollowupTrackerItemsByState(items: Item[], state: Followup
   return items.filter((item) =>
     (state.tab === "resolved" ? item.resolved : !item.resolved) &&
     (state.region === ALL || item.region === state.region) &&
+    (state.owner === "全部" || item.owner === state.owner) &&
     (!state.search || [item.customer, item.owner, item.region, item.accountSet].join(" ").toLocaleLowerCase().includes(state.search)) &&
     (state.risk === "全部" || riskOf(item) === state.risk) &&
     (state.finance === "全部" || financeOf(item) === state.finance) &&
@@ -297,6 +300,9 @@ export function UnresolvedFollowupDashboard() {
   const { quarter, reconciliationById, followups, refresh } = useDashboardData();
   const items = useMemo(() => toItems(quarter?.label ?? "", reconciliationById, followups), [quarter, reconciliationById, followups]);
   const [region, setRegion] = useState(ALL);
+  // Mobile controls update this same explicit filter state as the desktop
+  // controls, rather than treating a selected owner as a fuzzy text search.
+  const [owner, setOwner] = useState("全部");
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [risk, setRisk] = useState("全部");
@@ -321,7 +327,8 @@ export function UnresolvedFollowupDashboard() {
   useEffect(() => {
     const initialFilter = Object.fromEntries(new URLSearchParams(window.location.search));
     if (initialFilter.region) setRegion(initialFilter.region);
-    if (initialFilter.owner || initialFilter.customer) setQuery(initialFilter.owner || initialFilter.customer || "");
+    if (initialFilter.owner || initialFilter.baseOwner) setOwner(initialFilter.owner || initialFilter.baseOwner || "全部");
+    if (initialFilter.customer) setQuery(initialFilter.customer);
     if (initialFilter.filter === "finance" || initialFilter.filter === "finance_review") setFinance("需财务复核");
     if (PROCESS_STAGES.includes(initialFilter.stage as ProcessStage)) {
       setProcessStage(initialFilter.stage);
@@ -334,23 +341,24 @@ export function UnresolvedFollowupDashboard() {
     const applyDashboardFilter = (event: Event) => {
       const filter = (event as CustomEvent<Record<string, string>>).detail;
       if (!filter) return;
-      if (filter.region) setRegion(filter.region);
-      if (filter.owner || filter.customer) setQuery(filter.owner || filter.customer || "");
-      if (filter.filter === "finance" || filter.filter === "finance_review") setFinance("需财务复核");
+      // A dashboard navigation replaces the full context, so a prior mobile
+      // selection cannot persist into a new drill-down without that filter.
+      setRegion(filter.region || ALL);
+      setOwner(filter.owner || filter.baseOwner || "全部");
+      setQuery(filter.customer || "");
+      setRisk("全部");
+      setFinance(filter.filter === "finance" || filter.filter === "finance_review" ? "需财务复核" : "全部");
+      setProcessStage("全部");
+      setDashboardMetricFilter("");
+      setTableFilters({});
       if (PROCESS_STAGES.includes(filter.stage as ProcessStage)) {
-        setDashboardMetricFilter("");
         setProcessStage(filter.stage);
         setTab(filter.stage === "已关闭" ? "resolved" : "pending");
         return;
       }
       if (["all", "overdue", "untouched", "customer", "internal", "finance_review", "leader_review", "leader", "week"].includes(filter.filter ?? "")) {
         setDashboardMetricFilter(filter.filter as DashboardMetricFilter);
-        setProcessStage("全部");
-        setRisk("全部");
-        setFinance("全部");
-        setTableFilters({});
-        if (!filter.owner && !filter.customer) setQuery("");
-      } else setDashboardMetricFilter("");
+      }
       setTab("pending");
     };
     window.addEventListener("reconciliation-followup-filter", applyDashboardFilter);
@@ -374,7 +382,7 @@ export function UnresolvedFollowupDashboard() {
   }, [query]);
   useEffect(() => {
     setPage(1);
-  }, [region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters, tab, pageSize]);
+  }, [region, owner, search, risk, finance, processStage, dashboardMetricFilter, tableFilters, tab, pageSize]);
   const pending = useMemo(
     () => items.filter((item) => !item.resolved),
     [items],
@@ -384,8 +392,8 @@ export function UnresolvedFollowupDashboard() {
     [items],
   );
   const activeFilterState = useMemo(
-    () => ({ region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters }),
-    [region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters],
+    () => ({ region, owner, search, risk, finance, processStage, dashboardMetricFilter, tableFilters }),
+    [region, owner, search, risk, finance, processStage, dashboardMetricFilter, tableFilters],
   );
   const pendingCount = useMemo(
     () => filterFollowupTrackerItemsByState(items, { ...activeFilterState, tab: "pending" }).length,
@@ -396,8 +404,8 @@ export function UnresolvedFollowupDashboard() {
     [items, activeFilterState],
   );
   const visible = useMemo(
-    () => filterFollowupTrackerItemsByState(items, { tab, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters }),
-    [items, tab, region, search, risk, finance, processStage, dashboardMetricFilter, tableFilters],
+    () => filterFollowupTrackerItemsByState(items, { tab, region, owner, search, risk, finance, processStage, dashboardMetricFilter, tableFilters }),
+    [items, tab, region, owner, search, risk, finance, processStage, dashboardMetricFilter, tableFilters],
   );
   // KPI cards, regional summaries, and the list all begin with this same
   // complete pending-record filter. Pagination is intentionally applied only
@@ -422,6 +430,10 @@ export function UnresolvedFollowupDashboard() {
   const regions = useMemo(
     () => [...new Set((isPhoneViewport ? items : pending).map((item) => item.region))],
     [isPhoneViewport, items, pending],
+  );
+  const owners = useMemo(
+    () => [...new Set(items.map((item) => item.owner).filter(Boolean))],
+    [items],
   );
   const overdue = useMemo(
     () => filteredPending.filter((item) => (dayDistance(latest(item)) ?? 0) > OVERDUE_DAYS),
@@ -478,10 +490,12 @@ export function UnresolvedFollowupDashboard() {
   );
   const reset = () => {
     setRegion(ALL);
+    setOwner("全部");
     setQuery("");
     setRisk("全部");
     setFinance("全部");
     setProcessStage("全部");
+    setDashboardMetricFilter("");
     setTableFilters({});
     setFilterColumns([]);
   };
@@ -703,6 +717,13 @@ export function UnresolvedFollowupDashboard() {
           <button type="button" className={region === ALL ? "active" : ""} onClick={() => setRegion(ALL)}>{ALL}</button>
           {regions.map((name) => <button type="button" className={region === name ? "active" : ""} key={name} onClick={() => setRegion(name)}>{name}</button>)}
         </div>
+        <label className="uf-mobile-owner">
+          负责人
+          <select value={owner} aria-label="按负责人筛选" onChange={(event) => setOwner(event.target.value)}>
+            <option>全部</option>
+            {owners.map((name) => <option key={name}>{name}</option>)}
+          </select>
+        </label>
         <div className="uf-mobile-search">
           <span aria-hidden="true">⌕</span>
           <input value={query} aria-label="搜索客户名称" placeholder="搜索客户名称" onChange={(event) => setQuery(event.target.value)} />
@@ -726,6 +747,16 @@ export function UnresolvedFollowupDashboard() {
             >
               <option>{ALL}</option>
               {regions.map((name) => (
+                <option key={name}>{name}</option>
+              ))}
+            </select>
+            <select
+              value={owner}
+              aria-label="按负责人筛选"
+              onChange={(event) => setOwner(event.target.value)}
+            >
+              <option>全部</option>
+              {owners.map((name) => (
                 <option key={name}>{name}</option>
               ))}
             </select>

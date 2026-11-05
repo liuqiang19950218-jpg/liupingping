@@ -21,5 +21,5 @@ test("drawer uses canonical followup filtering and difference descriptions", asy
   assert.match(drawer, /解决时间/);
   assert.doesNotMatch(drawer, /item\.solution/);
   const tracker = await readFile(new URL("../app/UnresolvedFollowupDashboard.tsx", import.meta.url), "utf8");
-  assert.match(tracker, /filterFollowupTrackerItemsByState\(items, \{ tab, region, search/);
+  assert.match(tracker, /filterFollowupTrackerItemsByState\(items, \{ tab, region, owner, search/);
 });
