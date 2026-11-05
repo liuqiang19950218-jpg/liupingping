@@ -1,0 +1,58 @@
+name: Cross-platform mobile browser regression
+
+on:
+  push:
+    branches:
+      - feature/mobile-global-filter-linkage-20261105
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run lint
+      - run: node --test tests/*.test.mjs
+      - run: npm test
+      - run: npm run test
+      - name: Default Playwright Chromium
+        run: npm run test:mobile-browser
+      - name: CHROME_PATH Chromium
+        run: CHROME_PATH="$(node -e "const { chromium } = require('playwright'); process.stdout.write(chromium.executablePath())")" npm run test:mobile-browser
+      - name: PLAYWRIGHT_BROWSERS_PATH Chromium
+        run: |
+          export PLAYWRIGHT_BROWSERS_PATH=/tmp/hermes-playwright-browsers
+          npx playwright install chromium
+          npm run test:mobile-browser
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - shell: pwsh
+        run: |
+          npm ci
+          npx playwright install chromium
+          npm run build
+          npm run lint
+          node --test tests/*.test.mjs
+          npm test
+          npm run test
+          npm run test:mobile-browser
+          $env:CHROME_PATH = node -e "const { chromium } = require('playwright'); process.stdout.write(chromium.executablePath())"
+          npm run test:mobile-browser
+          $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $env:RUNNER_TEMP 'hermes-playwright-browsers'
+          npx playwright install chromium
+          npm run test:mobile-browser
